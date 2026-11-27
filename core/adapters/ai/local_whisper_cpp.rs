@@ -21,7 +21,7 @@ use crate::{
 #[cfg(all(feature = "mobile-gpu", target_os = "android"))]
 use super::compute_resources::efficient_gpu_label;
 use super::compute_resources::{
-    GpuDevice, choose_gpu, missing_cpu_instructions, model_fits_on_gpu,
+    GpuBackend, GpuDevice, choose_gpu, first_gpu_on, missing_cpu_instructions, model_fits_on_gpu,
 };
 use super::gpu_attempt_guard::GpuAttemptGuard;
 use super::whisper_word_timing::{WhisperTokenTiming, words_from_tokens, words_match_text};
@@ -148,13 +148,15 @@ pub fn efficient_gpu() -> Option<String> {
 /// Side effects: Starts whisper.cpp's backends on first use, which may load the Vulkan library.
 pub fn available_gpus() -> Vec<GpuDevice> {
     use whisper_rs_sys::{
-        ggml_backend_dev_count, ggml_backend_dev_get, ggml_backend_dev_memory,
-        ggml_backend_dev_type, ggml_backend_dev_type_GGML_BACKEND_DEVICE_TYPE_GPU,
-        ggml_backend_dev_type_GGML_BACKEND_DEVICE_TYPE_IGPU,
+        ggml_backend_dev_backend_reg, ggml_backend_dev_count, ggml_backend_dev_get,
+        ggml_backend_dev_memory, ggml_backend_dev_type,
+        ggml_backend_dev_type_GGML_BACKEND_DEVICE_TYPE_GPU,
+        ggml_backend_dev_type_GGML_BACKEND_DEVICE_TYPE_IGPU, ggml_backend_reg_name,
     };
     let mut gpus = Vec::new();
     // SAFETY: These read ggml's device list, which ggml owns and keeps for the process's lifetime.
-    // The memory pointers are valid for the call.
+    // The memory pointers are valid for the call, and a registry's name is a NUL-terminated string
+    // that lives as long as the registry.
     unsafe {
         for position in 0..ggml_backend_dev_count() {
             let device = ggml_backend_dev_get(position);
@@ -165,8 +167,17 @@ pub fn available_gpus() -> Vec<GpuDevice> {
             }
             let (mut free_memory_bytes, mut total_memory_bytes) = (0_usize, 0_usize);
             ggml_backend_dev_memory(device, &mut free_memory_bytes, &mut total_memory_bytes);
+            let registry_name = ggml_backend_reg_name(ggml_backend_dev_backend_reg(device));
+            let backend = if registry_name.is_null() {
+                GpuBackend::Other
+            } else {
+                GpuBackend::from_ggml_name(
+                    &std::ffi::CStr::from_ptr(registry_name).to_string_lossy(),
+                )
+            };
             gpus.push(GpuDevice {
                 index: i32::try_from(gpus.len()).unwrap_or(i32::MAX),
+                backend,
                 is_discrete,
                 total_memory_bytes: total_memory_bytes as u64,
                 free_memory_bytes: free_memory_bytes as u64,
@@ -186,16 +197,21 @@ fn gpu_for_model(configuration: &LocalWhisperCppConfig) -> Option<GpuDevice> {
         return None;
     }
     if configuration.efficient_gpu {
-        // OpenCL reports no memory figures, and a phone's GPU shares system memory anyway.
-        // OpenCL is the only GPU backend in this build, so it is the first GPU.
-        return efficient_gpu().map(|_| GpuDevice {
-            index: 0,
-            is_discrete: false,
-            total_memory_bytes: 0,
-            free_memory_bytes: 0,
-        });
+        // OpenCL reports no memory figures, and a phone's GPU shares system memory anyway. The
+        // build also has Vulkan, which lists the same Adreno first, so OpenCL is found by name.
+        efficient_gpu()?;
+        return first_gpu_on(&available_gpus(), GpuBackend::OpenCl);
     }
-    let chosen_gpu = choose_gpu(&available_gpus())?;
+    let gpus = available_gpus();
+    // A phone outside efficient mode only asks for a GPU when its owner turned Vulkan on (#184).
+    let Some(chosen_gpu) = (if cfg!(target_os = "android") {
+        first_gpu_on(&gpus, GpuBackend::Vulkan)
+    } else {
+        choose_gpu(&gpus)
+    }) else {
+        tracing::info!(gpus_found = gpus.len(), "no usable GPU, using the CPU");
+        return None;
+    };
     let model_bytes = std::fs::metadata(&configuration.model_path).ok()?.len();
     if model_fits_on_gpu(model_bytes, chosen_gpu.free_memory_bytes) {
         Some(chosen_gpu)

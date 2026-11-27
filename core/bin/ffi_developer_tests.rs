@@ -244,3 +244,22 @@ fn a_malformed_request_is_an_invalid_argument() {
         assert_eq!(answer["error_code"], "invalid_argument", "{request}");
     }
 }
+
+#[test]
+fn android_vulkan_is_offered_off_by_default() {
+    let folder = DataFolder::new();
+    let state = run(&folder, json!({"command": "unlock"}));
+    let vulkan = setting(&state, "NOTE_TAKER_ANDROID_VULKAN");
+    assert_eq!(vulkan["kind"], "choice", "{vulkan}");
+    assert_eq!(vulkan["default"], "off");
+    let refused = run(
+        &folder,
+        json!({"command": "set", "name": "NOTE_TAKER_ANDROID_VULKAN", "value": "yes"}),
+    );
+    assert_eq!(refused["error_code"], "invalid_value");
+    let saved = run(
+        &folder,
+        json!({"command": "set", "name": "NOTE_TAKER_ANDROID_VULKAN", "value": "on"}),
+    );
+    assert_eq!(setting(&saved, "NOTE_TAKER_ANDROID_VULKAN")["saved"], "on");
+}

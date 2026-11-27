@@ -356,3 +356,18 @@ fn the_after_meeting_pass_follows_the_npu_unless_it_has_its_own_model() {
         "no model at all"
     );
 }
+
+#[test]
+fn a_phone_asks_for_a_gpu_only_in_efficient_mode_or_with_vulkan_on() {
+    use super::whisper_wants_gpu;
+    // Desktop: the GPU unless it is turned off.
+    assert!(whisper_wants_gpu(false, None, false, None));
+    assert!(!whisper_wants_gpu(false, Some("off"), false, None));
+    // Phone: the CPU by default, the GPU in efficient mode or with Vulkan turned on (#184).
+    assert!(!whisper_wants_gpu(true, None, false, None));
+    assert!(whisper_wants_gpu(true, None, true, None));
+    assert!(whisper_wants_gpu(true, None, false, Some("on")));
+    assert!(!whisper_wants_gpu(true, None, false, Some("off")));
+    // Turning the GPU off wins over both.
+    assert!(!whisper_wants_gpu(true, Some("off"), true, Some("on")));
+}

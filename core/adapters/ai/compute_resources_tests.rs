@@ -1,8 +1,9 @@
 //! Checks the choice of cores and GPU against the machines we measured and made-up edge cases.
 
 use super::compute_resources::{
-    GpuDevice, advertised_gpu_megabytes, choose_gpu, cores_for_gpu_submission, efficient_gpu_label,
-    fast_core_count, inference_thread_count, is_efficient_gpu, model_fits_on_gpu,
+    GpuBackend, GpuDevice, advertised_gpu_megabytes, choose_gpu, cores_for_gpu_submission,
+    efficient_gpu_label, fast_core_count, first_gpu_on, inference_thread_count, is_efficient_gpu,
+    model_fits_on_gpu,
 };
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -11,9 +12,18 @@ const GIB: u64 = 1024 * 1024 * 1024;
 fn gpu(index: i32, is_discrete: bool, memory_bytes: u64) -> GpuDevice {
     GpuDevice {
         index,
+        backend: GpuBackend::Vulkan,
         is_discrete,
         total_memory_bytes: memory_bytes,
         free_memory_bytes: memory_bytes,
+    }
+}
+
+/// Builds an integrated GPU on `backend`, as a phone lists it.
+fn phone_gpu(index: i32, backend: GpuBackend) -> GpuDevice {
+    GpuDevice {
+        backend,
+        ..gpu(index, false, 0)
     }
 }
 
@@ -117,4 +127,35 @@ fn the_gpu_label_is_readable() {
         "Adreno 740"
     );
     assert_eq!(efficient_gpu_label("Adreno 750"), "Adreno 750");
+}
+
+#[test]
+fn a_phone_with_both_backends_finds_each_by_name() {
+    // ggml registers Vulkan before OpenCL, so an Adreno phone lists the same GPU twice (#184).
+    let devices = [
+        phone_gpu(0, GpuBackend::Vulkan),
+        phone_gpu(1, GpuBackend::OpenCl),
+    ];
+    assert_eq!(
+        first_gpu_on(&devices, GpuBackend::OpenCl).map(|device| device.index),
+        Some(1)
+    );
+    assert_eq!(
+        first_gpu_on(&devices, GpuBackend::Vulkan).map(|device| device.index),
+        Some(0)
+    );
+}
+
+#[test]
+fn a_backend_that_found_no_gpu_gives_none() {
+    let mali_without_opencl = [phone_gpu(0, GpuBackend::Vulkan)];
+    assert_eq!(first_gpu_on(&mali_without_opencl, GpuBackend::OpenCl), None);
+    assert_eq!(first_gpu_on(&[], GpuBackend::Vulkan), None);
+}
+
+#[test]
+fn backend_names_are_read_as_ggml_writes_them() {
+    assert_eq!(GpuBackend::from_ggml_name("Vulkan"), GpuBackend::Vulkan);
+    assert_eq!(GpuBackend::from_ggml_name("OpenCL"), GpuBackend::OpenCl);
+    assert_eq!(GpuBackend::from_ggml_name("CUDA"), GpuBackend::Other);
 }

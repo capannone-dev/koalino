@@ -18,11 +18,38 @@ const GPU_WORKING_MEMORY_DENOMINATOR: u64 = 2;
 /// Kept free on the GPU for the desktop and other apps.
 const GPU_RESERVED_BYTES: u64 = 256 * 1024 * 1024;
 
+/// The library backend that reports a GPU. A phone built with both lists its GPU once per backend.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GpuBackend {
+    /// Vulkan: desktop GPUs, and phone GPUs other than Adreno (#184).
+    Vulkan,
+    /// OpenCL: efficient mode on Adreno phones (#75).
+    OpenCl,
+    /// Any other backend.
+    Other,
+}
+
+impl GpuBackend {
+    /// Reads the backend's name as ggml reports it, such as `Vulkan` or `OpenCL`.
+    ///
+    /// Inputs: The registry name. Outputs: The backend, `Other` when not one of ours.
+    /// Side effects: None.
+    pub fn from_ggml_name(name: &str) -> Self {
+        match name {
+            "Vulkan" => Self::Vulkan,
+            "OpenCL" => Self::OpenCl,
+            _ => Self::Other,
+        }
+    }
+}
+
 /// A GPU that the inference library reports.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GpuDevice {
     /// Position among the library's GPUs, as whisper.cpp's `gpu_device` counts them.
     pub index: i32,
+    /// The backend that reports it.
+    pub backend: GpuBackend,
     /// True for a GPU with its own memory; false for one sharing the system's.
     pub is_discrete: bool,
     /// Device memory in bytes. For an integrated GPU this is shared system memory.
@@ -157,6 +184,17 @@ pub fn choose_gpu(devices: &[GpuDevice]) -> Option<GpuDevice> {
         .filter(|device| device.is_discrete)
         .max_by_key(|device| device.total_memory_bytes)
         .or_else(|| devices.first())
+        .copied()
+}
+
+/// Finds the first GPU that `backend` reports.
+///
+/// Inputs: The GPUs found, in the library's order, and the backend wanted.
+/// Outputs: That GPU, or `None` when the backend found none. Side effects: None.
+pub fn first_gpu_on(devices: &[GpuDevice], backend: GpuBackend) -> Option<GpuDevice> {
+    devices
+        .iter()
+        .find(|device| device.backend == backend)
         .copied()
 }
 

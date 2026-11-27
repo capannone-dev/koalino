@@ -83,6 +83,13 @@ pub const DEVELOPER_SETTINGS: &[DeveloperSetting] = &[
         description: "Lets local transcription try the GPU. Off rules a faulty GPU driver out.",
     },
     DeveloperSetting {
+        name: "NOTE_TAKER_ANDROID_VULKAN",
+        kind: SettingKind::Choice(&["on", "off"]),
+        default: "off",
+        description: "Android only, a test: transcribes on GPUs other than Adreno (Mali, Xclipse, \
+                      PowerVR) through Vulkan. A GPU that crashes is not tried again.",
+    },
+    DeveloperSetting {
         name: "NOTE_TAKER_VAD_ENABLED",
         kind: SettingKind::Flag,
         default: "true",

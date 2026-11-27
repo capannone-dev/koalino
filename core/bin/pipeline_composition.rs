@@ -521,6 +521,45 @@ fn whisper_gpu_allowed() -> bool {
     crate::ffi_settings::app_setting("NOTE_TAKER_WHISPER_GPU").is_none_or(|value| value != "off")
 }
 
+/// Decides whether local transcription asks for a GPU.
+///
+/// Inputs: Whether this is a phone; `NOTE_TAKER_WHISPER_GPU` and `NOTE_TAKER_ANDROID_VULKAN` as
+/// set, or `None`; and whether efficient mode is on.
+/// Outputs: True to try a GPU. A computer tries one unless it is turned off. A phone stays on its
+/// CPU unless the owner chose efficient mode (OpenCL on Adreno) or turned Vulkan on in Settings →
+/// Developer (#184), which is off until measured on real phones.
+/// Side effects: None.
+fn whisper_wants_gpu(
+    is_phone: bool,
+    whisper_gpu: Option<&str>,
+    efficient_gpu: bool,
+    android_vulkan: Option<&str>,
+) -> bool {
+    whisper_gpu != Some("off") && (!is_phone || efficient_gpu || android_vulkan == Some("on"))
+}
+
+/// Applies `whisper_wants_gpu` to this device and its settings.
+///
+/// Outputs: True to try a GPU. Side effects: Reads the app settings.
+#[cfg(feature = "local-ai")]
+fn whisper_gpu_for(efficient_gpu: bool) -> bool {
+    use crate::ffi_settings::app_setting;
+    whisper_wants_gpu(
+        cfg!(target_os = "android"),
+        app_setting("NOTE_TAKER_WHISPER_GPU").as_deref(),
+        efficient_gpu,
+        app_setting("NOTE_TAKER_ANDROID_VULKAN")
+            .as_deref()
+            .or(ANDROID_VULKAN_BUILD_DEFAULT),
+    )
+}
+
+/// `NOTE_TAKER_ANDROID_VULKAN` for a test build compiled with `KOALINO_TEST_ANDROID_VULKAN=on`, so
+/// Firebase Test Lab can time Vulkan from the first start, which a Robo script cannot restart
+/// (#184). Unset in release builds; a value set in Settings → Developer still wins.
+#[cfg(feature = "local-ai")]
+const ANDROID_VULKAN_BUILD_DEFAULT: Option<&str> = option_env!("KOALINO_TEST_ANDROID_VULKAN");
+
 /// Returns the GPU memory this device should advertise to paired devices.
 ///
 /// Outputs: A discrete GPU's memory in megabytes, or zero. Side effects: Starts whisper.cpp's
@@ -604,8 +643,7 @@ fn local_engine(
     let thread_count = crate::adapters::ai::compute_resources::preferred_inference_threads();
     // An explicit language is required: whisper.cpp defaults to English, so Italian meetings
     // would otherwise come out as English text. `auto` makes it detect the language per chunk.
-    // A phone stays on its CPU unless the owner chose efficient mode.
-    let use_gpu = whisper_gpu_allowed() && (!cfg!(target_os = "android") || config.efficient_gpu);
+    let use_gpu = whisper_gpu_for(config.efficient_gpu);
     let mut local_config = LocalWhisperCppConfig::new(
         model_path,
         thread_count,
@@ -1053,7 +1091,7 @@ fn transcript_pass_engine(
     use crate::adapters::ai::local_whisper_cpp::{
         LocalWhisperCppConfig, LocalWhisperCppTranscriptionEngine,
     };
-    let use_gpu = whisper_gpu_allowed() && (!cfg!(target_os = "android") || efficient_gpu);
+    let use_gpu = whisper_gpu_for(efficient_gpu);
     let config = LocalWhisperCppConfig::new(
         model_path.to_path_buf(),
         crate::adapters::ai::compute_resources::preferred_inference_threads(),

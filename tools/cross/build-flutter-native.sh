@@ -43,6 +43,14 @@ refresh_whisper_build() {
   fi
 }
 
+# Stops unless fetch-vulkan.sh installed the Vulkan headers and shader compiler.
+require_vulkan_headers() {
+  if [ ! -f "$VULKAN_SDK/include/vulkan/vulkan.hpp" ] || [ ! -x "$VULKAN_SDK/bin/glslc" ]; then
+    echo "missing $VULKAN_SDK: run tools/cross/fetch-vulkan.sh" >&2
+    exit 1
+  fi
+}
+
 # Copies the fetched model to $1/ggml-base.bin unless an identical copy is already there.
 stage_model() {
   local source=$T/models/ggml-base.bin
@@ -109,13 +117,19 @@ for platform in "$@"; do
         echo "missing $OPENCL_HEADERS_DIR: run tools/cross/fetch-opencl.sh" >&2
         exit 1
       fi
+      require_vulkan_headers
       # mobile-gpu adds efficient mode; the phone's OpenCL library is opened at run time (#75).
+      # whisper-rs/vulkan adds GPUs other than Adreno, off until the owner turns it on (#184). It
+      # links Android's own libvulkan.so, which every phone from Android 7 (the minimum) has; the
+      # NDK lacks the C++ headers ggml uses, so they come from the pinned Vulkan headers.
       # npu-whisper runs Whisper on the NPU with Microsoft's ONNX Runtime, staged below (#75).
       if [ ! -f "$T/onnxruntime-android/libonnxruntime.so" ]; then
         echo "missing $T/onnxruntime-android: run tools/cross/fetch-onnxruntime-android.sh" >&2
         exit 1
       fi
-      cargo build --release --features local-ai,mobile-gpu,microphone,vad,diarization,npu-whisper --lib --target aarch64-linux-android
+      CXXFLAGS_aarch64_linux_android="-I$VULKAN_SDK/include" \
+        cargo build --release --features local-ai,mobile-gpu,microphone,vad,diarization,npu-whisper,whisper-rs/vulkan \
+        --lib --target aarch64-linux-android
       jni=ui/android/app/src/main/jniLibs/arm64-v8a
       mkdir -p "$jni"
       cp "$CARGO_TARGET_DIR/aarch64-linux-android/release/libnote_taker_core.so" "$jni/"
@@ -130,7 +144,11 @@ for platform in "$@"; do
         echo "missing $T/onnxruntime-android-x86_64: run tools/cross/fetch-onnxruntime-android.sh" >&2
         exit 1
       fi
-      cargo build --release --features local-ai,microphone,vad,diarization --lib --target x86_64-linux-android
+      # Vulkan as on phones, so the emulator's software GPU can exercise that path (#184).
+      require_vulkan_headers
+      CXXFLAGS_x86_64_linux_android="-I$VULKAN_SDK/include" \
+        cargo build --release --features local-ai,microphone,vad,diarization,whisper-rs/vulkan \
+        --lib --target x86_64-linux-android
       jni=ui/android/app/src/main/jniLibs/x86_64
       mkdir -p "$jni"
       cp "$CARGO_TARGET_DIR/x86_64-linux-android/release/libnote_taker_core.so" "$jni/"

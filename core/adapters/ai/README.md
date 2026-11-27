@@ -49,6 +49,13 @@ Efficient mode runs a model on a supported Adreno GPU with Flash Attention. It b
 - `gpu_attempt_guard.rs` applies to every GPU, desktops too. A marker file written before a GPU attempt, and removed after the first
   chunk, survives a driver that kills the process, so the next start uses the CPU until the owner tries again.
 
+The Android build also has whisper.cpp's Vulkan backend (#184), for GPUs other than Adreno. It stays off until the owner
+sets `NOTE_TAKER_ANDROID_VULKAN=on` (Settings → Developer), and is measured on real phones before Automatic uses it. With
+both backends, ggml lists an Adreno GPU twice, Vulkan first, so `GpuDevice.backend` and `first_gpu_on` pick efficient mode's
+OpenCL device and the Vulkan one by name, never by position. Vulkan links Android's own `libvulkan.so` (every phone from
+Android 7, the app's minimum), so no loader shim is needed there; it adds about 38 MB to the library (11 MB compressed),
+mostly precompiled shaders.
+
 The patched whisper.cpp is in `third_party/whisper-rs-sys`; its README lists the changes.
 
 ## Language models (#95)

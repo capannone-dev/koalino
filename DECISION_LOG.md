@@ -4266,3 +4266,23 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   and the merged person gets the usual deletion tombstone, which always wins. Passages travel with
   their meetings.
 - **Refused while recording**, since the pipeline is still writing that meeting's passages.
+
+## 2026-11-27 — Vulkan in the Android build, off by default (#184)
+
+- **What:** the Android core now builds whisper.cpp's Vulkan backend beside OpenCL. Phones whose
+  GPU is not a supported Adreno can try it with `NOTE_TAKER_ANDROID_VULKAN=on` (Settings →
+  Developer). Nothing changes for anyone else: a phone still transcribes on its CPU unless efficient
+  mode or this setting asks for a GPU, and Automatic does not use Vulkan yet.
+- **Why off:** Mali, Xclipse and PowerVR drivers vary widely, and ggml's Vulkan backend has not been
+  measured on them. Test Lab runs (#182 setup) measure speed and stability first; only GPU families
+  that come out faster will be offered by Automatic.
+- **Device choice by backend:** ggml registers Vulkan before OpenCL, so an Adreno phone lists its GPU
+  twice. Efficient mode used to assume OpenCL was GPU 0. It now finds OpenCL by name, and the Vulkan
+  option finds Vulkan by name.
+- **Linking:** Android's `libvulkan.so` is linked directly. It is a stable NDK library on every
+  phone from Android 7, the app's minimum, so the desktop loader shim is not needed. ggml still
+  creates a Vulkan instance when it starts, even on the CPU, as on desktops; the Test Lab runs check
+  that this is harmless on each phone.
+- **Cost:** about 38 MB more native library (11 MB compressed in the APK), mostly shaders. The
+  F-Droid build is unchanged for now.
+

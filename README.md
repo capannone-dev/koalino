@@ -311,6 +311,7 @@ repository.
 | `NOTE_TAKER_P2P_PEERS` | unset | Comma-separated `…/p2p/<peer-id>` addresses of your devices that mDNS cannot find (another subnet, NAT, VPN). They appear as nearby for pairing. Paired devices, configured or found by mDNS, are redialed every 10 s while disconnected |
 | `NOTE_TAKER_WHISPER_MODEL` | unset | Path to the local GGML model (`local-ai` builds) |
 | `NOTE_TAKER_WHISPER_GPU` | on | `off` keeps local transcription on the CPU in GPU builds |
+| `NOTE_TAKER_ANDROID_VULKAN` | off | Android only, a test: `on` transcribes on a GPU other than Adreno (Mali, Xclipse, PowerVR) through Vulkan, until measured on real phones (#184). Also in Settings → Developer |
 | `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` | Language detection, or a code such as `it` or `en`, for recordings without `--language`; kept in each meeting's details |
 | `NOTE_TAKER_TRANSCRIPT_PASS` | on (a phone runs it while charging) | After Stop, transcribe the meeting again in 30 s windows and replace its text. Speech is kept encrypted until then, and deleted after |
 | `NOTE_TAKER_TRANSCRIPT_PASS_MODEL` | the live model | GGML model for that pass, for example a larger one than live transcription uses (`local-ai` builds) |

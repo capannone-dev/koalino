@@ -17,13 +17,13 @@ Android builds of `daemon` and `cli` need, including whisper.cpp for on-device t
 | `package-linux-server.sh` | Builds `daemon`, `cli` and `browser-host` (the browser extension's host) with every feature, checks them, and assembles `dist/note-taker-server`: launchers, programs, models and the web dashboard (a Next.js standalone server started by `dashboard`, which needs Node.js 20 or newer), ready for `vm-deploy` |
 | `env.sh` | Source before a cross build or a Flutter build. Uses the rustup toolchain, a separate target directory (`$NOTE_TAKER_TOOLCHAINS/target`, so the host's `target/` is untouched), and the CMake toolchain files below |
 | `fetch-opencl.sh` | Installs the OpenCL headers (hash-pinned) for the Android build's efficient mode. Nothing links OpenCL at build time. |
-| `fetch-vulkan.sh` | Installs the Vulkan headers (hash-pinned), a link to the system's `glslc` and an empty link library into `vulkan-sdk`, for the Linux and Windows GPU builds. Needs the system's shaderc package |
+| `fetch-vulkan.sh` | Installs the Vulkan headers (hash-pinned), a link to the system's `glslc` and an empty link library into `vulkan-sdk`, for the GPU builds: Linux, Windows, and Android (#184, which links the phone's own loader instead of the empty library). Needs the system's shaderc package |
 | `cmake/` | CMake toolchain files for whisper.cpp; see its README |
 
 ```sh
 tools/cross/fetch.sh                      # once
 tools/cross/fetch-flutter.sh              # once, for the Flutter app
-tools/cross/fetch-vulkan.sh               # once, for the Linux and Windows app builds
+tools/cross/fetch-vulkan.sh               # once, for the Linux, Windows and Android app builds
 tools/cross/fetch-opencl.sh               # once, for the Android app build
 tools/cross/fetch-debian-sysroot.sh       # once, for the Linux app and server builds
 source tools/cross/env.sh

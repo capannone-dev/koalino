@@ -40,3 +40,19 @@ gcloud firebase test android run --type robo --app koalino.apk \
 List phone models with `gcloud firebase test android models list --filter=form=PHYSICAL`.
 Results, screenshots and logcat land in the project's Test Lab bucket. The free tier allows only
 a few physical-device runs a day.
+
+## Timing Vulkan on phones without Adreno (#184)
+
+The Android build has whisper.cpp's Vulkan backend, but phones only use it with
+`NOTE_TAKER_ANDROID_VULKAN=on`, a developer setting that applies at the next start, which a Robo
+script cannot do. For Test Lab, build a test APK whose core starts with it on:
+
+```bash
+KOALINO_TEST_ANDROID_VULKAN=on bash tools/cross/build-flutter-native.sh android
+(cd ui && flutter build apk --release --target-platform android-arm64)
+```
+
+Then run `automatic-model.robo.json` as above: the speed check times Automatic's model on the
+Vulkan GPU, to compare with the CPU results of a normal build on the same phone. Efficient mode
+(OpenCL on Adreno) still takes precedence on phones that support it. Never publish such an APK:
+the next normal build rebuilds the core without it, because cargo tracks the variable.
