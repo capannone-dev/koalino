@@ -269,3 +269,28 @@ fn a_hand_picked_model_is_never_stepped_down() {
         Some("ggml-base.bin")
     );
 }
+
+#[test]
+fn phones_warn_about_a_model_above_60_percent_of_memory_and_computers_above_70() {
+    use super::exceeds_memory_share;
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let medium = 1_950_000_000; // about what `medium` needs
+    let small = 850_000_000;
+    let three_gib = 3 * GIB;
+    assert!(
+        exceeds_memory_share(medium, three_gib, true),
+        "a 3 GB phone flags medium"
+    );
+    assert!(
+        !exceeds_memory_share(medium, three_gib, false),
+        "70% on a computer"
+    );
+    assert!(
+        !exceeds_memory_share(small, three_gib, true),
+        "small still fits a 3 GB phone"
+    );
+    assert!(
+        !exceeds_memory_share(medium, 6 * GIB, true),
+        "a 6 GB phone runs medium"
+    );
+}

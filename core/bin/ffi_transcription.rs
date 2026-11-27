@@ -62,8 +62,10 @@ const STATUS_NO_SPACE: c_int = 6;
 /// The model is in use or shipped with the app.
 const STATUS_NOT_REMOVABLE: c_int = 7;
 
-/// Share of total memory a model may use before Settings warns about it.
+/// Share of total memory a model may use on a computer before Settings warns about it.
 const MEMORY_WARNING_PERCENT: u64 = 70;
+/// The same share on a phone, lower because Android and other apps keep much of its memory (#106).
+const PHONE_MEMORY_WARNING_PERCENT: u64 = 60;
 /// Space kept free beyond the file itself.
 const DISK_MARGIN_BYTES: u64 = 200 * 1024 * 1024;
 
@@ -154,6 +156,19 @@ unsafe fn text_argument<'a>(text: *const c_char) -> Option<&'a str> {
     unsafe { CStr::from_ptr(text) }.to_str().ok()
 }
 
+/// Reports whether a model needs more of the device's memory than Settings accepts silently.
+///
+/// Inputs: The model's estimated memory, the device's total memory, and whether it is a phone
+/// (60% there, 70% on a computer). Outputs: `true` to show the warning. Side effects: None.
+pub(crate) fn exceeds_memory_share(model_bytes: u64, total_bytes: u64, is_phone: bool) -> bool {
+    let percent = if is_phone {
+        PHONE_MEMORY_WARNING_PERCENT
+    } else {
+        MEMORY_WARNING_PERCENT
+    };
+    model_bytes > total_bytes / 100 * percent
+}
+
 /// Builds one model's row.
 fn model_row(
     model: &WhisperModelEntry,
@@ -168,9 +183,11 @@ fn model_row(
         "english_only": model.is_english_only(),
         "on_device": paths.locate_model(model.file_name()).is_some(),
         "removable": paths.is_removable(model.file_name()),
-        "too_large_for_memory": total_memory.is_some_and(|total| {
-            model.estimated_memory_bytes() > total / 100 * MEMORY_WARNING_PERCENT
-        }),
+        "too_large_for_memory": total_memory.is_some_and(|total| exceeds_memory_share(
+            model.estimated_memory_bytes(),
+            total,
+            cfg!(target_os = "android"),
+        )),
     })
 }
 

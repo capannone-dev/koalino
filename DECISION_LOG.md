@@ -4302,3 +4302,12 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Not during installation:** an APK has no install-time step outside Google Play's asset packs,
   which F-Droid and GitHub releases can't use, and desktop installers already ship `base`, so the
   app works offline from the first start. Downloading after the first start covers every channel.
+
+## 2026-11-27 — Phones warn about a model above 60% of memory (#106)
+
+- **Problem:** Settings marks a Whisper model "too large" only above 70% of total memory. On a 3 GB
+  phone that is 2.1 GB, so `medium` (about 1.95 GB) showed no warning, although Android and other
+  apps keep a large share of a phone's memory.
+- **Decision (owner):** 60% on phones, 70% kept on computers. A 3 GB phone now flags `medium` and
+  still accepts `small`; a 6 GB phone accepts `medium`. Automatic never picks `medium` on a phone,
+  so this only guides a model picked by hand.
