@@ -4266,3 +4266,19 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   and the merged person gets the usual deletion tombstone, which always wins. Passages travel with
   their meetings.
 - **Refused while recording**, since the pipeline is still writing that meeting's passages.
+
+## 2026-11-27 — No Vulkan in the Android build for now (#184)
+
+- **Measured:** a test build with whisper.cpp's Vulkan backend turned on (branch
+  `experiment/android-vulkan`) ran in Firebase Test Lab. On Mali GPUs it was much slower than the
+  phones' own CPUs:
+  - Galaxy A06 (Mali-G52): `base` at 1.6× real time, against 0.7× on its CPU.
+  - Pixel 8a (Mali-G715): `small` at 1.0× real time, against 0.4× on its CPU.
+  
+  No phone crashed with Vulkan built in.
+- **Decision:** the Android build stays without Vulkan. Mali is the most common GPU outside Adreno,
+  and the backend would add about 11 MB to the APK, plus a Vulkan start-up on every phone, for no
+  gain there.
+- **Kept for later:** the branch has the build, GPU choice by backend name (with both backends ggml
+  lists an Adreno GPU twice, Vulkan first), a developer setting and a Test Lab build switch. Retry
+  it on Xclipse (Exynos 2200/2400) or PowerVR phones, or when ggml's Vulkan backend improves on Mali.
