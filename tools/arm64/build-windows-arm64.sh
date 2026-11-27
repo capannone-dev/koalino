@@ -7,8 +7,10 @@
 # release's cross build (cargo-zigbuild, windows-gnu) has no ARM64 ONNX Runtime to link. So the
 # core is built for aarch64-pc-windows-msvc, with whisper.cpp compiled by clang-cl (ggml refuses
 # MSVC's own compiler on ARM), for the baseline ARMv8 CPU. Diarization loads Microsoft's ARM64
-# onnxruntime.dll from beside the app at run time, as on x86_64. No Vulkan: the x86_64 build's
-# Vulkan support is not yet tried on ARM GPUs, so transcription runs on the CPU.
+# onnxruntime.dll from beside the app at run time, as on x86_64. whisper.cpp has its Vulkan
+# backend (#179), built against the SDK in $VULKAN_SDK, whose vulkan-1.lib the workflow empties: the
+# core opens the loader at run time (vulkan_loader_shim.rs), so it starts where no GPU driver
+# installed one and transcribes on the CPU there.
 #
 # Usage: tools/arm64/build-windows-arm64.sh VERSION
 # Needs: Rust with the aarch64-pc-windows-msvc target, Flutter, Visual Studio 2022 with the ARM64
@@ -22,6 +24,7 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 VERSION=${1:?usage: build-windows-arm64.sh VERSION}
 MODELS=${NOTE_TAKER_MODELS:?set NOTE_TAKER_MODELS to the folder holding the models}
 ONNX_RUNTIME=${NOTE_TAKER_ONNX_RUNTIME:?set NOTE_TAKER_ONNX_RUNTIME to the ARM64 ONNX Runtime folder}
+: "${VULKAN_SDK:?set VULKAN_SDK to the Vulkan SDK (headers, glslc, an empty vulkan-1.lib)}"
 TARGET=aarch64-pc-windows-msvc
 cd "$REPO"
 
@@ -42,10 +45,10 @@ export CXXFLAGS_aarch64_pc_windows_msvc=-EHsc
 MSVC_LINKER="${VCToolsInstallDir:?load the Visual Studio ARM64 environment first}/bin/HostARM64/arm64/link.exe"
 [ -f "$MSVC_LINKER" ] || { echo "missing $MSVC_LINKER" >&2; exit 1; }
 export CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=$MSVC_LINKER
-cargo build --release --features local-ai,microphone,computer-sound,vad,diarization --lib --target "$TARGET"
+cargo build --release --features local-ai,microphone,computer-sound,vad,diarization,whisper-rs/vulkan --lib --target "$TARGET"
 cargo build --release --bin note_taker_mcp --bin browser-host --target "$TARGET"
 # The CLI with the same AI features, only for tools/arm64/check-transcription.sh (not packed).
-cargo build --release --features local-ai,microphone,computer-sound,vad,diarization --bin cli --target "$TARGET"
+cargo build --release --features local-ai,microphone,computer-sound,vad,diarization,whisper-rs/vulkan --bin cli --target "$TARGET"
 RELEASE=target/$TARGET/release
 
 # The staging folders ui/windows/CMakeLists.txt installs beside the runner.

@@ -26,6 +26,10 @@ env:
   # LLVM's Windows on ARM build, for clang-cl and libclang when Visual Studio has none (#176).
   LLVM_VERSION: 23.1.6
   LLVM_WOA64_SHA256: 18b5b93305262760e107178de218f17fdd487642d34e1502e3a6dc8231e5a50d
+  # LunarG's Vulkan SDK for Windows on ARM, for the Vulkan headers and glslc (#179). The app links
+  # no Vulkan code: the SDK's vulkan-1.lib is replaced by an empty one (vulkan_loader_shim.rs).
+  VULKAN_SDK_VERSION: 1.4.363.1
+  VULKAN_SDK_WARM_SHA256: 29d925e3ee4793f9c3977f34389ccb0273c0347bfacf2f08dd70104d6d096ceb
 
 jobs:
   linux-arm64:
@@ -155,6 +159,25 @@ jobs:
           file "$llvm/libclang.dll" || true
           echo "$llvm" >> "$GITHUB_PATH"
           echo "LIBCLANG_PATH=$(cygpath -w "$llvm")" >> "$GITHUB_ENV"
+      - name: Install the Vulkan SDK for ARM64
+        run: |
+          installer="vulkansdk-windows-ARM64-$VULKAN_SDK_VERSION.exe"
+          curl -sSfL -o "$installer" \
+            "https://sdk.lunarg.com/sdk/download/$VULKAN_SDK_VERSION/warm/$installer"
+          echo "$VULKAN_SDK_WARM_SHA256  $installer" | sha256sum -c -
+          sdk_unix="/c/VulkanSDK/$VULKAN_SDK_VERSION"
+          sdk=$(cygpath -w "$sdk_unix")
+          ./"$installer" --root "$sdk" --accept-licenses --default-answer --confirm-command install
+          rm "$installer"
+          ls "$sdk_unix/Include/vulkan/vulkan.h" "$sdk_unix/Bin/glslc.exe"
+          # An empty import library: nothing may import vulkan-1.dll, or the core would not load
+          # where no GPU driver installed the loader (the core opens it at run time instead).
+          printf 'int koalino_vulkan_stub;\n' > stub.c
+          clang-cl -c stub.c -Fo:stub.obj
+          lib.exe -nologo -out:"$(cygpath -w "$sdk_unix/Lib/vulkan-1.lib")" stub.obj
+          rm stub.c stub.obj
+          echo "VULKAN_SDK=$sdk" >> "$GITHUB_ENV"
+          echo "$sdk_unix/Bin" >> "$GITHUB_PATH"
       - name: Install Flutter
         run: |
           git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
@@ -166,8 +189,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: windows-arm64-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: windows-arm64-cargo-
+          key: windows-arm64-vulkan-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-arm64-vulkan-cargo-
       - name: Download the models and ONNX Runtime
         run: |
           tools/arm64/fetch-models.sh "$NOTE_TAKER_MODELS"
@@ -188,7 +211,16 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Build
         run: tools/arm64/build-windows-arm64.sh "${{ steps.version.outputs.version }}"
+      - name: Check that the core does not import the Vulkan loader
+        run: |
+          deps=$(dumpbin.exe -nologo -dependents target/aarch64-pc-windows-msvc/release/note_taker_core.dll)
+          echo "$deps"
+          if grep -qi 'vulkan-1.dll' <<<"$deps"; then
+            echo "note_taker_core.dll imports vulkan-1.dll" >&2
+            exit 1
+          fi
       - name: Check that it transcribes
+        # The runner has no GPU, so this also checks the fallback to the CPU (#179).
         run: tools/arm64/check-transcription.sh target/aarch64-pc-windows-msvc/release/cli.exe "$NOTE_TAKER_MODELS/ggml-base.bin"
       - name: Check that the app starts
         # The app loads the core and stays up for a minute; a missing DLL or a crash on start
