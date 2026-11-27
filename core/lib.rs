@@ -94,6 +94,9 @@ pub mod ffi_recordings;
 /// Holds the settings the Flutter app passes to `note_taker_configure`, over the environment.
 #[path = "bin/ffi_settings.rs"]
 pub mod ffi_settings;
+/// Transcript speaker labels: each segment's voice, and renaming a saved person (#186).
+#[path = "bin/ffi_speakers.rs"]
+pub mod ffi_speakers;
 /// The desktop app's Teams bridge for the browser extension (#123).
 #[path = "bin/ffi_teams_bridge.rs"]
 pub mod ffi_teams_bridge;

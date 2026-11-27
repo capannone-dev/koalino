@@ -482,6 +482,14 @@ non-blank segments in start-time order, one per line, then falls back to the fla
 `None`. Export follows the same order. Before this, both read paths showed a recorded meeting as
 having no transcript.
 
+## Person rename
+
+`person_rename.rs` (#186) renames a saved person, as when the owner double-clicks or long-presses
+a speaker's label in a transcript. The name is trimmed and must be 1–100 characters on one line.
+A name another saved person has is refused (`NameTaken`): two people with one name could not be
+told apart, and merging people is not supported. Saving the identity refreshes `updated_at`, so
+paired devices take the newest name (#56). Names are never logged.
+
 ## Meeting rename
 
 `meeting_rename.rs` (Issue #38) is the one use case behind `meetings rename` (CLI),

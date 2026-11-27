@@ -4222,3 +4222,16 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Unchanged:** a hand-picked model is never stepped down, only proposed (#68). When no smaller
   model keeps up, Automatic keeps its model: stepping down would lose accuracy and still fall
   behind. Nothing downloads.
+
+## 2026-11-27 — Renaming a speaker from the transcript (#186)
+
+- **Gesture:** double-click or long-press on the speaker label line only. The passage text keeps
+  its long-press/right-click correction (#96), so the two gestures never compete.
+- **What changes:** a saved person is renamed everywhere (people are global and sync to paired
+  devices through `updated_at`, #56). An unknown voice is named with the existing cluster
+  assignment, which joins a saved person of the same name, as Voices does.
+- **Name taken:** renaming a saved person to another saved person's name is refused (`name_taken`)
+  instead of merging. Merging two people moves voice variants and segments and cannot be undone
+  simply, so it is its own issue.
+- **Contract:** each segment in the meeting JSON gains `voice` (`person`/`unknown` with an ID, or
+  null); an older core without it reads as no voice, so the label just doesn't react.

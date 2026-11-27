@@ -177,6 +177,17 @@ from a background isolate.
   or blank name), `cluster_not_found`, `cluster_already_resolved`, `assignment_failed`, or
   `runtime_unavailable`.
 
+- `char *note_taker_rename_person(const char *identity_id, const char *name)` renames a saved person
+  from a meeting's transcript (#186) and returns
+  `{"ok":true,"identity_id":"uuid","identity_name":"Grace Hopper"}`. The name is trimmed and must be
+  1–100 characters on one line. A name another saved person has (ignoring case) is refused, since
+  merging two people is not supported; the same person changing only the case is allowed. On failure
+  it returns `{"ok":false,"error_code","error"}` with `invalid_argument` (bad UUID), `invalid_name`,
+  `person_not_found`, `name_taken`, `rename_failed`, or `runtime_unavailable`. The new name reaches
+  paired devices with the voice library (#56). Each segment in `note_taker_get_meeting`'s answer
+  carries `voice`: `{"kind":"person","id"}` for a saved person, `{"kind":"unknown","id"}` with an
+  unknown voice's cluster (name it with `note_taker_assign_cluster`), or `null`.
+
 - `char *note_taker_get_voice_library(void)` returns every meeting's unresolved clusters and the
   saved people (Issue #63):
   `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title":"…|null","total_duration_ms","chunk_count","created_at","speaker_label":"Speaker 2|null","has_review_clip":true,"voice_group_id":"uuid","suggested_name":"…|null"}],"saved_people":[{"identity_id","display_name","voice_variant_count"}]}`,

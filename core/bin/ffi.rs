@@ -1243,6 +1243,19 @@ impl FfiRuntime {
         }
     }
 
+    /// Renames a saved person from a meeting's transcript (#186).
+    ///
+    /// Inputs: The person's ID (UUID string) and the typed name.
+    /// Outputs: The JSON answer of `ffi_speakers::rename_person_json`.
+    /// Side effects: Saves the person under the new name, which syncs to paired devices.
+    fn rename_person(&self, identity_id: &str, name: &str) -> String {
+        crate::ffi_speakers::rename_person_json(
+            self.voice_identity_manager.vector_database(),
+            identity_id,
+            name,
+        )
+    }
+
     /// Names several unknown voices as one person, as when the owner names a voice group (#82).
     ///
     /// Inputs: `cluster_ids_json` is a JSON array of UUID strings, in the order to name them;
@@ -2205,6 +2218,10 @@ impl FfiRuntime {
                     "overlapping_speech": segment.confidence().overlapping_speech,
                     "uncertain_speaker": segment.confidence().uncertain_speaker,
                     "uncertain_words": segment.confidence().uncertain_words,
+                    // Which voice to rename from the label (#186).
+                    "voice": crate::ffi_speakers::segment_voice_json(segment, |identity_id| {
+                        speaker_names.contains_key(&identity_id)
+                    }),
                 })
             })
             .collect();
@@ -3723,6 +3740,42 @@ pub unsafe extern "C" fn note_taker_assign_cluster(
         .unwrap_or(std::ptr::null_mut())
 }
 
+/// Renames a saved person from a meeting's transcript (#186).
+///
+/// Inputs: `identity_id` (a UUID) and `name` are non-null NUL-terminated UTF-8 strings.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`): `{"ok":true,"identity_id",
+/// "identity_name"}` or `{"ok":false,"error_code","error"}` with `invalid_argument`,
+/// `invalid_name`, `person_not_found`, `name_taken`, `rename_failed` or `runtime_unavailable`.
+/// Returns null only if the response cannot be allocated as a C string.
+/// Side effects: Saves the person under the new name, synchronously; Flutter should call it from
+/// a background isolate.
+///
+/// # Safety
+/// Both pointers must be null or point to valid NUL-terminated C strings for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_rename_person(
+    identity_id: *const c_char,
+    name: *const c_char,
+) -> *mut c_char {
+    let response_json = match (unsafe { ffi_string(identity_id) }, unsafe {
+        ffi_string(name)
+    }) {
+        (Some(identity_id), Some(name)) => {
+            with_runtime_json(|runtime| Ok(runtime.rename_person(identity_id, name)))
+                .unwrap_or_else(|_| {
+                    export_error_json("runtime_unavailable", "the native runtime is unavailable")
+                })
+        }
+        _ => export_error_json(
+            "invalid_argument",
+            "identity_id and name must be valid UTF-8 C strings",
+        ),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
 /// Names several unknown voices as one person and returns caller-freed result JSON (#82).
 ///
 /// Inputs: `cluster_ids_json` (a JSON array of UUID strings) and `identity_name` (non-blank) are
@@ -4983,6 +5036,7 @@ mod ffi_contract_tests {
                 "overlapping_speech": false,
                 "uncertain_speaker": false,
                 "uncertain_words": [],
+                "voice": null,
             }])
         );
         let untitled_summary = meetings

@@ -139,6 +139,10 @@ mod pairing_manager_tests;
 pub mod pass_comparison;
 #[cfg(test)]
 mod pass_comparison_tests;
+/// Renames a saved person from a meeting's transcript, refusing another person's name (#186).
+pub mod person_rename;
+#[cfg(test)]
+mod person_rename_tests;
 /// Connects transcription, diarization, and voice identity into speaker-attributed segments.
 pub mod pipeline;
 /// Encodes the sealed `NTP1` messages that copy the project list to paired devices (Issue #85).

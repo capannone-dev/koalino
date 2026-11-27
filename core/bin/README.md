@@ -382,6 +382,11 @@ removes the request, or marks it `failed` with the error code. Another computer'
 over after 30 minutes, and at most 10 requests are sent per hour. `ffi_llm.rs` also gives the app
 `note_taker_request_paired_summary`, which writes or cancels a request.
 
+`ffi_speakers.rs` (#186) tells the meeting screen which voice each transcript segment belongs to
+(the `voice` field: a saved person, an unknown voice's cluster, or none) and backs
+`note_taker_rename_person`, which renames a saved person through `application/person_rename.rs`.
+Unknown voices are named with `note_taker_assign_cluster`, as in Voices.
+
 `ffi_edits.rs` (#96) gives the app `note_taker_meeting_edit`: the notes, the summary's text and
 single transcript segments, through `application/meeting_edits.rs` (the same rules as the web).
 It also keeps an answer from the owner's own AI app as the summary (`keep_answer`) and undoes
