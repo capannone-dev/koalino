@@ -98,6 +98,23 @@ jobs:
           package_version="${version/-/\~}"
           tools/packaging/linux/build-deb.sh "dist/koalino-linux-arm64-$version.tar.gz" "$package_version" dist
           tools/packaging/linux/build-rpm.sh "dist/koalino-linux-arm64-$version.tar.gz" "$package_version" dist
+      - name: Package the Flatpak
+        # The same script as on x86_64, on the aarch64 Freedesktop runtime from Flathub (#190).
+        run: |
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+          tools/packaging/linux/build-flatpak.sh "dist/koalino-linux-arm64-${{ steps.version.outputs.version }}.tar.gz" dist
+      - name: Check that the Flatpak starts
+        # Installed from the bundle as a user would, then run as in the tarball's check above.
+        run: |
+          flatpak install --user -y --noninteractive "dist/koalino-arm64-${{ steps.version.outputs.version }}.flatpak"
+          status=0
+          NOTE_TAKER_KEYCHAIN_ENABLED=false NOTE_TAKER_ENCRYPTION_PASSPHRASE=ci-smoke-test-only \
+            timeout 60 xvfb-run -a flatpak run --env=NOTE_TAKER_KEYCHAIN_ENABLED=false \
+            --env=NOTE_TAKER_ENCRYPTION_PASSPHRASE=ci-smoke-test-only io.github.capannone_dev.koalino || status=$?
+          echo "app exit status: $status (124 = still running at the timeout)"
+          [ "$status" -eq 124 ]
       - name: Upload the packages
         uses: actions/upload-artifact@v4
         with:
@@ -106,12 +123,13 @@ jobs:
             dist/koalino-linux-arm64-*.tar.gz
             dist/koalino_*_arm64.deb
             dist/koalino-*.aarch64.rpm
+            dist/koalino-arm64-*.flatpak
           if-no-files-found: error
       - name: Attach the packages to the release
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           gh release upload "$GITHUB_REF_NAME" dist/koalino-linux-arm64-*.tar.gz \
-            dist/koalino_*_arm64.deb dist/koalino-*.aarch64.rpm --clobber
+            dist/koalino_*_arm64.deb dist/koalino-*.aarch64.rpm dist/koalino-arm64-*.flatpak --clobber
 
   windows-arm64:
     name: Windows ARM64 zip

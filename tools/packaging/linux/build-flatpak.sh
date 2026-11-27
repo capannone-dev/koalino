@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Builds a single-file Flatpak bundle of the Koalino desktop app from the Linux release tarball.
 #
-# Usage: build-flatpak.sh <koalino-linux-x86_64-VERSION.tar.gz> <output-dir>
+# Usage: build-flatpak.sh <koalino-linux-ARCH-VERSION.tar.gz> <output-dir>
+# ARCH, x86_64 or arm64 (#190), must be the machine's own: flatpak-builder builds for the host, and
+# the bundle is named koalino-ARCH-VERSION.flatpak.
 # Needs: flatpak and flatpak-builder, with the org.freedesktop.Platform and Sdk 24.08 runtimes
 # from Flathub (`flatpak install --user flathub org.freedesktop.Platform//24.08
 # org.freedesktop.Sdk//24.08`). The bundle names Flathub as its runtime source, so
