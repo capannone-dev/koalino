@@ -3330,4 +3330,25 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get notEnoughFreeSpaceToDownload =>
       'Пока недостаточно свободного места, чтобы его скачать.';
+
+  @override
+  String get downloadTheBestModelByItself =>
+      'Скачивать лучшую модель самостоятельно';
+
+  @override
+  String get downloadTheBestModelByItselfHint =>
+      'По Wi-Fi и при наличии места модель, которую «Автоматически» выбирает для этого устройства, скачивается при запуске. Пока что записи используют текущую модель.';
+
+  @override
+  String gettingAMoreAccurateModel(String name, String percent) {
+    return 'Загружается более точная модель ($name) для этого устройства: $percent';
+  }
+
+  @override
+  String get recordingsUseTheCurrentModelMeanwhile =>
+      'Пока она не готова, записи используют текущую модель.';
+
+  @override
+  String get youCanRecordOnceItIsReady =>
+      'Записывать можно будет, как только она будет готова.';
 }

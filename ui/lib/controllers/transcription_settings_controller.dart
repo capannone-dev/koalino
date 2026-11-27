@@ -117,6 +117,12 @@ final class TranscriptionSettingsController extends ChangeNotifier {
       _run(() => _bridge.setAfterMeetingPass(enabled: enabled),
           success: l10n.savedTheNextRecordingUsesThis2);
 
+  /// Turns downloading Automatic's model by itself on or off (#189).
+  ///
+  /// Inputs: The choice. Side effects: Stores it and reloads.
+  Future<void> setAutoDownload({required bool enabled}) =>
+      _run(() => _bridge.setAutoDownload(enabled: enabled), success: null);
+
   /// Chooses the after-meeting pass's model (#87), or `null` for the recording model.
   ///
   /// Inputs: A model on this device, or `null`. Side effects: Stores the choice and reloads.

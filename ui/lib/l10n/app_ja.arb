@@ -851,5 +851,10 @@
   "mergedInto": "{source} は {target} に統合されました",
   "thesePeopleCouldNotBeMerged": "この人たちを統合できませんでした。もう一度お試しください。",
   "peopleCannotBeMergedWhileRecording": "会議の録音中は人を統合できません。",
-  "notEnoughFreeSpaceToDownload": "ダウンロードするための空き容量がまだ足りません。"
+  "notEnoughFreeSpaceToDownload": "ダウンロードするための空き容量がまだ足りません。",
+  "downloadTheBestModelByItself": "最適なモデルを自動でダウンロード",
+  "downloadTheBestModelByItselfHint": "Wi-Fi 接続中で空き容量があれば、自動がこのデバイス向けに選んだモデルを起動時にダウンロードします。その間、録音は現在のモデルを使います。",
+  "gettingAMoreAccurateModel": "このデバイス向けのより正確なモデル（{name}）を取得中：{percent}",
+  "recordingsUseTheCurrentModelMeanwhile": "準備ができるまで、録音は現在のモデルを使います。",
+  "youCanRecordOnceItIsReady": "準備ができ次第、録音できるようになります。"
 }

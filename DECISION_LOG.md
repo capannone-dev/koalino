@@ -4282,3 +4282,23 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Kept for later:** the branch has the build, GPU choice by backend name (with both backends ggml
   lists an Adreno GPU twice, Vulkan first), a developer setting and a Test Lab build switch. Retry
   it on Xclipse (Exynos 2200/2400) or PowerVR phones, or when ggml's Vulkan backend improves on Mali.
+
+## 2026-11-27 — Automatic's model downloads by itself at first start (#189)
+
+- **Problem:** a fresh install transcribed at once with the shipped `base`, but the better model
+  Automatic picks for the device (often `small`) waited behind a Download button in Settings, which
+  most people never open. The F-Droid build ships no model, so it could not record at all until
+  someone downloaded one by hand.
+- **Decision:** at start, and whenever the app returns to the foreground, the app downloads
+  Automatic's model by itself when:
+  - Automatic is chosen and the new "Download the best model by itself" switch is on (the default);
+  - the model is missing and fits in the free space;
+  - the network is unmetered (Android's `NOT_METERED` capability), so mobile data is never spent.
+  
+  Recordings keep using `base` meanwhile; a finished download now marks the pipeline stale, so the
+  next recording uses the new model, and the speed check (#109) still steps down if it is too slow.
+  The Record screen shows the progress with a Stop button. A stop or a failure waits for the next
+  start, to avoid retrying in a loop.
+- **Not during installation:** an APK has no install-time step outside Google Play's asset packs,
+  which F-Droid and GitHub releases can't use, and desktop installers already ship `base`, so the
+  app works offline from the first start. Downloading after the first start covers every channel.

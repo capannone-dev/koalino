@@ -3353,4 +3353,25 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get notEnoughFreeSpaceToDownload =>
       'Für den Download ist noch nicht genug freier Speicher vorhanden.';
+
+  @override
+  String get downloadTheBestModelByItself =>
+      'Bestes Modell selbst herunterladen';
+
+  @override
+  String get downloadTheBestModelByItselfHint =>
+      'Im WLAN und bei genug Speicher wird das Modell, das Automatisch für dieses Gerät wählt, beim Start heruntergeladen. Aufnahmen nutzen bis dahin das aktuelle Modell.';
+
+  @override
+  String gettingAMoreAccurateModel(String name, String percent) {
+    return 'Ein genaueres Modell ($name) für dieses Gerät wird geladen: $percent';
+  }
+
+  @override
+  String get recordingsUseTheCurrentModelMeanwhile =>
+      'Aufnahmen nutzen weiter das aktuelle Modell, bis es bereit ist.';
+
+  @override
+  String get youCanRecordOnceItIsReady =>
+      'Du kannst aufnehmen, sobald es bereit ist.';
 }

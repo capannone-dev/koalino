@@ -851,5 +851,10 @@
   "mergedInto": "{source} ahora forma parte de {target}",
   "thesePeopleCouldNotBeMerged": "No se pudo unir a estas personas. Inténtalo de nuevo.",
   "peopleCannotBeMergedWhileRecording": "No se pueden unir personas mientras se graba una reunión.",
-  "notEnoughFreeSpaceToDownload": "Todavía no hay suficiente espacio libre para descargarlo."
+  "notEnoughFreeSpaceToDownload": "Todavía no hay suficiente espacio libre para descargarlo.",
+  "downloadTheBestModelByItself": "Descargar el mejor modelo por sí solo",
+  "downloadTheBestModelByItselfHint": "Con wifi y si cabe, el modelo que Automático elige para este dispositivo se descarga al iniciar. Mientras tanto, las grabaciones usan el modelo actual.",
+  "gettingAMoreAccurateModel": "Descargando un modelo más preciso ({name}) para este dispositivo: {percent}",
+  "recordingsUseTheCurrentModelMeanwhile": "Las grabaciones siguen usando el modelo actual hasta que esté listo.",
+  "youCanRecordOnceItIsReady": "Podrás grabar en cuanto esté listo."
 }

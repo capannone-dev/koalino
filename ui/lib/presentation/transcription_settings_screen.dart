@@ -37,6 +37,9 @@ const Key automaticDownloadKey = ValueKey<String>('automatic-download');
 /// Finds the after-meeting pass switch (#87).
 const Key afterMeetingPassKey = ValueKey<String>('after-meeting-pass');
 
+/// The switch for downloading Automatic's model by itself (#189).
+const Key autoDownloadKey = ValueKey<String>('auto-download');
+
 /// The after-meeting pass's model picker (#87).
 const Key afterMeetingPassModelKey =
     ValueKey<String>('after-meeting-pass-model');
@@ -214,6 +217,8 @@ final class _TranscriptionSettingsScreenState
                   const Divider(),
                 ],
                 ..._modelTiles(context, settings),
+                if (settings.automatic.enabled)
+                  _autoDownloadTile(settings.autoDownload),
                 const Divider(),
                 // Keyed, so the message row above appearing keeps its text and state.
                 _GlossarySection(
@@ -332,6 +337,18 @@ final class _TranscriptionSettingsScreenState
             ? null
             : (bool value) =>
                 widget.controller.setComputerSound(enabled: value),
+      );
+
+  /// Downloading Automatic's model by itself (#189): at start, on Wi-Fi when it fits.
+  Widget _autoDownloadTile(bool enabled) => SwitchListTile(
+        key: autoDownloadKey,
+        secondary: const Icon(Icons.download_for_offline_outlined),
+        title: Text(l10n.downloadTheBestModelByItself),
+        subtitle: Text(l10n.downloadTheBestModelByItselfHint),
+        value: enabled,
+        onChanged: widget.controller.isBusy
+            ? null
+            : (bool value) => widget.controller.setAutoDownload(enabled: value),
       );
 
   /// The after-meeting pass (#87): transcribe the meeting again after Stop, with longer context.

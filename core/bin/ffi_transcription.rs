@@ -46,8 +46,9 @@ use crate::{
     application::combined_meetings::{MAX_KEEP_SPEECH_DAYS, MIN_KEEP_SPEECH_DAYS, keep_for_days},
     domain::transcription_glossary::TranscriptionGlossary,
     transcription_settings::{
-        computer_sound_enabled, keep_speech_days, save_computer_sound, save_glossary,
-        save_keep_speech_days, save_transcript_pass, transcript_pass_enabled,
+        auto_download_enabled, computer_sound_enabled, keep_speech_days, save_auto_download,
+        save_computer_sound, save_glossary, save_keep_speech_days, save_transcript_pass,
+        transcript_pass_enabled,
     },
 };
 
@@ -451,6 +452,7 @@ fn settings_json() -> String {
             "waiting_for_download": automatic.and_then(|choice| choice.waiting_for_download),
         },
         "after_meeting_pass": transcript_pass_enabled(&saved),
+        "auto_download": auto_download_enabled(&saved),
         // The pass's own model when it is still on this device; null re-transcribes with the
         // live model (#87).
         "after_meeting_pass_model": saved
@@ -629,6 +631,21 @@ pub extern "C" fn note_taker_set_computer_sound(enabled: c_int) -> c_int {
     }
 }
 
+/// Turns downloading Automatic's model by itself (#189) on or off.
+///
+/// Inputs: Non-zero to turn it on. Outputs: 0, or 2 when the choice can't be stored.
+/// Side effects: Stores the choice. A download already running continues.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_set_auto_download(enabled: c_int) -> c_int {
+    match save_auto_download(&paths().settings_file, enabled != 0) {
+        Ok(()) => STATUS_OK,
+        Err(error) => {
+            tracing::warn!(error = %error, "unable to store the automatic download choice");
+            STATUS_FAILED
+        }
+    }
+}
+
 /// Turns the after-meeting pass (#87) on or off from the next recording.
 ///
 /// Inputs: Non-zero to turn it on. Outputs: 0, or 2 when the choice can't be stored.
@@ -800,8 +817,13 @@ pub unsafe extern "C" fn note_taker_download_whisper_model(file_name: *const c_c
                 Err(ModelDownloadError::Corrupted) => ("failed", Some("corrupted")),
                 Err(ModelDownloadError::Storage(_)) => ("failed", Some("storage")),
             };
-            if let Err(error) = &result {
-                tracing::warn!(error = %error, "Whisper model download did not finish");
+            match &result {
+                // A new model may be the one Automatic waited for (#189): the next recording
+                // rebuilds the pipeline with it; a running one keeps its model.
+                Ok(_) => PIPELINE_STALE.store(true, Ordering::Relaxed),
+                Err(error) => {
+                    tracing::warn!(error = %error, "Whisper model download did not finish")
+                }
             }
         });
     if spawned.is_err() {

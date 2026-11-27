@@ -69,6 +69,10 @@ them into `<data directory>/npu/{qnn,model}` when both are complete. Dart polls 
 turns the NPU on (`note_taker_set_npu_whisper`) once done. No Qualcomm code is in the APK; only
 Microsoft's `libonnxruntime.so` (MIT) is, beside the core.
 
+`NetworkState.kt` (#189) serves `note_taker/network`: `isUnmetered` is true on a connected network
+without the metered flag (Wi-Fi, Ethernet), so Automatic's model downloads by itself without
+spending mobile data.
+
 Two platform details make the NPU reachable from an app:
 
 - The manifest declares `libcdsprpc.so` with `<uses-native-library>`, like `libOpenCL.so`;

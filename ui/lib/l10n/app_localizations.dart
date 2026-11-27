@@ -5229,6 +5229,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'There isn\'t enough free space to download it yet.'**
   String get notEnoughFreeSpaceToDownload;
+
+  /// No description provided for @downloadTheBestModelByItself.
+  ///
+  /// In en, this message translates to:
+  /// **'Download the best model by itself'**
+  String get downloadTheBestModelByItself;
+
+  /// No description provided for @downloadTheBestModelByItselfHint.
+  ///
+  /// In en, this message translates to:
+  /// **'On Wi-Fi, when it fits, the model Automatic picks for this device is downloaded at start. Recordings use the current model meanwhile.'**
+  String get downloadTheBestModelByItselfHint;
+
+  /// No description provided for @gettingAMoreAccurateModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Getting a more accurate model ({name}) for this device: {percent}'**
+  String gettingAMoreAccurateModel(String name, String percent);
+
+  /// No description provided for @recordingsUseTheCurrentModelMeanwhile.
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings keep using the current model until it\'s ready.'**
+  String get recordingsUseTheCurrentModelMeanwhile;
+
+  /// No description provided for @youCanRecordOnceItIsReady.
+  ///
+  /// In en, this message translates to:
+  /// **'You can record as soon as it\'s ready.'**
+  String get youCanRecordOnceItIsReady;
 }
 
 class _AppLocalizationsDelegate

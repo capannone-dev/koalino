@@ -100,6 +100,7 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         keepSpeech: SpeechRetention(days: keepSpeechDays),
         afterMeetingPass: afterMeetingPass,
         afterMeetingPassModel: afterMeetingPassModel,
+        autoDownload: autoDownload,
         computerSound: ComputerSoundSetting(
             available: computerSoundAvailable, enabled: computerSound),
         npu: npu,
@@ -172,6 +173,16 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   Future<int> setComputerSound({required bool enabled}) async {
     calls.add('computer sound $enabled');
     computerSound = enabled;
+    return transcriptionStatusOk;
+  }
+
+  /// Whether Automatic's model downloads by itself (#189).
+  bool autoDownload = true;
+
+  @override
+  Future<int> setAutoDownload({required bool enabled}) async {
+    calls.add('auto download $enabled');
+    autoDownload = enabled;
     return transcriptionStatusOk;
   }
 
@@ -712,6 +723,28 @@ void main() {
           'waiting_for_download': null,
         }).fileName,
         'ggml-small.bin');
+  });
+
+  testWidgets(
+      'downloading Automatic\'s model by itself is on by default and can be turned off',
+      (WidgetTester tester) async {
+    // Shown only while Automatic chooses the model.
+    final _FakeBridge bridge = _FakeBridge()..selected = null;
+    await _pump(tester, bridge);
+    await tester.scrollUntilVisible(find.byKey(autoDownloadKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(find.byKey(autoDownloadKey)).value,
+        isTrue);
+
+    await tester.tap(find.byKey(autoDownloadKey));
+    await tester.pumpAndSettle();
+
+    expect(bridge.calls, contains('auto download false'));
+    await tester.scrollUntilVisible(find.byKey(autoDownloadKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<SwitchListTile>(find.byKey(autoDownloadKey)).value,
+        isFalse);
   });
 
   testWidgets('the after-meeting pass is on by default and can be turned off',

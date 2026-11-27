@@ -3320,4 +3320,24 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get notEnoughFreeSpaceToDownload =>
       'Per ora non c\'è abbastanza spazio libero per scaricarlo.';
+
+  @override
+  String get downloadTheBestModelByItself =>
+      'Scarica da solo il modello migliore';
+
+  @override
+  String get downloadTheBestModelByItselfHint =>
+      'Con il Wi-Fi, se c\'è spazio, il modello che Automatico sceglie per questo dispositivo viene scaricato all\'avvio. Nel frattempo le registrazioni usano il modello attuale.';
+
+  @override
+  String gettingAMoreAccurateModel(String name, String percent) {
+    return 'Sto scaricando un modello più preciso ($name) per questo dispositivo: $percent';
+  }
+
+  @override
+  String get recordingsUseTheCurrentModelMeanwhile =>
+      'Le registrazioni continuano a usare il modello attuale finché non è pronto.';
+
+  @override
+  String get youCanRecordOnceItIsReady => 'Potrai registrare appena è pronto.';
 }

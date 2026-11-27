@@ -3081,4 +3081,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notEnoughFreeSpaceToDownload => '可用空间暂不足以下载它。';
+
+  @override
+  String get downloadTheBestModelByItself => '自动下载最佳模型';
+
+  @override
+  String get downloadTheBestModelByItselfHint =>
+      '连接 Wi-Fi 且空间足够时，启动时会下载“自动”为此设备选择的模型。在此期间，录音使用当前模型。';
+
+  @override
+  String gettingAMoreAccurateModel(String name, String percent) {
+    return '正在为此设备获取更准确的模型（$name）：$percent';
+  }
+
+  @override
+  String get recordingsUseTheCurrentModelMeanwhile => '在它准备好之前，录音继续使用当前模型。';
+
+  @override
+  String get youCanRecordOnceItIsReady => '准备好后即可录音。';
 }

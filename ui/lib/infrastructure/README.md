@@ -82,6 +82,9 @@ cloud transcription or key since #117. `setGlossary` saves the glossary (one ter
 settings carry the saved terms. `setKeepSpeechDays` saves the speech retention window, which the
 settings carry as `SpeechRetention` (`days` and its bounds, #93).
 
+`network_state.dart` (#189) tells whether the network is unmetered: Android answers through
+`note_taker/network` (`NetworkState.kt`); computers always count as unmetered.
+
 `language_bridge.dart` reaches the core's default language and the language of the next or current
 recording (`note_taker_get_default_language`, `note_taker_set_default_language`,
 `note_taker_set_recording_language`) on background isolates (Issue #62).

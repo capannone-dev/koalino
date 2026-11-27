@@ -95,6 +95,8 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler(NpuDownload())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/whisper_model")
             .setMethodCallHandler(WhisperModel(assets))
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/network")
+            .setMethodCallHandler(NetworkState(applicationContext))
         val recordingChannel =
             MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/recording_service")
         recordingChannel.setMethodCallHandler { call, result ->

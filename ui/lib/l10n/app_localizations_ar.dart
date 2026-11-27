@@ -3329,4 +3329,23 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get notEnoughFreeSpaceToDownload =>
       'لا توجد مساحة فارغة كافية لتنزيله بعد.';
+
+  @override
+  String get downloadTheBestModelByItself => 'تنزيل أفضل نموذج تلقائيًا';
+
+  @override
+  String get downloadTheBestModelByItselfHint =>
+      'عند الاتصال بشبكة Wi-Fi وتوفر المساحة، يُنزَّل عند البدء النموذج الذي يختاره «تلقائي» لهذا الجهاز. وفي الأثناء تستخدم التسجيلات النموذج الحالي.';
+
+  @override
+  String gettingAMoreAccurateModel(String name, String percent) {
+    return 'جارٍ تنزيل نموذج أدق ($name) لهذا الجهاز: $percent';
+  }
+
+  @override
+  String get recordingsUseTheCurrentModelMeanwhile =>
+      'تواصل التسجيلات استخدام النموذج الحالي حتى يصبح جاهزًا.';
+
+  @override
+  String get youCanRecordOnceItIsReady => 'يمكنك التسجيل فور جاهزيته.';
 }

@@ -77,6 +77,14 @@ transcribed; the core stores and applies it.
 
 `transcription_settings_controller.dart` holds the Transcription page: models and downloads (#67); the OpenAI choice is gone (#117).
 
+`automatic_model_fetcher.dart` (#189) downloads Automatic's model by itself, so a fresh install
+reaches the best model for the device without opening Settings. `main.dart` runs `check()` once the
+core is open and whenever the app returns to the foreground; it starts the core's download only when
+Automatic and the "Download the best model by itself" switch are on, the model is missing and fits
+in the free space, and the network is unmetered (`network_state.dart`). Recordings keep using the
+model already here; the Record screen shows a banner with the progress and a Stop button. A stopped
+or failed download is not retried until the next start.
+
 `summary_export_controller.dart` (#130) exports a meeting's summary as PDF, plain text, Word or
 Markdown like a meeting export: the save dialog on desktops, a private copy handed to the system
 picker and deleted on phones. The summary page shows it as an Export menu when

@@ -9,6 +9,7 @@ import 'dart:async';
 // ignore: deprecated_member_use
 import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/automatic_model_fetcher.dart';
 import 'package:note_taker_ui/controllers/live_transcript_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
@@ -52,6 +53,7 @@ final class RecordingScreen extends StatefulWidget {
     this.photoScreenBuilder,
     this.attachmentsController,
     this.activeMeetingId,
+    this.modelFetcher,
     super.key,
   });
 
@@ -61,6 +63,9 @@ final class RecordingScreen extends StatefulWidget {
   final MeetingScreenBuilder? photoScreenBuilder;
   final MeetingAttachmentsController? attachmentsController;
   final Future<String?> Function()? activeMeetingId;
+
+  /// Downloads Automatic's model by itself (#189); when given, its progress shows above the title.
+  final AutomaticModelFetcher? modelFetcher;
 
   @override
   State<RecordingScreen> createState() => _RecordingScreenState();
@@ -200,6 +205,9 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
+                      if (widget.modelFetcher
+                          case final AutomaticModelFetcher fetcher)
+                        ModelDownloadBanner(fetcher: fetcher),
                       TextField(
                         controller: _titleController,
                         enabled: !isBusy,
@@ -702,3 +710,65 @@ String? describeMicrophoneProblem(
             MicrophoneHearing.blockedByWindows =>
               l10n.windowsBlocksTheMicrophone,
           };
+
+/// The key of the banner showing the automatic model download (#189).
+const Key modelDownloadBannerKey = ValueKey<String>('model-download-banner');
+
+/// Shows Automatic's model downloading by itself (#189), with a way to stop it for this run.
+///
+/// Recordings keep transcribing with the model already here meanwhile, so the banner only informs.
+final class ModelDownloadBanner extends StatelessWidget {
+  /// Creates the banner. Inputs: The fetcher it follows. Side effects: None.
+  const ModelDownloadBanner({required this.fetcher, super.key});
+
+  final AutomaticModelFetcher fetcher;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: fetcher,
+        builder: (BuildContext context, Widget? child) {
+          final String? name = fetcher.modelName;
+          if (name == null) {
+            return const SizedBox.shrink();
+          }
+          final double? progress = fetcher.progress;
+          return Card(
+            key: modelDownloadBannerKey,
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      const Icon(Icons.download_outlined),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(l10n.gettingAMoreAccurateModel(
+                            name,
+                            progress == null
+                                ? ''
+                                : '${(progress * 100).floor()}%')),
+                      ),
+                      TextButton(
+                        onPressed: () => fetcher.stop(),
+                        child: Text(l10n.stop),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(value: progress),
+                  const SizedBox(height: 8),
+                  Text(
+                      fetcher.hasModelMeanwhile
+                          ? l10n.recordingsUseTheCurrentModelMeanwhile
+                          : l10n.youCanRecordOnceItIsReady,
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+}

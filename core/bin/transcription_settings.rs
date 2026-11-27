@@ -45,6 +45,10 @@ pub struct SavedTranscriptionSettings {
     /// Whether each meeting is re-transcribed after Stop (#87); `None` keeps the default (on).
     #[serde(default)]
     pub transcript_pass: Option<bool>,
+    /// Whether Automatic's model is downloaded by itself when it isn't on the device (#189); `None`
+    /// keeps the default (on). The app still waits for an unmetered network on phones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_download: Option<bool>,
     /// The catalog file name of the model for that pass; `None` uses the live model.
     #[serde(default)]
     pub transcript_pass_model: Option<String>,
@@ -303,6 +307,23 @@ pub fn transcript_pass_enabled(saved: &SavedTranscriptionSettings) -> bool {
 pub fn save_transcript_pass(settings_file: &Path, enabled: bool) -> io::Result<()> {
     let mut saved = load_settings(settings_file);
     saved.transcript_pass = Some(enabled);
+    save_settings(settings_file, &saved)
+}
+
+/// Whether Automatic's model is downloaded by itself (#189).
+///
+/// Inputs: The saved settings. Outputs: The choice; on when unset. Side effects: None.
+pub fn auto_download_enabled(saved: &SavedTranscriptionSettings) -> bool {
+    saved.auto_download.unwrap_or(true)
+}
+
+/// Saves whether Automatic's model is downloaded by itself, keeping every other saved choice.
+///
+/// Inputs: The settings file and the choice. Outputs: `Ok(())` or the write error.
+/// Side effects: Rewrites the file atomically; the app reads it at its next check.
+pub fn save_auto_download(settings_file: &Path, enabled: bool) -> io::Result<()> {
+    let mut saved = load_settings(settings_file);
+    saved.auto_download = Some(enabled);
     save_settings(settings_file, &saved)
 }
 

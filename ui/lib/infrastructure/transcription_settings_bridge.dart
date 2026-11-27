@@ -276,6 +276,7 @@ final class TranscriptionSettings {
     this.computerSound = const ComputerSoundSetting(),
     this.npu = const NpuStatus(),
     this.automatic = const AutomaticModelStatus(),
+    this.autoDownload = true,
   });
 
   /// Reads the view from the core's JSON.
@@ -302,6 +303,7 @@ final class TranscriptionSettings {
           : SpeechRetention.fromJson(
               json['keep_speech']! as Map<String, Object?>),
       afterMeetingPass: json['after_meeting_pass'] as bool? ?? true,
+      autoDownload: json['auto_download'] as bool? ?? true,
       afterMeetingPassModel: json['after_meeting_pass_model'] as String?,
       computerSound: json['computer_sound'] == null
           ? const ComputerSoundSetting()
@@ -332,6 +334,9 @@ final class TranscriptionSettings {
 
   /// A model proposed from this device's measurements, or `null`.
   final WhisperProposal? proposal;
+
+  /// Whether Automatic's model is downloaded by itself when it isn't here (#189); on by default.
+  final bool autoDownload;
 
   /// The model suggested for this device, or `null` when there is none.
   final WhisperSuggestion? suggestion;
@@ -459,6 +464,10 @@ abstract interface class TranscriptionSettingsBridge {
   /// Starts a download. Outputs: A core status. Side effects: The core downloads in the background.
   Future<int> download(String fileName);
 
+  /// Turns downloading Automatic's model by itself on or off (#189).
+  /// Outputs: A core status. Side effects: Stores the choice.
+  Future<int> setAutoDownload({required bool enabled});
+
   /// Cancels the running download. Side effects: The partial file is removed.
   Future<void> cancelDownload();
 
@@ -514,6 +523,14 @@ final class RustTranscriptionSettingsBridge
     return Isolate.run(() => _openCoreLibrary()
         .lookupFunction<Int32 Function(Int32), int Function(int)>(
             'note_taker_set_after_meeting_pass')(value));
+  }
+
+  @override
+  Future<int> setAutoDownload({required bool enabled}) {
+    final int value = enabled ? 1 : 0;
+    return Isolate.run(() => _openCoreLibrary()
+        .lookupFunction<Int32 Function(Int32), int Function(int)>(
+            'note_taker_set_auto_download')(value));
   }
 
   @override

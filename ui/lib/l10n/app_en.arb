@@ -2489,5 +2489,15 @@
   "peopleCannotBeMergedWhileRecording": "People cannot be merged while a meeting is being recorded.",
   "@peopleCannotBeMergedWhileRecording": {},
   "notEnoughFreeSpaceToDownload": "There isn't enough free space to download it yet.",
-  "@notEnoughFreeSpaceToDownload": {}
+  "@notEnoughFreeSpaceToDownload": {},
+  "downloadTheBestModelByItself": "Download the best model by itself",
+  "@downloadTheBestModelByItself": {},
+  "downloadTheBestModelByItselfHint": "On Wi-Fi, when it fits, the model Automatic picks for this device is downloaded at start. Recordings use the current model meanwhile.",
+  "@downloadTheBestModelByItselfHint": {},
+  "gettingAMoreAccurateModel": "Getting a more accurate model ({name}) for this device: {percent}",
+  "@gettingAMoreAccurateModel": {"placeholders": {"name": {"type": "String"}, "percent": {"type": "String"}}},
+  "recordingsUseTheCurrentModelMeanwhile": "Recordings keep using the current model until it's ready.",
+  "@recordingsUseTheCurrentModelMeanwhile": {},
+  "youCanRecordOnceItIsReady": "You can record as soon as it's ready.",
+  "@youCanRecordOnceItIsReady": {}
 }

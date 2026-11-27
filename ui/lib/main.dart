@@ -25,6 +25,8 @@ import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
+import 'package:note_taker_ui/controllers/automatic_model_fetcher.dart';
+import 'package:note_taker_ui/infrastructure/network_state.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/controllers/live_transcript_controller.dart';
@@ -182,10 +184,20 @@ Future<void> main() async {
     // Plain copies of an earlier hand-off's meeting are not kept across runs (#114).
     unawaited(_handoffPlatform.handoffDirectory().then(clearHandoffFolder));
   }
-  // Starts after the first frame, so the waiting message shows during a keychain prompt.
-  unawaited(coreStartupController.start());
+  // Starts after the first frame, so the waiting message shows during a keychain prompt. Once the
+  // core is open, Automatic's model is fetched by itself when it is due (#189), and checked again
+  // whenever the app returns, for example after reaching Wi-Fi.
+  unawaited(coreStartupController.start().then((_) => _modelFetcher.check()));
+  // The binding keeps the listener for the app's lifetime.
+  AppLifecycleListener(onResume: () => unawaited(_modelFetcher.check()));
   unawaited(callWatchController?.start());
 }
+
+/// Downloads Automatic's model by itself (#189); lives as long as the app.
+final AutomaticModelFetcher _modelFetcher = AutomaticModelFetcher(
+  bridge: const RustTranscriptionSettingsBridge(),
+  network: const PlatformNetworkState(),
+);
 
 /// Configures the application-wide Material 3 light and dark themes and the adaptive navigation shell.
 final class NoteTakerApp extends StatelessWidget {
@@ -255,6 +267,8 @@ final class NoteTakerApp extends StatelessWidget {
         photoScreenBuilder: _photoScreenBuilder,
         attachmentsController: _recordingAttachmentsController,
         activeMeetingId: activeMeetingId,
+        // Tests that build the app without the core omit the start-up controller.
+        modelFetcher: coreStartupController == null ? null : _modelFetcher,
       ),
       meetingsScreenBuilder: (BuildContext context) =>
           const _MeetingsDestination(),

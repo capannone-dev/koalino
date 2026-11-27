@@ -851,5 +851,10 @@
   "mergedInto": "{source} теперь объединён с {target}",
   "thesePeopleCouldNotBeMerged": "Не удалось объединить этих людей. Попробуйте ещё раз.",
   "peopleCannotBeMergedWhileRecording": "Нельзя объединять людей во время записи встречи.",
-  "notEnoughFreeSpaceToDownload": "Пока недостаточно свободного места, чтобы его скачать."
+  "notEnoughFreeSpaceToDownload": "Пока недостаточно свободного места, чтобы его скачать.",
+  "downloadTheBestModelByItself": "Скачивать лучшую модель самостоятельно",
+  "downloadTheBestModelByItselfHint": "По Wi-Fi и при наличии места модель, которую «Автоматически» выбирает для этого устройства, скачивается при запуске. Пока что записи используют текущую модель.",
+  "gettingAMoreAccurateModel": "Загружается более точная модель ({name}) для этого устройства: {percent}",
+  "recordingsUseTheCurrentModelMeanwhile": "Пока она не готова, записи используют текущую модель.",
+  "youCanRecordOnceItIsReady": "Записывать можно будет, как только она будет готова."
 }

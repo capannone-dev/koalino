@@ -81,6 +81,7 @@ fn settings_round_trip() {
         efficient_gpu: false,
         dismissed_proposals: vec!["ggml-medium.bin".to_owned()],
         transcript_pass: Some(false),
+        auto_download: Some(false),
         transcript_pass_model: Some("ggml-large-v3-turbo.bin".to_owned()),
         glossary: vec!["Marco Rossi".to_owned()],
         keep_speech_days: Some(14),
@@ -356,4 +357,19 @@ fn the_npu_choice_round_trips() {
     assert!(loaded.efficient_gpu, "other choices stay");
     save_npu_whisper(&paths.settings_file, false).unwrap_or_else(|e| panic!("{e}"));
     assert!(!load_settings(&paths.settings_file).npu_whisper);
+}
+
+#[test]
+fn downloading_the_best_model_by_itself_is_saved_and_defaults_to_on() {
+    use super::transcription_settings::{auto_download_enabled, save_auto_download};
+    let paths = paths("auto-download");
+    assert!(auto_download_enabled(&load_settings(&paths.settings_file)));
+
+    save_auto_download(&paths.settings_file, false).unwrap_or_else(|error| panic!("{error}"));
+    let saved = load_settings(&paths.settings_file);
+    assert_eq!(saved.auto_download, Some(false));
+    assert!(!auto_download_enabled(&saved));
+
+    save_auto_download(&paths.settings_file, true).unwrap_or_else(|error| panic!("{error}"));
+    assert!(auto_download_enabled(&load_settings(&paths.settings_file)));
 }
