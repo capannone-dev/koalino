@@ -762,8 +762,7 @@ final class _MeetingContent extends StatelessWidget {
       renamer: renamer,
       style: style,
       // Every passage by this voice changes, so the whole meeting reloads.
-      onRenamed: (_) =>
-          unawaited(controller.selectMeeting(meeting.summary.meetingId)),
+      onRenamed: (_) => unawaited(controller.refreshSelectedMeeting()),
     );
   }
 

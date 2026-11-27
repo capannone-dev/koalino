@@ -95,6 +95,29 @@ final class MeetingListController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reloads the open meeting in place, as after renaming a speaker (#186), so the page keeps
+  /// its scroll position instead of showing a spinner.
+  ///
+  /// Outputs: Completes when done; a failed load keeps the meeting already shown.
+  /// Side effects: Reads the meeting through the bridge; notifies listeners when it changed.
+  Future<void> refreshSelectedMeeting() async {
+    final String? meetingId = _selectedMeetingId;
+    if (meetingId == null) {
+      return;
+    }
+    final MeetingDetail loaded;
+    try {
+      loaded = await _meetingBridge.getMeeting(meetingId);
+    } on Object {
+      return;
+    }
+    if (_selectedMeetingId != meetingId) {
+      return;
+    }
+    _selectedMeeting = loaded;
+    notifyListeners();
+  }
+
   /// Renames `meetingId` and updates the list row and open detail without reloading them.
   ///
   /// Inputs: The meeting ID and the title as typed; it is trimmed before it is sent. Callers

@@ -91,4 +91,17 @@ void main() {
     expect(await controller.splitMeeting('meeting-combined'), isFalse);
     expect(meetingBridge.meetingListRequestCount, 2, reason: 'no reload');
   });
+
+  test(
+      'a refresh after a speaker rename keeps the meeting shown, with no spinner',
+      () async {
+    final (MeetingListController controller, FakeMeetingBridge meetingBridge) =
+        await loadedController();
+    final List<bool> loadingStates = <bool>[];
+    controller.addListener(() => loadingStates.add(controller.isLoadingDetail));
+    await controller.refreshSelectedMeeting();
+    expect(meetingBridge.requestedMeetings.last, 'meeting-titled');
+    expect(loadingStates, isNot(contains(true)));
+    expect(controller.selectedMeeting?.summary.meetingId, 'meeting-titled');
+  });
 }
