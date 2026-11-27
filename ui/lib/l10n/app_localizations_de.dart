@@ -3248,4 +3248,69 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get useOneTo100CharactersOnOneLine =>
       'Verwende 1 bis 100 Zeichen in einer Zeile.';
+
+  @override
+  String versionNumber(Object version) {
+    return 'Version $version';
+  }
+
+  @override
+  String get developerSettings => 'Entwicklereinstellungen';
+
+  @override
+  String get appVariablesForExpertsAndDevelopers =>
+      'App-Variablen für Fachleute und Entwickler';
+
+  @override
+  String tapsLeftToTurnOnDeveloperSettings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Noch $count-mal tippen, um die Entwicklereinstellungen einzuschalten',
+      one: 'Noch 1 Tippen, um die Entwicklereinstellungen einzuschalten',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get developerSettingsAreOn =>
+      'Die Entwicklereinstellungen sind eingeschaltet';
+
+  @override
+  String get developerSettingsWarning =>
+      'Diese Variablen ändern, wie Koalino intern arbeitet. Ein falscher Wert kann Transkription, Synchronisierung oder die Browsererweiterung stoppen. Gespeicherte Werte gelten nach einem Neustart von Koalino.';
+
+  @override
+  String get restartKoalinoToApply =>
+      'Starte Koalino neu, um die gespeicherten Werte anzuwenden.';
+
+  @override
+  String nowAndDefault(Object now, Object defaultValue) {
+    return 'Jetzt: $now · Standard: $defaultValue';
+  }
+
+  @override
+  String get notSet => 'nicht gesetzt';
+
+  @override
+  String savedForTheNextStart(Object value) {
+    return 'Für den nächsten Start gespeichert: $value';
+  }
+
+  @override
+  String get useDefault => 'Standard verwenden';
+
+  @override
+  String get resetAll => 'Alle zurücksetzen';
+
+  @override
+  String get turnOffDeveloperSettings => 'Entwicklereinstellungen ausschalten';
+
+  @override
+  String get turnOffDeveloperSettingsExplanation =>
+      'Jeder Wert kehrt beim nächsten Start zum Standard zurück, und dieser Bereich wird wieder ausgeblendet.';
+
+  @override
+  String get turnOff => 'Ausschalten';
 }

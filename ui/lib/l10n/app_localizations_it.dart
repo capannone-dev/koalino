@@ -3216,4 +3216,68 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get useOneTo100CharactersOnOneLine =>
       'Usa da 1 a 100 caratteri su una riga.';
+
+  @override
+  String versionNumber(Object version) {
+    return 'Versione $version';
+  }
+
+  @override
+  String get developerSettings => 'Impostazioni sviluppatore';
+
+  @override
+  String get appVariablesForExpertsAndDevelopers =>
+      'Variabili dell’app, per esperti e sviluppatori';
+
+  @override
+  String tapsLeftToTurnOnDeveloperSettings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ancora $count tocchi per attivare le impostazioni sviluppatore',
+      one: 'Ancora 1 tocco per attivare le impostazioni sviluppatore',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get developerSettingsAreOn =>
+      'Le impostazioni sviluppatore sono attive';
+
+  @override
+  String get developerSettingsWarning =>
+      'Queste variabili cambiano il funzionamento interno di Koalino. Un valore sbagliato può fermare la trascrizione, la sincronizzazione o l’estensione del browser. I valori salvati valgono al riavvio di Koalino.';
+
+  @override
+  String get restartKoalinoToApply =>
+      'Riavvia Koalino per applicare i valori salvati.';
+
+  @override
+  String nowAndDefault(Object now, Object defaultValue) {
+    return 'Ora: $now · Predefinito: $defaultValue';
+  }
+
+  @override
+  String get notSet => 'non impostato';
+
+  @override
+  String savedForTheNextStart(Object value) {
+    return 'Salvato per il prossimo avvio: $value';
+  }
+
+  @override
+  String get useDefault => 'Usa predefinito';
+
+  @override
+  String get resetAll => 'Ripristina tutto';
+
+  @override
+  String get turnOffDeveloperSettings => 'Disattiva impostazioni sviluppatore';
+
+  @override
+  String get turnOffDeveloperSettingsExplanation =>
+      'Ogni valore torna al predefinito al prossimo avvio e questa sezione viene di nuovo nascosta.';
+
+  @override
+  String get turnOff => 'Disattiva';
 }

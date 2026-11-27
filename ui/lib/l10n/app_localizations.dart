@@ -5085,6 +5085,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use 1 to 100 characters on one line.'**
   String get useOneTo100CharactersOnOneLine;
+
+  /// No description provided for @versionNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version}'**
+  String versionNumber(Object version);
+
+  /// No description provided for @developerSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Developer settings'**
+  String get developerSettings;
+
+  /// No description provided for @appVariablesForExpertsAndDevelopers.
+  ///
+  /// In en, this message translates to:
+  /// **'App variables, for experts and developers'**
+  String get appVariablesForExpertsAndDevelopers;
+
+  /// No description provided for @tapsLeftToTurnOnDeveloperSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 more tap to turn on developer settings} other{{count} more taps to turn on developer settings}}'**
+  String tapsLeftToTurnOnDeveloperSettings(int count);
+
+  /// No description provided for @developerSettingsAreOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Developer settings are on'**
+  String get developerSettingsAreOn;
+
+  /// No description provided for @developerSettingsWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'These variables change how Koalino works inside. A wrong value can stop transcription, sync or the browser extension. Saved values apply when Koalino restarts.'**
+  String get developerSettingsWarning;
+
+  /// No description provided for @restartKoalinoToApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart Koalino to apply the saved values.'**
+  String get restartKoalinoToApply;
+
+  /// No description provided for @nowAndDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Now: {now} · Default: {defaultValue}'**
+  String nowAndDefault(Object now, Object defaultValue);
+
+  /// No description provided for @notSet.
+  ///
+  /// In en, this message translates to:
+  /// **'not set'**
+  String get notSet;
+
+  /// No description provided for @savedForTheNextStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved for the next start: {value}'**
+  String savedForTheNextStart(Object value);
+
+  /// No description provided for @useDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Use default'**
+  String get useDefault;
+
+  /// No description provided for @resetAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset all'**
+  String get resetAll;
+
+  /// No description provided for @turnOffDeveloperSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off developer settings'**
+  String get turnOffDeveloperSettings;
+
+  /// No description provided for @turnOffDeveloperSettingsExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Every value goes back to its default at the next start, and this section is hidden again.'**
+  String get turnOffDeveloperSettingsExplanation;
+
+  /// No description provided for @turnOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off'**
+  String get turnOff;
 }
 
 class _AppLocalizationsDelegate

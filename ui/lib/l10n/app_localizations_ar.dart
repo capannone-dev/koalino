@@ -3224,4 +3224,69 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get useOneTo100CharactersOnOneLine =>
       'استخدم من 1 إلى 100 حرف في سطر واحد.';
+
+  @override
+  String versionNumber(Object version) {
+    return 'الإصدار $version';
+  }
+
+  @override
+  String get developerSettings => 'إعدادات المطوّر';
+
+  @override
+  String get appVariablesForExpertsAndDevelopers =>
+      'متغيرات التطبيق، للخبراء والمطوّرين';
+
+  @override
+  String tapsLeftToTurnOnDeveloperSettings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count نقرة أخرى لتشغيل إعدادات المطوّر',
+      few: '$count نقرات أخرى لتشغيل إعدادات المطوّر',
+      two: 'نقرتان أخريان لتشغيل إعدادات المطوّر',
+      one: 'نقرة واحدة أخرى لتشغيل إعدادات المطوّر',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get developerSettingsAreOn => 'تم تشغيل إعدادات المطوّر';
+
+  @override
+  String get developerSettingsWarning =>
+      'تغيّر هذه المتغيرات طريقة عمل Koalino الداخلية. قد توقف القيمة الخاطئة النسخ أو المزامنة أو إضافة المتصفح. تُطبَّق القيم المحفوظة عند إعادة تشغيل Koalino.';
+
+  @override
+  String get restartKoalinoToApply =>
+      'أعد تشغيل Koalino لتطبيق القيم المحفوظة.';
+
+  @override
+  String nowAndDefault(Object now, Object defaultValue) {
+    return 'الآن: $now · الافتراضي: $defaultValue';
+  }
+
+  @override
+  String get notSet => 'غير مضبوط';
+
+  @override
+  String savedForTheNextStart(Object value) {
+    return 'محفوظ للتشغيل التالي: $value';
+  }
+
+  @override
+  String get useDefault => 'استخدام الافتراضي';
+
+  @override
+  String get resetAll => 'إعادة ضبط الكل';
+
+  @override
+  String get turnOffDeveloperSettings => 'إيقاف إعدادات المطوّر';
+
+  @override
+  String get turnOffDeveloperSettingsExplanation =>
+      'تعود كل قيمة إلى الافتراضي عند التشغيل التالي، ويُخفى هذا القسم مجددًا.';
+
+  @override
+  String get turnOff => 'إيقاف';
 }

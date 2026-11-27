@@ -34,6 +34,8 @@ import 'package:note_taker_ui/presentation/assistant_access_screen.dart';
 import 'package:note_taker_ui/presentation/call_offer_banner.dart';
 import 'package:note_taker_ui/presentation/notes_folder_screen.dart';
 import 'package:note_taker_ui/presentation/transcription_settings_screen.dart';
+import 'package:note_taker_ui/controllers/developer_settings_controller.dart';
+import 'package:note_taker_ui/presentation/developer_settings_screen.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Finds the default language selector in tests.
@@ -62,6 +64,7 @@ final class SettingsScreen extends StatelessWidget {
   /// Side effects: None; the controls ask their controllers, and Telemetry pushes its page.
   const SettingsScreen({
     required this.logSettingsController,
+    this.developerSettingsController,
     this.appLanguageController,
     this.appLockController,
     this.telemetryScreenBuilder,
@@ -80,6 +83,9 @@ final class SettingsScreen extends StatelessWidget {
   });
 
   final LogSettingsController logSettingsController;
+
+  /// Adds the version row and, once seven taps unlock it, Developer settings (#187) when given.
+  final DeveloperSettingsController? developerSettingsController;
 
   /// Adds the app language selector (#124) when given.
   final AppLanguageController? appLanguageController;
@@ -395,6 +401,11 @@ final class SettingsScreen extends StatelessWidget {
         },
       ),
       const AboutKoalinoTile(),
+      if (developerSettingsController
+          case final DeveloperSettingsController developer) ...<Widget>[
+        DeveloperSettingsTile(controller: developer),
+        DeveloperVersionTile(controller: developer, version: appVersion),
+      ],
     ];
   }
 

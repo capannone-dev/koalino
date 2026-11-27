@@ -50,6 +50,13 @@ own again, for good.
 optional title, then opens a meeting with no recording, to be filled by writing notes or adding
 files (#129).
 
+`developer_settings_screen.dart` (#187) adds the version row at the end of Settings. Seven taps
+unlock the Developer entry (a countdown appears for the last four), which lists the app variables
+an expert can override, with what is in effect now, the default, and what is saved for the next
+start. Flags and choices are picked from chips, other values typed; a refused value keeps the
+dialog open with the core's reason. A banner asks for a restart when saved values differ from the
+running ones. Reset all clears them; Turn off developer settings clears them and hides the entry.
+
 `speaker_label.dart` (#186) is a transcript segment's speaker label. Double-clicking or
 long-pressing it opens a dialog that names that voice, suggesting the saved people as the owner
 types. A saved person is renamed in every meeting; an unknown voice is named as in Voices. A name

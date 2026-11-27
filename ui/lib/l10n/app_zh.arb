@@ -827,5 +827,20 @@
   "doubleClickOrLongPressToRename": "双击或长按以重命名",
   "theNewNameAppliesToEveryPassage": "新名称会应用到这个声音的每一段发言，包括你所有的会议和已配对的设备。",
   "anotherSavedPersonIsCalled": "已有另一位保存的人叫“{name}”。要把两者合并，请打开“声音”。",
-  "useOneTo100CharactersOnOneLine": "请在一行内输入 1 到 100 个字符。"
+  "useOneTo100CharactersOnOneLine": "请在一行内输入 1 到 100 个字符。",
+  "versionNumber": "版本 {version}",
+  "developerSettings": "开发者设置",
+  "appVariablesForExpertsAndDevelopers": "面向专家和开发者的应用变量",
+  "tapsLeftToTurnOnDeveloperSettings": "{count, plural, other{再点按 {count} 次即可开启开发者设置}}",
+  "developerSettingsAreOn": "开发者设置已开启",
+  "developerSettingsWarning": "这些变量会改变 Koalino 的内部工作方式。错误的值可能导致转写、同步或浏览器扩展停止工作。保存的值在 Koalino 重启后生效。",
+  "restartKoalinoToApply": "重启 Koalino 以应用保存的值。",
+  "nowAndDefault": "当前：{now} · 默认：{defaultValue}",
+  "notSet": "未设置",
+  "savedForTheNextStart": "已保存，下次启动生效：{value}",
+  "useDefault": "使用默认值",
+  "resetAll": "全部重置",
+  "turnOffDeveloperSettings": "关闭开发者设置",
+  "turnOffDeveloperSettingsExplanation": "下次启动时所有值都会恢复为默认值，此部分将再次隐藏。",
+  "turnOff": "关闭"
 }

@@ -2984,4 +2984,64 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get useOneTo100CharactersOnOneLine => '请在一行内输入 1 到 100 个字符。';
+
+  @override
+  String versionNumber(Object version) {
+    return '版本 $version';
+  }
+
+  @override
+  String get developerSettings => '开发者设置';
+
+  @override
+  String get appVariablesForExpertsAndDevelopers => '面向专家和开发者的应用变量';
+
+  @override
+  String tapsLeftToTurnOnDeveloperSettings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '再点按 $count 次即可开启开发者设置',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get developerSettingsAreOn => '开发者设置已开启';
+
+  @override
+  String get developerSettingsWarning =>
+      '这些变量会改变 Koalino 的内部工作方式。错误的值可能导致转写、同步或浏览器扩展停止工作。保存的值在 Koalino 重启后生效。';
+
+  @override
+  String get restartKoalinoToApply => '重启 Koalino 以应用保存的值。';
+
+  @override
+  String nowAndDefault(Object now, Object defaultValue) {
+    return '当前：$now · 默认：$defaultValue';
+  }
+
+  @override
+  String get notSet => '未设置';
+
+  @override
+  String savedForTheNextStart(Object value) {
+    return '已保存，下次启动生效：$value';
+  }
+
+  @override
+  String get useDefault => '使用默认值';
+
+  @override
+  String get resetAll => '全部重置';
+
+  @override
+  String get turnOffDeveloperSettings => '关闭开发者设置';
+
+  @override
+  String get turnOffDeveloperSettingsExplanation =>
+      '下次启动时所有值都会恢复为默认值，此部分将再次隐藏。';
+
+  @override
+  String get turnOff => '关闭';
 }

@@ -127,6 +127,10 @@ start-up and `choose()` saves it through an `AppLanguageStore`.
 current recording, and returns to the default when a recording ends (Issue #62).
 `describeTranscriptionLanguages` names a meeting's languages for its detail screen.
 
+`developer_settings_controller.dart` (#187) holds Settings → Developer: the seven taps on the
+version row (taps more than 3 s apart start again) that unlock it, and the core's list of
+overridable app variables. Saving, resetting and turning off go to the core, which validates them.
+
 `projects_controller.dart` (Issue #85) holds the Projects tab: the project list, the open project
 (meetings newest first, resources oldest first), and every change (create, rename, delete, add
 files or shared paths, write a note, delete a resource, move a meeting). `projectNameError`

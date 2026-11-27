@@ -3209,4 +3209,69 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get useOneTo100CharactersOnOneLine =>
       'Use de 1 a 100 caracteres em uma linha.';
+
+  @override
+  String versionNumber(Object version) {
+    return 'Versão $version';
+  }
+
+  @override
+  String get developerSettings => 'Configurações de desenvolvedor';
+
+  @override
+  String get appVariablesForExpertsAndDevelopers =>
+      'Variáveis do app, para especialistas e desenvolvedores';
+
+  @override
+  String tapsLeftToTurnOnDeveloperSettings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Mais $count toques para ativar as configurações de desenvolvedor',
+      one: 'Mais 1 toque para ativar as configurações de desenvolvedor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get developerSettingsAreOn =>
+      'As configurações de desenvolvedor estão ativadas';
+
+  @override
+  String get developerSettingsWarning =>
+      'Estas variáveis mudam o funcionamento interno do Koalino. Um valor errado pode parar a transcrição, a sincronização ou a extensão do navegador. Os valores salvos valem quando o Koalino reinicia.';
+
+  @override
+  String get restartKoalinoToApply =>
+      'Reinicie o Koalino para aplicar os valores salvos.';
+
+  @override
+  String nowAndDefault(Object now, Object defaultValue) {
+    return 'Agora: $now · Padrão: $defaultValue';
+  }
+
+  @override
+  String get notSet => 'não definido';
+
+  @override
+  String savedForTheNextStart(Object value) {
+    return 'Salvo para a próxima inicialização: $value';
+  }
+
+  @override
+  String get useDefault => 'Usar padrão';
+
+  @override
+  String get resetAll => 'Redefinir tudo';
+
+  @override
+  String get turnOffDeveloperSettings =>
+      'Desativar configurações de desenvolvedor';
+
+  @override
+  String get turnOffDeveloperSettingsExplanation =>
+      'Cada valor volta ao padrão na próxima inicialização, e esta seção fica oculta de novo.';
+
+  @override
+  String get turnOff => 'Desativar';
 }

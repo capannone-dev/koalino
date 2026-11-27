@@ -3218,4 +3218,69 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get useOneTo100CharactersOnOneLine =>
       'Utilisez de 1 à 100 caractères sur une ligne.';
+
+  @override
+  String versionNumber(Object version) {
+    return 'Version $version';
+  }
+
+  @override
+  String get developerSettings => 'Paramètres développeur';
+
+  @override
+  String get appVariablesForExpertsAndDevelopers =>
+      'Variables de l’app, pour experts et développeurs';
+
+  @override
+  String tapsLeftToTurnOnDeveloperSettings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Encore $count appuis pour activer les paramètres développeur',
+      one: 'Encore 1 appui pour activer les paramètres développeur',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get developerSettingsAreOn =>
+      'Les paramètres développeur sont activés';
+
+  @override
+  String get developerSettingsWarning =>
+      'Ces variables modifient le fonctionnement interne de Koalino. Une mauvaise valeur peut arrêter la transcription, la synchronisation ou l’extension du navigateur. Les valeurs enregistrées s’appliquent au redémarrage de Koalino.';
+
+  @override
+  String get restartKoalinoToApply =>
+      'Redémarrez Koalino pour appliquer les valeurs enregistrées.';
+
+  @override
+  String nowAndDefault(Object now, Object defaultValue) {
+    return 'Actuel : $now · Par défaut : $defaultValue';
+  }
+
+  @override
+  String get notSet => 'non défini';
+
+  @override
+  String savedForTheNextStart(Object value) {
+    return 'Enregistré pour le prochain démarrage : $value';
+  }
+
+  @override
+  String get useDefault => 'Utiliser la valeur par défaut';
+
+  @override
+  String get resetAll => 'Tout réinitialiser';
+
+  @override
+  String get turnOffDeveloperSettings =>
+      'Désactiver les paramètres développeur';
+
+  @override
+  String get turnOffDeveloperSettingsExplanation =>
+      'Chaque valeur revient à sa valeur par défaut au prochain démarrage, et cette section est de nouveau masquée.';
+
+  @override
+  String get turnOff => 'Désactiver';
 }

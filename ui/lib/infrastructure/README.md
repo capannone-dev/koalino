@@ -19,6 +19,11 @@ domain structs are never represented in Dart or presented to widgets.
 
 `MeetingBridge.getMeeting` also decodes the meeting's `attachments`.
 
+`developer_settings_bridge.dart` (#187) sends Settings → Developer's commands (`get`, `unlock`,
+`set`, `reset`, `lock`) to `note_taker_developer_settings` on a background isolate and decodes the
+list of overridable variables; a refusal becomes `DeveloperSettingsException` with the core's code
+and its English explanation of the accepted values.
+
 `speaker_rename_bridge.dart` (#186) decodes each segment's `voice` (a saved person or an unknown
 voice) and defines `SpeakerRenamer`. `RustSpeakerRenamer` renames a person through
 `note_taker_rename_person` and names an unknown voice through `note_taker_assign_cluster`, each on

@@ -3169,4 +3169,67 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get useOneTo100CharactersOnOneLine =>
       'Use 1 to 100 characters on one line.';
+
+  @override
+  String versionNumber(Object version) {
+    return 'Version $version';
+  }
+
+  @override
+  String get developerSettings => 'Developer settings';
+
+  @override
+  String get appVariablesForExpertsAndDevelopers =>
+      'App variables, for experts and developers';
+
+  @override
+  String tapsLeftToTurnOnDeveloperSettings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count more taps to turn on developer settings',
+      one: '1 more tap to turn on developer settings',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get developerSettingsAreOn => 'Developer settings are on';
+
+  @override
+  String get developerSettingsWarning =>
+      'These variables change how Koalino works inside. A wrong value can stop transcription, sync or the browser extension. Saved values apply when Koalino restarts.';
+
+  @override
+  String get restartKoalinoToApply =>
+      'Restart Koalino to apply the saved values.';
+
+  @override
+  String nowAndDefault(Object now, Object defaultValue) {
+    return 'Now: $now · Default: $defaultValue';
+  }
+
+  @override
+  String get notSet => 'not set';
+
+  @override
+  String savedForTheNextStart(Object value) {
+    return 'Saved for the next start: $value';
+  }
+
+  @override
+  String get useDefault => 'Use default';
+
+  @override
+  String get resetAll => 'Reset all';
+
+  @override
+  String get turnOffDeveloperSettings => 'Turn off developer settings';
+
+  @override
+  String get turnOffDeveloperSettingsExplanation =>
+      'Every value goes back to its default at the next start, and this section is hidden again.';
+
+  @override
+  String get turnOff => 'Turn off';
 }

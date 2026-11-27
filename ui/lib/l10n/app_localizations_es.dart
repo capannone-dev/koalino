@@ -3205,4 +3205,68 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get useOneTo100CharactersOnOneLine =>
       'Usa de 1 a 100 caracteres en una línea.';
+
+  @override
+  String versionNumber(Object version) {
+    return 'Versión $version';
+  }
+
+  @override
+  String get developerSettings => 'Ajustes de desarrollador';
+
+  @override
+  String get appVariablesForExpertsAndDevelopers =>
+      'Variables de la app, para expertos y desarrolladores';
+
+  @override
+  String tapsLeftToTurnOnDeveloperSettings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count toques más para activar los ajustes de desarrollador',
+      one: '1 toque más para activar los ajustes de desarrollador',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get developerSettingsAreOn =>
+      'Los ajustes de desarrollador están activados';
+
+  @override
+  String get developerSettingsWarning =>
+      'Estas variables cambian el funcionamiento interno de Koalino. Un valor incorrecto puede detener la transcripción, la sincronización o la extensión del navegador. Los valores guardados se aplican al reiniciar Koalino.';
+
+  @override
+  String get restartKoalinoToApply =>
+      'Reinicia Koalino para aplicar los valores guardados.';
+
+  @override
+  String nowAndDefault(Object now, Object defaultValue) {
+    return 'Ahora: $now · Predeterminado: $defaultValue';
+  }
+
+  @override
+  String get notSet => 'sin definir';
+
+  @override
+  String savedForTheNextStart(Object value) {
+    return 'Guardado para el próximo inicio: $value';
+  }
+
+  @override
+  String get useDefault => 'Usar predeterminado';
+
+  @override
+  String get resetAll => 'Restablecer todo';
+
+  @override
+  String get turnOffDeveloperSettings => 'Desactivar ajustes de desarrollador';
+
+  @override
+  String get turnOffDeveloperSettingsExplanation =>
+      'Cada valor vuelve a su valor predeterminado en el próximo inicio y esta sección se oculta de nuevo.';
+
+  @override
+  String get turnOff => 'Desactivar';
 }

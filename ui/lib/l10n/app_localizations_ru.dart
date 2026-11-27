@@ -3226,4 +3226,68 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get useOneTo100CharactersOnOneLine =>
       'Используйте от 1 до 100 символов в одной строке.';
+
+  @override
+  String versionNumber(Object version) {
+    return 'Версия $version';
+  }
+
+  @override
+  String get developerSettings => 'Настройки разработчика';
+
+  @override
+  String get appVariablesForExpertsAndDevelopers =>
+      'Переменные приложения для специалистов и разработчиков';
+
+  @override
+  String tapsLeftToTurnOnDeveloperSettings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ещё $count нажатий, чтобы включить настройки разработчика',
+      few: 'Ещё $count нажатия, чтобы включить настройки разработчика',
+      one: 'Ещё $count нажатие, чтобы включить настройки разработчика',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get developerSettingsAreOn => 'Настройки разработчика включены';
+
+  @override
+  String get developerSettingsWarning =>
+      'Эти переменные меняют внутреннюю работу Koalino. Неверное значение может остановить расшифровку, синхронизацию или расширение браузера. Сохранённые значения применяются после перезапуска Koalino.';
+
+  @override
+  String get restartKoalinoToApply =>
+      'Перезапустите Koalino, чтобы применить сохранённые значения.';
+
+  @override
+  String nowAndDefault(Object now, Object defaultValue) {
+    return 'Сейчас: $now · По умолчанию: $defaultValue';
+  }
+
+  @override
+  String get notSet => 'не задано';
+
+  @override
+  String savedForTheNextStart(Object value) {
+    return 'Сохранено до следующего запуска: $value';
+  }
+
+  @override
+  String get useDefault => 'По умолчанию';
+
+  @override
+  String get resetAll => 'Сбросить всё';
+
+  @override
+  String get turnOffDeveloperSettings => 'Выключить настройки разработчика';
+
+  @override
+  String get turnOffDeveloperSettingsExplanation =>
+      'При следующем запуске все значения вернутся к значениям по умолчанию, а этот раздел снова будет скрыт.';
+
+  @override
+  String get turnOff => 'Выключить';
 }

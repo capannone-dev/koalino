@@ -827,5 +827,20 @@
   "doubleClickOrLongPressToRename": "Дважды щёлкните или нажмите и удерживайте, чтобы переименовать",
   "theNewNameAppliesToEveryPassage": "Новое имя применяется ко всем фрагментам этого голоса во всех ваших встречах и на связанных устройствах.",
   "anotherSavedPersonIsCalled": "Другого сохранённого человека уже зовут «{name}». Чтобы объединить их, откройте «Голоса».",
-  "useOneTo100CharactersOnOneLine": "Используйте от 1 до 100 символов в одной строке."
+  "useOneTo100CharactersOnOneLine": "Используйте от 1 до 100 символов в одной строке.",
+  "versionNumber": "Версия {version}",
+  "developerSettings": "Настройки разработчика",
+  "appVariablesForExpertsAndDevelopers": "Переменные приложения для специалистов и разработчиков",
+  "tapsLeftToTurnOnDeveloperSettings": "{count, plural, one{Ещё {count} нажатие, чтобы включить настройки разработчика} few{Ещё {count} нажатия, чтобы включить настройки разработчика} other{Ещё {count} нажатий, чтобы включить настройки разработчика}}",
+  "developerSettingsAreOn": "Настройки разработчика включены",
+  "developerSettingsWarning": "Эти переменные меняют внутреннюю работу Koalino. Неверное значение может остановить расшифровку, синхронизацию или расширение браузера. Сохранённые значения применяются после перезапуска Koalino.",
+  "restartKoalinoToApply": "Перезапустите Koalino, чтобы применить сохранённые значения.",
+  "nowAndDefault": "Сейчас: {now} · По умолчанию: {defaultValue}",
+  "notSet": "не задано",
+  "savedForTheNextStart": "Сохранено до следующего запуска: {value}",
+  "useDefault": "По умолчанию",
+  "resetAll": "Сбросить всё",
+  "turnOffDeveloperSettings": "Выключить настройки разработчика",
+  "turnOffDeveloperSettingsExplanation": "При следующем запуске все значения вернутся к значениям по умолчанию, а этот раздел снова будет скрыт.",
+  "turnOff": "Выключить"
 }

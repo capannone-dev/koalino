@@ -827,5 +827,20 @@
   "doubleClickOrLongPressToRename": "انقر نقرًا مزدوجًا أو اضغط مطولًا لإعادة التسمية",
   "theNewNameAppliesToEveryPassage": "ينطبق الاسم الجديد على كل مقطع لهذا الصوت، في جميع اجتماعاتك وعلى أجهزتك المقترنة.",
   "anotherSavedPersonIsCalled": "يوجد شخص محفوظ آخر باسم \"{name}\". لدمجهما، افتح الأصوات.",
-  "useOneTo100CharactersOnOneLine": "استخدم من 1 إلى 100 حرف في سطر واحد."
+  "useOneTo100CharactersOnOneLine": "استخدم من 1 إلى 100 حرف في سطر واحد.",
+  "versionNumber": "الإصدار {version}",
+  "developerSettings": "إعدادات المطوّر",
+  "appVariablesForExpertsAndDevelopers": "متغيرات التطبيق، للخبراء والمطوّرين",
+  "tapsLeftToTurnOnDeveloperSettings": "{count, plural, one{نقرة واحدة أخرى لتشغيل إعدادات المطوّر} two{نقرتان أخريان لتشغيل إعدادات المطوّر} few{{count} نقرات أخرى لتشغيل إعدادات المطوّر} other{{count} نقرة أخرى لتشغيل إعدادات المطوّر}}",
+  "developerSettingsAreOn": "تم تشغيل إعدادات المطوّر",
+  "developerSettingsWarning": "تغيّر هذه المتغيرات طريقة عمل Koalino الداخلية. قد توقف القيمة الخاطئة النسخ أو المزامنة أو إضافة المتصفح. تُطبَّق القيم المحفوظة عند إعادة تشغيل Koalino.",
+  "restartKoalinoToApply": "أعد تشغيل Koalino لتطبيق القيم المحفوظة.",
+  "nowAndDefault": "الآن: {now} · الافتراضي: {defaultValue}",
+  "notSet": "غير مضبوط",
+  "savedForTheNextStart": "محفوظ للتشغيل التالي: {value}",
+  "useDefault": "استخدام الافتراضي",
+  "resetAll": "إعادة ضبط الكل",
+  "turnOffDeveloperSettings": "إيقاف إعدادات المطوّر",
+  "turnOffDeveloperSettingsExplanation": "تعود كل قيمة إلى الافتراضي عند التشغيل التالي، ويُخفى هذا القسم مجددًا.",
+  "turnOff": "إيقاف"
 }

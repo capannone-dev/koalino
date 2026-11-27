@@ -827,5 +827,20 @@
   "doubleClickOrLongPressToRename": "Doble clic o mantén pulsado para cambiar el nombre",
   "theNewNameAppliesToEveryPassage": "El nuevo nombre se aplica a cada fragmento de esta voz, en todas tus reuniones y en tus dispositivos vinculados.",
   "anotherSavedPersonIsCalled": "Otra persona guardada ya se llama «{name}». Para unirlas, abre Voces.",
-  "useOneTo100CharactersOnOneLine": "Usa de 1 a 100 caracteres en una línea."
+  "useOneTo100CharactersOnOneLine": "Usa de 1 a 100 caracteres en una línea.",
+  "versionNumber": "Versión {version}",
+  "developerSettings": "Ajustes de desarrollador",
+  "appVariablesForExpertsAndDevelopers": "Variables de la app, para expertos y desarrolladores",
+  "tapsLeftToTurnOnDeveloperSettings": "{count, plural, =1{1 toque más para activar los ajustes de desarrollador} other{{count} toques más para activar los ajustes de desarrollador}}",
+  "developerSettingsAreOn": "Los ajustes de desarrollador están activados",
+  "developerSettingsWarning": "Estas variables cambian el funcionamiento interno de Koalino. Un valor incorrecto puede detener la transcripción, la sincronización o la extensión del navegador. Los valores guardados se aplican al reiniciar Koalino.",
+  "restartKoalinoToApply": "Reinicia Koalino para aplicar los valores guardados.",
+  "nowAndDefault": "Ahora: {now} · Predeterminado: {defaultValue}",
+  "notSet": "sin definir",
+  "savedForTheNextStart": "Guardado para el próximo inicio: {value}",
+  "useDefault": "Usar predeterminado",
+  "resetAll": "Restablecer todo",
+  "turnOffDeveloperSettings": "Desactivar ajustes de desarrollador",
+  "turnOffDeveloperSettingsExplanation": "Cada valor vuelve a su valor predeterminado en el próximo inicio y esta sección se oculta de nuevo.",
+  "turnOff": "Desactivar"
 }

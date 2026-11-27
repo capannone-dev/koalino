@@ -50,6 +50,8 @@ import 'package:note_taker_ui/infrastructure/pairing_link_bridge.dart';
 import 'package:note_taker_ui/infrastructure/language_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_attachment_bridge.dart';
+import 'package:note_taker_ui/controllers/developer_settings_controller.dart';
+import 'package:note_taker_ui/infrastructure/developer_settings_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/speaker_rename_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
@@ -625,10 +627,15 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
   final NetworkSettingsController _networkSettingsController =
       NetworkSettingsController(p2pBridge: const RustP2pBridge());
 
+  /// Settings → Developer (#187).
+  final DeveloperSettingsController _developerSettingsController =
+      DeveloperSettingsController(bridge: const RustDeveloperSettingsBridge());
+
   @override
   void initState() {
     super.initState();
     unawaited(_logSettingsController.load());
+    unawaited(_developerSettingsController.load());
     unawaited(_transcriptionRouteController.load());
     unawaited(_networkSettingsController.load());
   }
@@ -638,12 +645,14 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
     _logSettingsController.dispose();
     _transcriptionRouteController.dispose();
     _networkSettingsController.dispose();
+    _developerSettingsController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => SettingsScreen(
         logSettingsController: _logSettingsController,
+        developerSettingsController: _developerSettingsController,
         appLanguageController: widget.appLanguageController,
         appLockController: widget.appLockController,
         telemetryScreenBuilder: (BuildContext context) =>
