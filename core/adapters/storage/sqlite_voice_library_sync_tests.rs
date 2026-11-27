@@ -279,3 +279,98 @@ fn the_digest_follows_the_library() {
         .unwrap_or_else(|error| panic!("variant must store: {error}"));
     assert_ne!(with_identity, digest(&laptop));
 }
+
+/// Merging two saved people (#188) moves the samples to the person kept, under new IDs so paired
+/// devices add them, and deletes the other with a tombstone, so every device ends the same way.
+#[test]
+fn a_merge_moves_samples_and_converges_on_a_paired_device() {
+    const BOB: Uuid = Uuid::from_u128(0xB0B);
+    let (laptop, phone) = (store(1), store(2));
+    laptop
+        .save_speaker_identity(&SpeakerIdentity::new(ALICE, "Alice"))
+        .and_then(|()| laptop.save_speaker_identity(&SpeakerIdentity::new(BOB, "Alice R.")))
+        .and_then(|()| {
+            laptop.store_embedding(VoiceEmbedding::new(ALICE, VARIANT_ONE, vec![1.0, 0.0]))
+        })
+        .and_then(|()| {
+            laptop.store_embedding(VoiceEmbedding::new(BOB, VARIANT_TWO, vec![0.0, 1.0]))
+        })
+        .unwrap_or_else(|error| panic!("enrollment must succeed: {error}"));
+    // The phone already has both people from an earlier sync.
+    import(&phone, &export(&laptop));
+
+    let moved = laptop
+        .merge_identity(BOB, ALICE)
+        .unwrap_or_else(|error| panic!("merge must succeed: {error}"));
+    assert_eq!(moved, 1);
+    assert_eq!(names(&laptop), vec!["Alice".to_owned()]);
+    assert_eq!(laptop.voice_variant_count(ALICE).ok(), Some(2));
+    let exported = export(&laptop);
+    assert!(
+        exported
+            .tombstones
+            .iter()
+            .any(|tombstone| tombstone.identity_id == BOB)
+    );
+    assert!(
+        exported
+            .variants
+            .iter()
+            .all(|variant| variant.identity_id == ALICE && variant.variant_id != VARIANT_TWO),
+        "moved samples get new IDs"
+    );
+    // Bob's voice still matches, now as Alice.
+    let found = laptop
+        .search_similar(&[0.0, 1.0], 1)
+        .unwrap_or_else(|error| panic!("search must succeed: {error}"));
+    assert_eq!(
+        found.first().map(|(variant, _)| variant.identity_id()),
+        Some(ALICE)
+    );
+
+    import(&phone, &exported);
+    assert_eq!(names(&phone), vec!["Alice".to_owned()]);
+    assert_eq!(phone.voice_variant_count(ALICE).ok(), Some(2));
+    assert_eq!(digest(&phone), digest(&laptop));
+}
+
+#[test]
+fn a_merge_needs_two_different_saved_people() {
+    let laptop = store(1);
+    laptop
+        .save_speaker_identity(&SpeakerIdentity::new(ALICE, "Alice"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(laptop.merge_identity(ALICE, ALICE).is_err());
+    assert!(
+        laptop
+            .merge_identity(Uuid::from_u128(0xDEAD), ALICE)
+            .is_err()
+    );
+    assert!(
+        laptop
+            .merge_identity(ALICE, Uuid::from_u128(0xDEAD))
+            .is_err()
+    );
+    assert_eq!(names(&laptop), vec!["Alice".to_owned()]);
+}
+
+/// A Teams user linked to the merged person stays recognized, as the person kept (#188).
+#[test]
+fn a_merge_moves_external_links_to_the_person_kept() {
+    use crate::ports::external_bridge::ExternalIdentityRepository;
+    const BOB: Uuid = Uuid::from_u128(0xB0B);
+    let laptop = store(1);
+    let bob = SpeakerIdentity::new(BOB, "Bob");
+    laptop
+        .save_speaker_identity(&SpeakerIdentity::new(ALICE, "Alice"))
+        .and_then(|()| laptop.save_speaker_identity(&bob))
+        .and_then(|()| laptop.save_external_mapping("teams-user-1", &bob))
+        .unwrap_or_else(|error| panic!("{error}"));
+    laptop
+        .merge_identity(BOB, ALICE)
+        .unwrap_or_else(|error| panic!("merge must succeed: {error}"));
+    let linked = laptop
+        .find_by_external_id("teams-user-1")
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(linked.map(|identity| identity.identity_id()), Some(ALICE));
+}

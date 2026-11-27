@@ -392,7 +392,8 @@ over after 30 minutes, and at most 10 requests are sent per hour. `ffi_llm.rs` a
 
 `ffi_speakers.rs` (#186) tells the meeting screen which voice each transcript segment belongs to
 (the `voice` field: a saved person, an unknown voice's cluster, or none) and backs
-`note_taker_rename_person`, which renames a saved person through `application/person_rename.rs`.
+`note_taker_rename_person`, which renames a saved person through `application/person_rename.rs`,
+and `note_taker_merge_people` (#188, `application/person_merge.rs`), refused while recording.
 Unknown voices are named with `note_taker_assign_cluster`, as in Voices.
 
 `ffi_edits.rs` (#96) gives the app `note_taker_meeting_edit`: the notes, the summary's text and

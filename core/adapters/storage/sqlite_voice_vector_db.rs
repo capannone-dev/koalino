@@ -374,6 +374,113 @@ impl VoiceVectorDB for SqliteVoiceVectorDB {
         tracing::info!(identity_id = %identity_id, "Speaker identity deleted");
         Ok(())
     }
+
+    /// Merges `source` into `target` in one transaction (#188).
+    ///
+    /// Inputs: Two different saved identities.
+    /// Outputs: The number of moved variants, or `Rejected` when either is missing or they are
+    /// the same, or a storage error (then nothing changed).
+    /// Side effects: Opens each of `source`'s embeddings and seals it again under a new variant ID
+    /// for `target` (sync merges variants by ID, so paired devices add them), moves external links
+    /// such as Teams users, refreshes `target`'s `updated_at`, deletes `source`'s variants and
+    /// identity, and records its tombstone. Embeddings are never logged.
+    fn merge_identity(&self, source: Uuid, target: Uuid) -> Result<usize, StorageError> {
+        let transaction = self
+            .connection
+            .write_transaction()
+            .map_err(|error| sqlite_error("unable to begin the merge", error))?;
+        let saved = |id: Uuid| {
+            transaction
+                .query_row(
+                    "SELECT COUNT(*) FROM speaker_identities WHERE id = ?1",
+                    params![id.to_string()],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(|error| sqlite_error("unable to read a speaker identity", error))
+                .map(|count| count > 0)
+        };
+        if source == target || !saved(source)? || !saved(target)? {
+            return Err(StorageError::Rejected {
+                reason: String::from("a merge needs two different saved people"),
+            });
+        }
+        let source_variants: Vec<(String, Vec<u8>)> = {
+            let mut statement = transaction
+                .prepare("SELECT id, embedding FROM voice_variants WHERE identity_id = ?1")
+                .map_err(|error| sqlite_error("unable to prepare the merge", error))?;
+            let rows = statement
+                .query_map(params![source.to_string()], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+                })
+                .map_err(|error| sqlite_error("unable to read voice variants", error))?;
+            rows.collect::<Result<_, _>>()
+                .map_err(|error| sqlite_error("unable to read voice variants", error))?
+        };
+        let now = Utc::now();
+        for (old_variant_id, sealed) in &source_variants {
+            let vector = VOICE_VARIANT_EMBEDDINGS.open(
+                self.embedding_cipher.as_ref(),
+                &[old_variant_id],
+                sealed,
+            )?;
+            let new_variant_id = Uuid::new_v4().to_string();
+            let resealed = VOICE_VARIANT_EMBEDDINGS.seal(
+                self.embedding_cipher.as_ref(),
+                &[&new_variant_id],
+                &vector,
+            )?;
+            transaction
+                .execute(
+                    "INSERT INTO voice_variants (id, identity_id, embedding, embedding_format, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        new_variant_id,
+                        target.to_string(),
+                        resealed,
+                        SEALED_EMBEDDING_FORMAT,
+                        now.to_rfc3339(),
+                    ],
+                )
+                .map_err(|error| sqlite_error("unable to move a voice variant", error))?;
+        }
+        transaction
+            .execute(
+                "UPDATE external_identity_mappings SET identity_id = ?2 WHERE identity_id = ?1",
+                params![source.to_string(), target.to_string()],
+            )
+            .map_err(|error| sqlite_error("unable to move external links", error))?;
+        for (statement, context) in [
+            (
+                "DELETE FROM voice_variants WHERE identity_id = ?1",
+                "unable to delete merged voice variants",
+            ),
+            (
+                "DELETE FROM speaker_identities WHERE id = ?1",
+                "unable to delete the merged identity",
+            ),
+        ] {
+            transaction
+                .execute(statement, params![source.to_string()])
+                .map_err(|error| sqlite_error(context, error))?;
+        }
+        transaction
+            .execute(
+                "UPDATE speaker_identities SET updated_at = ?2 WHERE id = ?1",
+                params![target.to_string(), now.to_rfc3339()],
+            )
+            .map_err(|error| sqlite_error("unable to update the kept identity", error))?;
+        voice_library_sync::record_tombstone(&transaction, source, now)?;
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit the merge", error))?;
+        tracing::info!(
+            source = %source,
+            target = %target,
+            moved_variants = source_variants.len(),
+            "Speaker identities merged"
+        );
+        Ok(source_variants.len())
+    }
 }
 
 /// Parses a stored UUID column.

@@ -139,6 +139,10 @@ mod pairing_manager_tests;
 pub mod pass_comparison;
 #[cfg(test)]
 mod pass_comparison_tests;
+/// Merges one saved person into another: passages, voice samples and links (#188).
+pub mod person_merge;
+#[cfg(test)]
+mod person_merge_tests;
 /// Renames a saved person from a meeting's transcript, refusing another person's name (#186).
 pub mod person_rename;
 #[cfg(test)]

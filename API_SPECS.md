@@ -185,11 +185,19 @@ from a background isolate.
   while locked), `unknown_setting` (not on the list), `invalid_value` (`error` says what is
   accepted), or `storage_failed`. Values are saved in `developer-settings.json` in the data folder
   and apply at the next start, ahead of the configuration and the environment; `lock` clears them.
+- `char *note_taker_merge_people(const char *source, const char *target)` merges one saved person
+  into another (#188) and returns
+  `{"ok":true,"identity_id":"<target>","identity_name","segments_updated":3,"variants_moved":1}`.
+  Every transcript passage naming `source` is relinked to `target` first; then `source`'s voice
+  samples (sealed again under new IDs) and external links (Teams users) move to `target`, and
+  `source` is deleted with a tombstone, so paired devices converge. On failure it returns
+  `{"ok":false,"error_code","error"}` with `invalid_argument`, `same_person`, `person_not_found`,
+  `recording` (refused while a meeting is recorded), `merge_failed`, or `runtime_unavailable`.
 - `char *note_taker_rename_person(const char *identity_id, const char *name)` renames a saved person
   from a meeting's transcript (#186) and returns
   `{"ok":true,"identity_id":"uuid","identity_name":"Grace Hopper"}`. The name is trimmed and must be
-  1–100 characters on one line. A name another saved person has (ignoring case) is refused, since
-  merging two people is not supported; the same person changing only the case is allowed. On failure
+  1–100 characters on one line. A name another saved person has (ignoring case) is refused; the app
+  then offers `note_taker_merge_people`; the same person changing only the case is allowed. On failure
   it returns `{"ok":false,"error_code","error"}` with `invalid_argument` (bad UUID), `invalid_name`,
   `person_not_found`, `name_taken`, `rename_failed`, or `runtime_unavailable`. The new name reaches
   paired devices with the voice library (#56). Each segment in `note_taker_get_meeting`'s answer

@@ -1256,6 +1256,24 @@ impl FfiRuntime {
         )
     }
 
+    /// Merges one saved person into another (#188), refused while a meeting is being recorded,
+    /// whose passages the pipeline is still writing.
+    ///
+    /// Inputs: The IDs (UUID strings) of the person to merge and the person to keep.
+    /// Outputs: The JSON answer of `ffi_speakers::merge_people_json`, or `recording`.
+    /// Side effects: See `application::person_merge::merge_people`.
+    fn merge_people(&self, source: &str, target: &str) -> String {
+        if self.active_meeting_id().is_some() {
+            return export_error_json("recording", "people cannot be merged while recording");
+        }
+        crate::ffi_speakers::merge_people_json(
+            &self.note_repository,
+            self.voice_identity_manager.vector_database(),
+            source,
+            target,
+        )
+    }
+
     /// Names several unknown voices as one person, as when the owner names a voice group (#82).
     ///
     /// Inputs: `cluster_ids_json` is a JSON array of UUID strings, in the order to name them;
@@ -3769,6 +3787,40 @@ pub unsafe extern "C" fn note_taker_rename_person(
         _ => export_error_json(
             "invalid_argument",
             "identity_id and name must be valid UTF-8 C strings",
+        ),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Merges one saved person into another (#188).
+///
+/// Inputs: `source` (the person to merge) and `target` (the person to keep) are non-null
+/// NUL-terminated UTF-8 UUID strings.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`): `{"ok":true,"identity_id",
+/// "identity_name","segments_updated","variants_moved"}` or `{"ok":false,"error_code","error"}`
+/// with `invalid_argument`, `same_person`, `person_not_found`, `recording`, `merge_failed` or
+/// `runtime_unavailable`. Returns null only if the response cannot be allocated as a C string.
+/// Side effects: Relinks transcript passages, moves voice samples and links, and deletes `source`
+/// (on paired devices too), synchronously; Flutter should call it from a background isolate.
+///
+/// # Safety
+/// Both pointers must be null or point to valid NUL-terminated C strings for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_merge_people(
+    source: *const c_char,
+    target: *const c_char,
+) -> *mut c_char {
+    let response_json = match (unsafe { ffi_string(source) }, unsafe { ffi_string(target) }) {
+        (Some(source), Some(target)) => {
+            with_runtime_json(|runtime| Ok(runtime.merge_people(source, target))).unwrap_or_else(
+                |_| export_error_json("runtime_unavailable", "the native runtime is unavailable"),
+            )
+        }
+        _ => export_error_json(
+            "invalid_argument",
+            "source and target must be valid UTF-8 C strings",
         ),
     };
     CString::new(response_json)

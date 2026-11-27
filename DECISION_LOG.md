@@ -4253,3 +4253,16 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   translated.
 - `NOTE_TAKER_WHISPER_GPU` is now read through `app_setting` like the others, so the override
   reaches it.
+
+## 2026-11-27 — Merging two saved people (#188)
+
+- **Where:** Voices has Merge into… on each saved person; renaming a person to another saved
+  person's name in a transcript offers Merge with that person. Both warn that it cannot be undone.
+- **Direction:** from the rename dialog, the person being renamed is merged into the one who already
+  has the name, so the existing name stays.
+- **Order:** passages are relinked first, then the voice store merges in one transaction. A failure
+  part-way leaves both people and passages naming the kept one: a retry finishes.
+- **Sync:** no new protocol. Moved samples are sealed again under new IDs (variants merge by ID),
+  and the merged person gets the usual deletion tombstone, which always wins. Passages travel with
+  their meetings.
+- **Refused while recording**, since the pipeline is still writing that meeting's passages.

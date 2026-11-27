@@ -115,6 +115,21 @@ pub trait VoiceVectorDB {
     /// Outputs: Success or a portable storage failure.
     /// Side effects: Deletes sensitive biometric data from the adapter-owned store.
     fn delete_identity(&self, identity_id: Uuid) -> Result<(), StorageError>;
+
+    /// Merges one saved person into another (#188): `source`'s voice variants and external
+    /// links move to `target`, then `source` is deleted as by `delete_identity`.
+    ///
+    /// Inputs: Two different saved people.
+    /// Outputs: How many variants moved, or `Rejected` when either is missing, they are the same,
+    /// or the store cannot merge (the default, for stores without it).
+    /// Side effects: All or nothing: moved variants get new IDs so paired devices add them, and
+    /// `source` leaves a tombstone so they delete it. Embeddings are never logged.
+    fn merge_identity(&self, source: Uuid, target: Uuid) -> Result<usize, StorageError> {
+        let _ = (source, target);
+        Err(StorageError::Rejected {
+            reason: "this voice store cannot merge people".to_owned(),
+        })
+    }
 }
 
 /// Copies the voice library between paired devices (Issue #56).
@@ -177,5 +192,9 @@ where
 
     fn delete_identity(&self, identity_id: Uuid) -> Result<(), StorageError> {
         (*self).delete_identity(identity_id)
+    }
+
+    fn merge_identity(&self, source: Uuid, target: Uuid) -> Result<usize, StorageError> {
+        (*self).merge_identity(source, target)
     }
 }

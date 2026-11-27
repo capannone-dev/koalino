@@ -132,6 +132,40 @@ impl VoiceVectorDB for InMemoryVoiceVectorDB {
             .retain(|identity| identity.identity_id() != identity_id);
         Ok(())
     }
+
+    /// Moves `source`'s variants to `target` under new IDs, then deletes `source` (#188).
+    ///
+    /// Inputs: Two different saved identities. Outputs: The number of moved variants, or
+    /// `Rejected`. Side effects: Mutates the in-memory collections.
+    fn merge_identity(&self, source: Uuid, target: Uuid) -> Result<usize, StorageError> {
+        let saved = |id: Uuid| {
+            self.stored_identities
+                .borrow()
+                .iter()
+                .any(|identity| identity.identity_id() == id)
+        };
+        if source == target || !saved(source) || !saved(target) {
+            return Err(StorageError::Rejected {
+                reason: "a merge needs two different saved people".to_owned(),
+            });
+        }
+        let mut embeddings = self.stored_embeddings.borrow_mut();
+        let moved: Vec<VoiceEmbedding> = embeddings
+            .iter()
+            .filter(|embedding| embedding.identity_id() == source)
+            .map(|embedding| {
+                VoiceEmbedding::new(target, Uuid::new_v4(), embedding.vector().to_vec())
+            })
+            .collect();
+        let moved_count = moved.len();
+        embeddings.retain(|embedding| embedding.identity_id() != source);
+        embeddings.extend(moved);
+        drop(embeddings);
+        self.stored_identities
+            .borrow_mut()
+            .retain(|identity| identity.identity_id() != source);
+        Ok(moved_count)
+    }
 }
 
 /// Rejects vectors that cannot safely participate in cosine similarity.

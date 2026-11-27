@@ -1,5 +1,5 @@
 //! The meeting screen's speaker labels (#186): which voice a transcript segment belongs to, and
-//! renaming a saved person from the transcript.
+//! renaming a saved person from the transcript, and merging two saved people (#188).
 //!
 //! Double-clicking or long-pressing a label names that voice. A saved person is renamed
 //! everywhere (`rename_person`); an unknown voice is named through `note_taker_assign_cluster`,
@@ -9,9 +9,12 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
-    application::person_rename::{PersonRenameError, rename_person},
+    application::{
+        person_merge::{PersonMergeError, merge_people},
+        person_rename::{PersonRenameError, rename_person},
+    },
     domain::models::TranscriptSegment,
-    ports::voice::VoiceVectorDB,
+    ports::{storage::NoteRepository, voice::VoiceVectorDB},
 };
 
 /// The voice of one transcript segment, for the meeting screen.
@@ -60,6 +63,47 @@ where
                 PersonRenameError::PersonNotFound => "person_not_found",
                 PersonRenameError::NameTaken => "name_taken",
                 PersonRenameError::Storage(_) => "rename_failed",
+            };
+            error_json(code, &error.to_string())
+        }
+    }
+}
+
+/// Merges one saved person into another and answers in JSON (#188).
+///
+/// Inputs: The meetings, the voice store, and the IDs (UUID strings) of the person to merge and
+/// the person to keep.
+/// Outputs: `{"ok":true,"identity_id","identity_name","segments_updated","variants_moved"}`, or
+/// `{"ok":false,"error_code","error"}` with `invalid_argument`, `same_person`,
+/// `person_not_found` or `merge_failed`.
+/// Side effects: See `merge_people`.
+pub fn merge_people_json<Notes, Voices>(
+    notes: &Notes,
+    voices: &Voices,
+    source: &str,
+    target: &str,
+) -> String
+where
+    Notes: NoteRepository + ?Sized,
+    Voices: VoiceVectorDB + ?Sized,
+{
+    let (Ok(source), Ok(target)) = (Uuid::parse_str(source), Uuid::parse_str(target)) else {
+        return error_json("invalid_argument", "both IDs must be UUIDs");
+    };
+    match merge_people(notes, voices, source, target) {
+        Ok(merged) => json!({
+            "ok": true,
+            "identity_id": merged.identity_id().to_string(),
+            "identity_name": merged.identity_name(),
+            "segments_updated": merged.segments_updated(),
+            "variants_moved": merged.variants_moved(),
+        })
+        .to_string(),
+        Err(error) => {
+            let code = match &error {
+                PersonMergeError::SamePerson => "same_person",
+                PersonMergeError::PersonNotFound => "person_not_found",
+                PersonMergeError::Storage(_) => "merge_failed",
             };
             error_json(code, &error.to_string())
         }

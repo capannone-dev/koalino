@@ -487,8 +487,17 @@ having no transcript.
 `person_rename.rs` (#186) renames a saved person, as when the owner double-clicks or long-presses
 a speaker's label in a transcript. The name is trimmed and must be 1–100 characters on one line.
 A name another saved person has is refused (`NameTaken`): two people with one name could not be
-told apart, and merging people is not supported. Saving the identity refreshes `updated_at`, so
+told apart. The app then offers to merge them (`person_merge.rs`). Saving the identity refreshes `updated_at`, so
 paired devices take the newest name (#56). Names are never logged.
+
+## Person merge
+
+`person_merge.rs` (#188) merges one saved person into another, when the same person was saved
+twice. It relinks every transcript passage that names the person merged, in every meeting, and
+only then calls the voice store's `merge_identity`, which in one transaction reseals their voice
+samples under new IDs for the person kept, moves external links, and deletes them with a
+tombstone. In that order a failure part-way never leaves passages naming a deleted person.
+Meetings and the voice library sync carry the result to paired devices.
 
 ## Meeting rename
 

@@ -83,3 +83,44 @@ fn renaming_answers_with_the_new_name_or_an_error_code() {
         "person_not_found"
     );
 }
+
+#[test]
+fn merging_answers_with_the_person_kept_or_an_error_code() {
+    use crate::{
+        adapters::storage::sqlite_adapter::SqliteNoteRepository,
+        application::crypto::voice_encryptor::ephemeral_cipher, ffi_speakers::merge_people_json,
+    };
+    let notes = SqliteNoteRepository::open_in_memory(ephemeral_cipher())
+        .unwrap_or_else(|error| panic!("{error}"));
+    let store = InMemoryVoiceVectorDB::new();
+    let (anna, twin) = (Uuid::new_v4(), Uuid::new_v4());
+    for (id, name) in [(anna, "Anna"), (twin, "Anna V.")] {
+        store
+            .save_speaker_identity(&SpeakerIdentity::new(id, name))
+            .unwrap_or_else(|error| panic!("{error}"));
+    }
+    let error_code = |source: &str, target: &str| {
+        parsed(&merge_people_json(&notes, &store, source, target))["error_code"].clone()
+    };
+    assert_eq!(error_code("x", &anna.to_string()), "invalid_argument");
+    assert_eq!(
+        error_code(&anna.to_string(), &anna.to_string()),
+        "same_person"
+    );
+    assert_eq!(
+        error_code(&Uuid::new_v4().to_string(), &anna.to_string()),
+        "person_not_found"
+    );
+
+    let merged = parsed(&merge_people_json(
+        &notes,
+        &store,
+        &twin.to_string(),
+        &anna.to_string(),
+    ));
+    assert_eq!(merged["ok"], true, "{merged}");
+    assert_eq!(merged["identity_id"], anna.to_string());
+    assert_eq!(merged["identity_name"], "Anna");
+    assert_eq!(merged["segments_updated"], 0);
+    assert_eq!(merged["variants_moved"], 0);
+}
