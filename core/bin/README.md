@@ -198,6 +198,14 @@ environment is never modified.
 The call is refused with `2` once the runtime has started, because the runtime would already
 have opened its stores elsewhere.
 
+`ffi_developer.rs` (#187) backs Settings → Developer: `note_taker_developer_settings` lists the
+few app variables an expert can override (`DEVELOPER_SETTINGS`), validates a new value, and saves
+it in `developer-settings.json` in the data folder. `ConfiguredSettings::from_json` loads that file
+at start, so the order is: developer override, then the app's configuration, then the environment.
+Values apply at the next start, because the pipeline, sync and bridge read their settings once.
+Secrets, storage paths, the device ID and test-only variables are never on the list, and a
+hand-edited file keeps only allowed, valid values. Values are never logged, only names.
+
 Otherwise the runtime opens lazily, on the first native call. The app calls
 `note_taker_start_runtime` right after configuring, on a background isolate, so the database and
 P2P sync start with the app instead of when the owner first opens a screen that needs them.

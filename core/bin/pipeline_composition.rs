@@ -514,10 +514,11 @@ pub fn transcription_task_profile(
 /// Says whether local transcription may try a GPU.
 ///
 /// Outputs: True unless `NOTE_TAKER_WHISPER_GPU` is `off`, the way to rule a GPU driver in or out.
-/// Side effects: Reads the environment.
+/// Side effects: Reads the app's settings, which include Settings → Developer (#187), else the
+/// environment.
 #[cfg(feature = "local-ai")]
 fn whisper_gpu_allowed() -> bool {
-    std::env::var("NOTE_TAKER_WHISPER_GPU").map_or(true, |value| value != "off")
+    crate::ffi_settings::app_setting("NOTE_TAKER_WHISPER_GPU").is_none_or(|value| value != "off")
 }
 
 /// Returns the GPU memory this device should advertise to paired devices.

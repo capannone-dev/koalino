@@ -67,6 +67,9 @@ pub mod ffi_call_watch;
 /// Chat with notes over the C ABI (#97).
 #[path = "bin/ffi_chat.rs"]
 pub mod ffi_chat;
+/// Settings → Developer: app variables an expert can override at the next start (#187).
+#[path = "bin/ffi_developer.rs"]
+pub mod ffi_developer;
 /// The owner's edits to a meeting over the C ABI (#96).
 #[path = "bin/ffi_edits.rs"]
 pub mod ffi_edits;

@@ -4235,3 +4235,21 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   simply, so it is its own issue.
 - **Contract:** each segment in the meeting JSON gains `voice` (`person`/`unknown` with an ID, or
   null); an older core without it reads as no voice, so the label just doesn't react.
+
+## 2026-11-27 — Developer settings in the app (#187)
+
+- **Unlock:** seven taps on the version row at the end of Settings, as Android's Build number.
+  The section is for experts, so it stays out of sight; turning it off clears every value.
+- **Where values live:** `developer-settings.json` in the app's data folder, written by the core.
+  Phones have no environment to set, so this is the only way to change these variables there.
+- **When they apply:** at the next start, ahead of the app's configuration and the environment.
+  The pipeline, sync and bridge read their settings once; changing them live would leave parts of
+  the app on old values. The page shows the value in effect and asks for a restart.
+- **What is on the list:** a curated allowlist in the core with types, bounds and descriptions
+  (GPU, VAD, diarization, after-meeting pass, fallback language, bridge on/port/buffer, sync
+  listen address). Secrets, storage paths, the device ID and test-only variables are never offered:
+  a wrong value there could lock the owner out of their data or break pairing.
+- **Descriptions stay in English:** they explain technical variable names; the page's own text is
+  translated.
+- `NOTE_TAKER_WHISPER_GPU` is now read through `app_setting` like the others, so the override
+  reaches it.

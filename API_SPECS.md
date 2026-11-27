@@ -177,6 +177,14 @@ from a background isolate.
   or blank name), `cluster_not_found`, `cluster_already_resolved`, `assignment_failed`, or
   `runtime_unavailable`.
 
+- `char *note_taker_developer_settings(const char *request_json)` runs Settings → Developer (#187).
+  Requests: `{"command":"get"|"unlock"|"lock"|"reset"}` or
+  `{"command":"set","name":"NOTE_TAKER_…","value":"…"|null}`. It answers
+  `{"ok":true,"unlocked":bool,"restart_needed":bool,"settings":[{"name","kind":"flag|integer|choice|language|multiaddress","description","default","options"?,"min"?,"max"?,"saved":"…"|null,"in_effect":"…"|null}]}`
+  or `{"ok":false,"error_code","error"}` with `invalid_argument`, `not_configured`, `locked` (set
+  while locked), `unknown_setting` (not on the list), `invalid_value` (`error` says what is
+  accepted), or `storage_failed`. Values are saved in `developer-settings.json` in the data folder
+  and apply at the next start, ahead of the configuration and the environment; `lock` clears them.
 - `char *note_taker_rename_person(const char *identity_id, const char *name)` renames a saved person
   from a meeting's transcript (#186) and returns
   `{"ok":true,"identity_id":"uuid","identity_name":"Grace Hopper"}`. The name is trimmed and must be

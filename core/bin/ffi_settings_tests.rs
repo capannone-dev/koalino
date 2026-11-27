@@ -250,3 +250,43 @@ fn a_relative_diarization_directory_is_refused() {
         Err(SettingsError::Invalid(message)) if message.contains("diarization_model_directory")
     ));
 }
+
+/// Settings → Developer's saved overrides (#187) win over the app's configuration and the
+/// environment, and only while the section is unlocked.
+#[test]
+fn developer_overrides_in_the_data_folder_win_at_start() {
+    let data_directory =
+        std::env::temp_dir().join(format!("settings-developer-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&data_directory).unwrap_or_else(|error| panic!("{error}"));
+    let file = data_directory.join(crate::ffi_developer::DEVELOPER_SETTINGS_FILE);
+    let configuration = format!(r#"{{"data_directory":"{}"}}"#, data_directory.display());
+    let environment = |name: &str| (name == "NOTE_TAKER_VAD_ENABLED").then(|| "true".to_owned());
+
+    std::fs::write(
+        &file,
+        r#"{"unlocked":true,"overrides":{"NOTE_TAKER_VAD_ENABLED":"off"}}"#,
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let settings = parsed(&configuration);
+    assert_eq!(
+        settings
+            .lookup("NOTE_TAKER_VAD_ENABLED", environment)
+            .as_deref(),
+        Some("false")
+    );
+    assert_eq!(settings.data_directory(), data_directory.as_path());
+    assert_eq!(settings.developer_overrides().len(), 1);
+
+    std::fs::write(
+        &file,
+        r#"{"unlocked":false,"overrides":{"NOTE_TAKER_VAD_ENABLED":"off"}}"#,
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        parsed(&configuration)
+            .lookup("NOTE_TAKER_VAD_ENABLED", environment)
+            .as_deref(),
+        Some("true")
+    );
+    let _ = std::fs::remove_dir_all(&data_directory);
+}

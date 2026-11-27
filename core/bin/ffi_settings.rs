@@ -7,6 +7,9 @@
 //! names the composition roots already read (`NOTE_TAKER_DATABASE_PATH`, `NOTE_TAKER_WHISPER_MODEL`,
 //! ...), and every FFI read goes through `app_setting`, which falls back to the environment. The
 //! process environment is never modified (`set_var` is unsafe with threads running).
+//!
+//! Overrides saved in Settings → Developer (#187, `ffi_developer`) are read from the data folder
+//! here, once, and win over both the configuration and the environment until the next start.
 
 use std::{
     collections::HashMap,
@@ -54,6 +57,10 @@ struct AppConfiguration {
 /// Validated settings, keyed by the variable names the composition roots read.
 pub struct ConfiguredSettings {
     values: HashMap<&'static str, String>,
+    /// The app's data folder, where Settings → Developer saves its file.
+    data_directory: PathBuf,
+    /// The developer overrides loaded at start (#187), applied ahead of `values`.
+    developer_overrides: HashMap<&'static str, String>,
 }
 
 impl ConfiguredSettings {
@@ -63,7 +70,8 @@ impl ConfiguredSettings {
     /// blank, and a peer address must not contain a comma (the list is stored comma-separated).
     /// Outputs: The settings, or `Invalid` naming the offending field.
     /// Side effects: Checks whether the diarization models exist in the data folder or the shipped
-    /// folder; directories are created when the runtime opens its stores.
+    /// folder, and reads Settings → Developer's overrides from the data folder (#187);
+    /// directories are created when the runtime opens its stores.
     pub fn from_json(json: &str) -> Result<Self, SettingsError> {
         let configuration: AppConfiguration = serde_json::from_str(json)
             .map_err(|error| SettingsError::Invalid(format!("unreadable JSON: {error}")))?;
@@ -142,16 +150,34 @@ impl ConfiguredSettings {
         if let Some(relay) = configuration.p2p_relay {
             values.insert("NOTE_TAKER_P2P_RELAY", relay);
         }
-        Ok(Self { values })
+        Ok(Self {
+            values,
+            developer_overrides: crate::ffi_developer::load_overrides(data_directory),
+            data_directory: data_directory.to_path_buf(),
+        })
     }
 
-    /// Returns the configured value of `name`, else the fallback's.
+    /// The app's data folder.
+    pub fn data_directory(&self) -> &Path {
+        &self.data_directory
+    }
+
+    /// The Settings → Developer overrides loaded at start (#187).
+    pub fn developer_overrides(&self) -> &HashMap<&'static str, String> {
+        &self.developer_overrides
+    }
+
+    /// Returns the developer override of `name`, else its configured value, else the fallback's.
     ///
     /// Inputs: A variable name and the fallback (the environment in production).
     /// Outputs: The value, or `None` when neither has it.
     /// Side effects: Those of `fallback`.
     pub fn lookup(&self, name: &str, fallback: impl Fn(&str) -> Option<String>) -> Option<String> {
-        self.values.get(name).cloned().or_else(|| fallback(name))
+        self.developer_overrides
+            .get(name)
+            .or_else(|| self.values.get(name))
+            .cloned()
+            .or_else(|| fallback(name))
     }
 }
 
@@ -186,6 +212,11 @@ impl SettingsCell {
         self.settings
             .set(settings)
             .map_err(|_| SettingsError::AlreadyConfigured)
+    }
+
+    /// The configured settings, when the app configured the core.
+    pub fn configured(&self) -> Option<&ConfiguredSettings> {
+        self.settings.get()
     }
 
     /// Returns the configured value of `name`, else the fallback's.
