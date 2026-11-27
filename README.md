@@ -101,7 +101,7 @@ with their SHA-256 sums in `SHA256SUMS.txt`.
 | <img src="docs/icons/flatpak.svg" alt="" width="16" height="16"> <img src="docs/icons/linux.svg" alt="" width="16" height="16"> Linux desktop (x86_64): any distribution | [`koalino-x86_64-0.2.0.flatpak`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-x86_64-0.2.0.flatpak) or [`koalino-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-linux-x86_64-0.2.0.tar.gz) | The same, as a Flatpak bundle or a tarball (Debian 13-era libraries or newer) |
 | <img src="docs/icons/linux.svg" alt="" width="16" height="16"> Linux desktop (ARM64): Debian 13+, Ubuntu 24.04+, Fedora; not yet tried on real hardware | [`koalino_0.2.0.preview.2_arm64.deb`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino_0.2.0.preview.2_arm64.deb), [`koalino-0.2.0.preview.2-1.aarch64.rpm`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-0.2.0.preview.2-1.aarch64.rpm) or [`koalino-linux-arm64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-linux-arm64-0.2.0.tar.gz) | The same, for ARM64 computers (no Flatpak yet) |
 | <img src="docs/icons/windows.svg" alt="" width="16" height="16"> Windows desktop (x86_64, Windows 10 or 11) | [`koalino-windows-x86_64-0.2.0-setup.exe`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0-setup.exe) (installer) or [`koalino-windows-x86_64-0.2.0-portable.exe`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0-portable.exe) (portable) | The same, for Windows |
-| <img src="docs/icons/windows.svg" alt="" width="16" height="16"> Windows on ARM (ARM64 laptops, Windows 11); not yet tried on real hardware | [`koalino-windows-arm64-0.2.0-setup.exe`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-arm64-0.2.0-setup.exe) (installer) or [`koalino-windows-arm64-0.2.0-portable.exe`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-arm64-0.2.0-portable.exe) (portable) | The same, for Windows on ARM (transcription on the CPU) |
+| <img src="docs/icons/windows.svg" alt="" width="16" height="16"> Windows on ARM (ARM64 laptops, Windows 11); not yet tried on real hardware ([help wanted](#windows-on-arm-help-wanted)) | [`koalino-windows-arm64-0.2.0-setup.exe`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-arm64-0.2.0-setup.exe) (installer) or [`koalino-windows-arm64-0.2.0-portable.exe`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-arm64-0.2.0-portable.exe) (portable) | The same, for Windows on ARM (transcription on the CPU) |
 | <img src="docs/icons/apple.svg" alt="" width="16" height="16"> macOS desktop (Intel and Apple silicon, macOS 12 or newer) | [`koalino-macos-universal-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-macos-universal-0.2.0.zip) | The same, for Mac, built on GitHub Actions; untested on real Macs and paused ([help wanted](#apple-devices-help-wanted)); on Intel Macs without speaker diarization |
 | <img src="docs/icons/android.svg" alt="" width="16" height="16"> Android (64-bit ARM) | [`koalino-android-arm64-0.2.0.apk`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.2.0.apk) | The app with Whisper `base` and the diarization models |
 | <img src="docs/icons/linux.svg" alt="" width="16" height="16"> Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
@@ -146,6 +146,26 @@ devices. The key is kept in Windows Credential Manager, and data lives in
 `%APPDATA%\capannone-dev\Koalino\` for both versions. On an ARM64 laptop (Windows on ARM), use the
 `koalino-windows-arm64-…` downloads instead: they work the same way and run natively, while the
 x64 ones run only under emulation, much more slowly (they warn you first).
+
+#### Windows on ARM: help wanted
+
+The maintainer has no Windows on ARM laptop. The ARM64 build is compiled and checked on GitHub's
+ARM64 runner, which has no GPU, but it has **never run on a real Snapdragon laptop**. So two things
+are unknown: whether the app works there as a whole (window, microphone, system sound, Credential
+Manager), and whether transcription can use the laptop's GPU. Releases transcribe on the CPU for
+now. A build that also uses the Adreno GPU through Vulkan is ready on the branch
+[`experiment/windows-arm64-vulkan`](https://github.com/capannone-dev/koalino/tree/experiment/windows-arm64-vulkan),
+but it ships only once someone has tried it on real hardware.
+
+If you have a Windows on ARM laptop (Snapdragon X Elite or X Plus, 8cx, or similar), you can help.
+Open an issue or comment on [#179](https://github.com/capannone-dev/koalino/issues/179). Useful
+help, from smallest to largest:
+
+- install the `koalino-windows-arm64-…` preview, record a short meeting, and report what works and
+  what doesn't;
+- try the Vulkan build from the branch above (its CI run publishes the zip) and compare how long
+  the same recording takes to transcribe with and without it;
+- leave a long recording running with the Vulkan build, to check that it stays stable.
 
 ### macOS
 
