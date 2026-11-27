@@ -850,5 +850,6 @@
   "mergeWithName": "{name} と統合",
   "mergedInto": "{source} は {target} に統合されました",
   "thesePeopleCouldNotBeMerged": "この人たちを統合できませんでした。もう一度お試しください。",
-  "peopleCannotBeMergedWhileRecording": "会議の録音中は人を統合できません。"
+  "peopleCannotBeMergedWhileRecording": "会議の録音中は人を統合できません。",
+  "notEnoughFreeSpaceToDownload": "ダウンロードするための空き容量がまだ足りません。"
 }

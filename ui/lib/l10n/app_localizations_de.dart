@@ -3349,4 +3349,8 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get peopleCannotBeMergedWhileRecording =>
       'Personen können nicht zusammengeführt werden, während eine Besprechung aufgenommen wird.';
+
+  @override
+  String get notEnoughFreeSpaceToDownload =>
+      'Für den Download ist noch nicht genug freier Speicher vorhanden.';
 }

@@ -850,5 +850,6 @@
   "mergeWithName": "Mit {name} zusammenführen",
   "mergedInto": "{source} gehört jetzt zu {target}",
   "thesePeopleCouldNotBeMerged": "Diese Personen konnten nicht zusammengeführt werden. Versuche es erneut.",
-  "peopleCannotBeMergedWhileRecording": "Personen können nicht zusammengeführt werden, während eine Besprechung aufgenommen wird."
+  "peopleCannotBeMergedWhileRecording": "Personen können nicht zusammengeführt werden, während eine Besprechung aufgenommen wird.",
+  "notEnoughFreeSpaceToDownload": "Für den Download ist noch nicht genug freier Speicher vorhanden."
 }

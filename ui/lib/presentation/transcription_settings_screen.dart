@@ -493,9 +493,17 @@ final class _TranscriptionSettingsScreenState
         reason,
       if (automatic.speedCheck case final String speedCheck) speedCheck,
     ].join(' ');
+    // Said ahead, as on the model rows, so the Download button's refusal is no surprise (#181).
+    final bool waitingDoesNotFit = waiting != null &&
+        (settings.availableDiskBytes ?? waiting.sizeBytes) < waiting.sizeBytes;
     final String subtitle = waiting != null
-        ? l10n.usesUntilIsDownloadedTheBest(
-            nameOf(automatic.fileName), waiting.name, reason)
+        ? <String>[
+            l10n
+                .usesUntilIsDownloadedTheBest(
+                    nameOf(automatic.fileName), waiting.name, reason)
+                .trim(),
+            if (waitingDoesNotFit) l10n.notEnoughFreeSpaceToDownload,
+          ].join(' ')
         : automatic.enabled
             ? reason
             : l10n.picksTheBestModelForThis(nameOf(automatic.fileName),

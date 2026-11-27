@@ -111,7 +111,8 @@ shows one row per size (tiny, base, small, medium, large-v3-turbo, the standard 
 model unless it may not fit in memory), plus every model on the device or chosen, suggested or
 proposed; `splitModelRows` puts the quantized, English-only, older and too-large variants under a
 collapsed "More models (N)" (#75). The first row, "Automatic" (the default, #106), names the model it runs here and why,
-with a Download button while the suggested model isn't on the device; picking a model by hand leaves it, and
+with a Download button while the suggested model isn't on the device (and a note when it doesn't fit
+in the free space, #181); picking a model by hand leaves it, and
 the efficient mode switch shows only then. Its Glossary section takes one name or term per line; the message under Save says
 it applies from the next recording, and refused text stays in the field to correct. Below it,
 "Keep speech for combining" is a menu of days (1 to 60, plus any window set from the CLI or the

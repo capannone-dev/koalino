@@ -850,5 +850,6 @@
   "mergeWithName": "Fusionner avec {name}",
   "mergedInto": "{source} fait maintenant partie de {target}",
   "thesePeopleCouldNotBeMerged": "Ces personnes n’ont pas pu être fusionnées. Réessayez.",
-  "peopleCannotBeMergedWhileRecording": "Impossible de fusionner des personnes pendant l’enregistrement d’une réunion."
+  "peopleCannotBeMergedWhileRecording": "Impossible de fusionner des personnes pendant l’enregistrement d’une réunion.",
+  "notEnoughFreeSpaceToDownload": "Il n'y a pas encore assez d'espace libre pour le télécharger."
 }

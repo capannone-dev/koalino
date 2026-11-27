@@ -3326,4 +3326,8 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get peopleCannotBeMergedWhileRecording =>
       'Нельзя объединять людей во время записи встречи.';
+
+  @override
+  String get notEnoughFreeSpaceToDownload =>
+      'Пока недостаточно свободного места, чтобы его скачать.';
 }

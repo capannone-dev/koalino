@@ -3145,4 +3145,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get peopleCannotBeMergedWhileRecording => '会議の録音中は人を統合できません。';
+
+  @override
+  String get notEnoughFreeSpaceToDownload => 'ダウンロードするための空き容量がまだ足りません。';
 }

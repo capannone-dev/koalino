@@ -3078,4 +3078,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get peopleCannotBeMergedWhileRecording => '录制会议时无法合并人员。';
+
+  @override
+  String get notEnoughFreeSpaceToDownload => '可用空间暂不足以下载它。';
 }

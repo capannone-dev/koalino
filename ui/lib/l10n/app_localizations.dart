@@ -5223,6 +5223,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'People cannot be merged while a meeting is being recorded.'**
   String get peopleCannotBeMergedWhileRecording;
+
+  /// No description provided for @notEnoughFreeSpaceToDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'There isn\'t enough free space to download it yet.'**
+  String get notEnoughFreeSpaceToDownload;
 }
 
 class _AppLocalizationsDelegate

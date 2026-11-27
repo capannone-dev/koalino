@@ -850,5 +850,6 @@
   "mergeWithName": "دمج مع {name}",
   "mergedInto": "أصبح {source} جزءًا من {target}",
   "thesePeopleCouldNotBeMerged": "تعذّر دمج هؤلاء الأشخاص. حاول مرة أخرى.",
-  "peopleCannotBeMergedWhileRecording": "لا يمكن دمج الأشخاص أثناء تسجيل اجتماع."
+  "peopleCannotBeMergedWhileRecording": "لا يمكن دمج الأشخاص أثناء تسجيل اجتماع.",
+  "notEnoughFreeSpaceToDownload": "لا توجد مساحة فارغة كافية لتنزيله بعد."
 }

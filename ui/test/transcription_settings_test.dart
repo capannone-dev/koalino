@@ -60,6 +60,9 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   }
 
   WhisperProposal? proposal;
+
+  /// Free space reported to the page.
+  int? availableDiskBytes = 100000000000;
   WhisperDownload downloadState = const WhisperDownload();
   final List<String> calls = <String>[];
   WhisperSuggestion? suggestion;
@@ -87,7 +90,7 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   @override
   Future<TranscriptionSettings?> read() async => TranscriptionSettings(
         selectedModel: selected,
-        availableDiskBytes: 100000000000,
+        availableDiskBytes: availableDiskBytes,
         models: const <WhisperModelInfo>[_base, _small, _english],
         download: downloadState,
         suggestion: suggestion,
@@ -678,6 +681,25 @@ void main() {
         reason: 'the download leaves Automatic on');
     bridge.downloadState = const WhisperDownload(state: 'cancelled');
     await controller.load();
+  });
+
+  testWidgets('Automatic warns ahead when its download does not fit (#181)',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..selected = null
+      ..automaticWaiting = 'ggml-small.bin'
+      ..availableDiskBytes = 150000000
+      ..suggestion = const WhisperSuggestion(
+          fileName: 'ggml-small.bin',
+          efficient: false,
+          reason: 'Fewer mistakes.');
+    await _pump(tester, bridge);
+
+    final Text automaticSubtitle = tester.widget<Text>(find.descendant(
+        of: find.byKey(automaticModelKey),
+        matching: find.textContaining('until small is downloaded')));
+    expect(automaticSubtitle.data,
+        contains("There isn't enough free space to download it yet."));
   });
 
   test('settings from a core without Automatic show the hand-picked model', () {

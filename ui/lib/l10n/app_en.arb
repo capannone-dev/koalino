@@ -2487,5 +2487,7 @@
   "thesePeopleCouldNotBeMerged": "These people could not be merged. Try again.",
   "@thesePeopleCouldNotBeMerged": {},
   "peopleCannotBeMergedWhileRecording": "People cannot be merged while a meeting is being recorded.",
-  "@peopleCannotBeMergedWhileRecording": {}
+  "@peopleCannotBeMergedWhileRecording": {},
+  "notEnoughFreeSpaceToDownload": "There isn't enough free space to download it yet.",
+  "@notEnoughFreeSpaceToDownload": {}
 }

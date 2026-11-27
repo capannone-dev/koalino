@@ -850,5 +850,6 @@
   "mergeWithName": "与 {name} 合并",
   "mergedInto": "{source} 已并入 {target}",
   "thesePeopleCouldNotBeMerged": "无法合并这些人，请重试。",
-  "peopleCannotBeMergedWhileRecording": "录制会议时无法合并人员。"
+  "peopleCannotBeMergedWhileRecording": "录制会议时无法合并人员。",
+  "notEnoughFreeSpaceToDownload": "可用空间暂不足以下载它。"
 }

@@ -3310,4 +3310,8 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get peopleCannotBeMergedWhileRecording =>
       'Não é possível juntar pessoas enquanto uma reunião está sendo gravada.';
+
+  @override
+  String get notEnoughFreeSpaceToDownload =>
+      'Ainda não há espaço livre suficiente para o transferir.';
 }
