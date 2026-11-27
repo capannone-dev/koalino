@@ -51,6 +51,7 @@ import 'package:note_taker_ui/infrastructure/language_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/infrastructure/speaker_rename_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/infrastructure/photo_camera.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
@@ -402,6 +403,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
         projectsController: _projectsController,
         summariesController: _summariesController,
         editController: _meetingEditController,
+        speakerRenamer: const RustSpeakerRenamer(),
         recordingsBridge: const RecordingsBridge(),
         focusStartMs: widget.openAtMs,
       );
@@ -416,6 +418,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
       projectsController: _projectsController,
       summariesController: _summariesController,
       editController: _meetingEditController,
+      speakerRenamer: const RustSpeakerRenamer(),
       searchBridge: const SearchBridge(),
       chatBridge: _chatBridge,
       recordingsBridge: const RecordingsBridge(),

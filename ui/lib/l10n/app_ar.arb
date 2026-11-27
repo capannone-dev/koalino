@@ -821,5 +821,11 @@
   "lastAutomaticBackupFailed": "فشلت نسخة {time}. تحقّق من المجلد.",
   "backUpNow": "انسخ الآن",
   "backupFolderUnavailable": "تعذّرت الكتابة في مجلد النسخ. تحقّق من أنه ما زال موجودًا وأن تطبيقه مسجَّل الدخول، أو اختر مجلدًا آخر.",
-  "automaticBackupsNotSetUp": "يجب إعداد النسخ التلقائي من جديد: أوقفه ثم شغّله."
+  "automaticBackupsNotSetUp": "يجب إعداد النسخ التلقائي من جديد: أوقفه ثم شغّله.",
+  "renameSpeaker": "إعادة تسمية المتحدث",
+  "nameThisVoice": "تسمية هذا الصوت",
+  "doubleClickOrLongPressToRename": "انقر نقرًا مزدوجًا أو اضغط مطولًا لإعادة التسمية",
+  "theNewNameAppliesToEveryPassage": "ينطبق الاسم الجديد على كل مقطع لهذا الصوت، في جميع اجتماعاتك وعلى أجهزتك المقترنة.",
+  "anotherSavedPersonIsCalled": "يوجد شخص محفوظ آخر باسم \"{name}\". لدمجهما، افتح الأصوات.",
+  "useOneTo100CharactersOnOneLine": "استخدم من 1 إلى 100 حرف في سطر واحد."
 }

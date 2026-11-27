@@ -3201,4 +3201,27 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get automaticBackupsNotSetUp =>
       'يجب إعداد النسخ التلقائي من جديد: أوقفه ثم شغّله.';
+
+  @override
+  String get renameSpeaker => 'إعادة تسمية المتحدث';
+
+  @override
+  String get nameThisVoice => 'تسمية هذا الصوت';
+
+  @override
+  String get doubleClickOrLongPressToRename =>
+      'انقر نقرًا مزدوجًا أو اضغط مطولًا لإعادة التسمية';
+
+  @override
+  String get theNewNameAppliesToEveryPassage =>
+      'ينطبق الاسم الجديد على كل مقطع لهذا الصوت، في جميع اجتماعاتك وعلى أجهزتك المقترنة.';
+
+  @override
+  String anotherSavedPersonIsCalled(Object name) {
+    return 'يوجد شخص محفوظ آخر باسم \"$name\". لدمجهما، افتح الأصوات.';
+  }
+
+  @override
+  String get useOneTo100CharactersOnOneLine =>
+      'استخدم من 1 إلى 100 حرف في سطر واحد.';
 }

@@ -821,5 +821,11 @@
   "lastAutomaticBackupFailed": "{time} 的备份失败。请检查文件夹。",
   "backUpNow": "立即备份",
   "backupFolderUnavailable": "无法写入备份文件夹。请确认它仍然存在且其应用已登录，或选择其他文件夹。",
-  "automaticBackupsNotSetUp": "需要重新设置自动备份：请将其关闭后再打开。"
+  "automaticBackupsNotSetUp": "需要重新设置自动备份：请将其关闭后再打开。",
+  "renameSpeaker": "重命名说话人",
+  "nameThisVoice": "为这个声音命名",
+  "doubleClickOrLongPressToRename": "双击或长按以重命名",
+  "theNewNameAppliesToEveryPassage": "新名称会应用到这个声音的每一段发言，包括你所有的会议和已配对的设备。",
+  "anotherSavedPersonIsCalled": "已有另一位保存的人叫“{name}”。要把两者合并，请打开“声音”。",
+  "useOneTo100CharactersOnOneLine": "请在一行内输入 1 到 100 个字符。"
 }

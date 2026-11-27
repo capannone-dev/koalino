@@ -3203,4 +3203,27 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get automaticBackupsNotSetUp =>
       'Автоматические копии нужно настроить заново: выключите и снова включите их.';
+
+  @override
+  String get renameSpeaker => 'Переименовать говорящего';
+
+  @override
+  String get nameThisVoice => 'Назвать этот голос';
+
+  @override
+  String get doubleClickOrLongPressToRename =>
+      'Дважды щёлкните или нажмите и удерживайте, чтобы переименовать';
+
+  @override
+  String get theNewNameAppliesToEveryPassage =>
+      'Новое имя применяется ко всем фрагментам этого голоса во всех ваших встречах и на связанных устройствах.';
+
+  @override
+  String anotherSavedPersonIsCalled(Object name) {
+    return 'Другого сохранённого человека уже зовут «$name». Чтобы объединить их, откройте «Голоса».';
+  }
+
+  @override
+  String get useOneTo100CharactersOnOneLine =>
+      'Используйте от 1 до 100 символов в одной строке.';
 }

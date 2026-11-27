@@ -821,5 +821,11 @@
   "lastAutomaticBackupFailed": "Die Sicherung vom {time} ist fehlgeschlagen. Prüfe den Ordner.",
   "backUpNow": "Jetzt sichern",
   "backupFolderUnavailable": "In den Sicherungsordner kann nicht geschrieben werden. Prüfe, ob er noch existiert und seine App angemeldet ist, oder wähle einen anderen Ordner.",
-  "automaticBackupsNotSetUp": "Automatische Sicherungen müssen neu eingerichtet werden: aus- und wieder einschalten."
+  "automaticBackupsNotSetUp": "Automatische Sicherungen müssen neu eingerichtet werden: aus- und wieder einschalten.",
+  "renameSpeaker": "Sprecher umbenennen",
+  "nameThisVoice": "Diese Stimme benennen",
+  "doubleClickOrLongPressToRename": "Doppelklicken oder lange drücken zum Umbenennen",
+  "theNewNameAppliesToEveryPassage": "Der neue Name gilt für jede Passage dieser Stimme, in allen deinen Besprechungen und auf deinen gekoppelten Geräten.",
+  "anotherSavedPersonIsCalled": "Eine andere gespeicherte Person heißt bereits „{name}“. Um beide zusammenzuführen, öffne Stimmen.",
+  "useOneTo100CharactersOnOneLine": "Verwende 1 bis 100 Zeichen in einer Zeile."
 }

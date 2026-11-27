@@ -821,5 +821,11 @@
   "lastAutomaticBackupFailed": "{time} のバックアップに失敗しました。フォルダを確認してください。",
   "backUpNow": "今すぐバックアップ",
   "backupFolderUnavailable": "バックアップフォルダに書き込めません。フォルダが存在し、そのアプリにサインインしているか確認するか、別のフォルダを選んでください。",
-  "automaticBackupsNotSetUp": "自動バックアップの再設定が必要です。いったんオフにしてからオンにしてください。"
+  "automaticBackupsNotSetUp": "自動バックアップの再設定が必要です。いったんオフにしてからオンにしてください。",
+  "renameSpeaker": "話者の名前を変更",
+  "nameThisVoice": "この声に名前を付ける",
+  "doubleClickOrLongPressToRename": "ダブルクリックまたは長押しで名前を変更",
+  "theNewNameAppliesToEveryPassage": "新しい名前は、すべての会議とペアリングしたデバイスで、この声のすべての発言に適用されます。",
+  "anotherSavedPersonIsCalled": "保存済みの別の人がすでに「{name}」という名前です。2人をまとめるには「声」を開いてください。",
+  "useOneTo100CharactersOnOneLine": "1〜100文字を1行で入力してください。"
 }

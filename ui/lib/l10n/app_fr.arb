@@ -821,5 +821,11 @@
   "lastAutomaticBackupFailed": "La sauvegarde du {time} a échoué. Vérifiez le dossier.",
   "backUpNow": "Sauvegarder maintenant",
   "backupFolderUnavailable": "Impossible d'écrire dans le dossier de sauvegarde. Vérifiez qu'il existe toujours et que son application est connectée, ou choisissez un autre dossier.",
-  "automaticBackupsNotSetUp": "Les sauvegardes automatiques doivent être reconfigurées : désactivez-les puis réactivez-les."
+  "automaticBackupsNotSetUp": "Les sauvegardes automatiques doivent être reconfigurées : désactivez-les puis réactivez-les.",
+  "renameSpeaker": "Renommer l’intervenant",
+  "nameThisVoice": "Nommer cette voix",
+  "doubleClickOrLongPressToRename": "Double-cliquez ou appuyez longuement pour renommer",
+  "theNewNameAppliesToEveryPassage": "Le nouveau nom s’applique à chaque passage de cette voix, dans toutes vos réunions et sur vos appareils associés.",
+  "anotherSavedPersonIsCalled": "Une autre personne enregistrée s’appelle déjà « {name} ». Pour les réunir, ouvrez Voix.",
+  "useOneTo100CharactersOnOneLine": "Utilisez de 1 à 100 caractères sur une ligne."
 }

@@ -3146,4 +3146,27 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get automaticBackupsNotSetUp =>
       'Automatic backups need setting up again: turn them off and on.';
+
+  @override
+  String get renameSpeaker => 'Rename speaker';
+
+  @override
+  String get nameThisVoice => 'Name this voice';
+
+  @override
+  String get doubleClickOrLongPressToRename =>
+      'Double-click or long-press to rename';
+
+  @override
+  String get theNewNameAppliesToEveryPassage =>
+      'The new name applies to every passage by this voice, in all your meetings and on your paired devices.';
+
+  @override
+  String anotherSavedPersonIsCalled(Object name) {
+    return 'Another saved person is already called “$name”. To join the two, open Voices.';
+  }
+
+  @override
+  String get useOneTo100CharactersOnOneLine =>
+      'Use 1 to 100 characters on one line.';
 }

@@ -9,6 +9,7 @@ import 'package:ffi/ffi.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
 import 'core_library.dart';
+import 'speaker_rename_bridge.dart';
 
 /// A device that recorded a meeting (#88), as Rust names it.
 final class RecordingDevice {
@@ -259,6 +260,7 @@ final class MeetingTranscriptSegment {
     this.overlappingSpeech = false,
     this.uncertainSpeaker = false,
     this.uncertainWords = const <int>[],
+    this.voice,
   });
 
   /// Offset of the segment start from the meeting start.
@@ -282,6 +284,9 @@ final class MeetingTranscriptSegment {
   /// Positions of the unclear words among the text's whitespace-separated words (#91).
   final List<int> uncertainWords;
 
+  /// The voice the label renames (#186); `null` when the segment has none.
+  final SpeakerVoice? voice;
+
   /// Decodes one element of the `segments` array; a core without the marks reads as plain.
   factory MeetingTranscriptSegment.fromJson(Map<String, Object?> json) {
     final Object? positions = json['uncertain_words'];
@@ -298,6 +303,7 @@ final class MeetingTranscriptSegment {
               .map((num position) => position.toInt())
               .toList(growable: false)
           : const <int>[],
+      voice: SpeakerVoice.fromJson(json['voice']),
     );
   }
 }

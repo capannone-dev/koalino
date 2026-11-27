@@ -821,5 +821,11 @@
   "lastAutomaticBackupFailed": "O backup de {time} falhou. Verifique a pasta.",
   "backUpNow": "Fazer backup agora",
   "backupFolderUnavailable": "Não é possível gravar na pasta de backups. Verifique se ela ainda existe e se o app dela tem sessão iniciada, ou escolha outra pasta.",
-  "automaticBackupsNotSetUp": "Os backups automáticos precisam ser configurados de novo: desative e ative novamente."
+  "automaticBackupsNotSetUp": "Os backups automáticos precisam ser configurados de novo: desative e ative novamente.",
+  "renameSpeaker": "Mudar o nome de quem fala",
+  "nameThisVoice": "Dar nome a esta voz",
+  "doubleClickOrLongPressToRename": "Clique duas vezes ou mantenha pressionado para mudar o nome",
+  "theNewNameAppliesToEveryPassage": "O novo nome vale para cada trecho desta voz, em todas as suas reuniões e nos seus dispositivos emparelhados.",
+  "anotherSavedPersonIsCalled": "Outra pessoa salva já se chama “{name}”. Para juntá-las, abra Vozes.",
+  "useOneTo100CharactersOnOneLine": "Use de 1 a 100 caracteres em uma linha."
 }

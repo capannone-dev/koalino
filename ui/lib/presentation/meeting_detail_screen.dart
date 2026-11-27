@@ -1,6 +1,7 @@
 // Renders one meeting with its title as the header, followed by metadata and transcript, with
 // its photos and documents placed where they were taken (Issue #54).
 
+import 'dart:async';
 import 'dart:io';
 
 // ignore: deprecated_member_use
@@ -30,6 +31,8 @@ import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
 import 'package:note_taker_ui/presentation/split_meeting_action.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
+import 'package:note_taker_ui/infrastructure/speaker_rename_bridge.dart';
+import 'package:note_taker_ui/presentation/speaker_label.dart';
 
 /// Builds a screen about one meeting, such as the voice gallery for its unknown speakers.
 typedef MeetingScreenBuilder = Widget Function(
@@ -64,6 +67,7 @@ final class MeetingDetailScreen extends StatefulWidget {
     this.editController,
     this.chatBridge,
     this.recordingsBridge,
+    this.speakerRenamer,
     this.focusStartMs,
     super.key,
   });
@@ -92,6 +96,9 @@ final class MeetingDetailScreen extends StatefulWidget {
 
   /// Adds Play recording when given and the meeting has a kept recording (#140).
   final RecordingsBridge? recordingsBridge;
+
+  /// Lets the owner rename speakers from the transcript when given (#186).
+  final SpeakerRenamer? speakerRenamer;
 
   @override
   State<MeetingDetailScreen> createState() => _MeetingDetailScreenState();
@@ -130,6 +137,7 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
         editController: widget.editController,
         chatBridge: widget.chatBridge,
         recordingsBridge: widget.recordingsBridge,
+        speakerRenamer: widget.speakerRenamer,
       ),
     ));
   }
@@ -222,6 +230,7 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
       body: MeetingDetailView(
           controller: widget.controller,
           editController: widget.editController,
+          speakerRenamer: widget.speakerRenamer,
           focusStartMs: widget.focusStartMs),
     );
   }
@@ -416,11 +425,15 @@ final class MeetingDetailView extends StatelessWidget {
   const MeetingDetailView(
       {required this.controller,
       this.editController,
+      this.speakerRenamer,
       this.focusStartMs,
       super.key});
 
   final MeetingListController controller;
   final MeetingEditController? editController;
+
+  /// Lets the owner rename speakers from the transcript when given (#186).
+  final SpeakerRenamer? speakerRenamer;
 
   /// Scrolls to and marks the transcript passage starting here (#100).
   final int? focusStartMs;
@@ -446,6 +459,7 @@ final class MeetingDetailView extends StatelessWidget {
               controller: controller,
               meeting: meeting,
               editController: editController,
+              speakerRenamer: speakerRenamer,
               focusStartMs: focusStartMs),
           null => Center(child: Text(l10n.selectAMeetingToSeeIts)),
         };
@@ -460,11 +474,13 @@ final class _MeetingContent extends StatelessWidget {
       {required this.controller,
       required this.meeting,
       this.editController,
+      this.speakerRenamer,
       this.focusStartMs});
 
   final MeetingListController controller;
   final MeetingDetail meeting;
   final MeetingEditController? editController;
+  final SpeakerRenamer? speakerRenamer;
   final int? focusStartMs;
 
   /// The start of the passage to scroll to: the one starting at `focusStartMs`, or the last one
@@ -706,10 +722,10 @@ final class _MeetingContent extends StatelessWidget {
           children: <Widget>[
             _withTooltip(
               segment.uncertainSpeaker ? l10n.theSpeakerIsAGuess : null,
-              Text(
+              _speakerLabel(
+                theme,
+                segment,
                 '$speaker · ${formatMeetingDuration(segment.startTimeMs)}',
-                style: theme.textTheme.labelLarge
-                    ?.copyWith(color: theme.colorScheme.primary),
               ),
             ),
             if (segment.overlappingSpeech)
@@ -726,6 +742,28 @@ final class _MeetingContent extends StatelessWidget {
         const SizedBox(height: 4),
         _segmentText(theme, segment),
       ],
+    );
+  }
+
+  /// The segment's speaker label, renamable by double-click or long-press when there is a
+  /// renamer and the segment has a voice (#186).
+  Widget _speakerLabel(
+      ThemeData theme, MeetingTranscriptSegment segment, String text) {
+    final TextStyle? style =
+        theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary);
+    final SpeakerRenamer? renamer = speakerRenamer;
+    if (renamer == null) {
+      return Text(text, style: style);
+    }
+    return SpeakerLabel(
+      text: text,
+      name: segment.speaker,
+      voice: segment.voice,
+      renamer: renamer,
+      style: style,
+      // Every passage by this voice changes, so the whole meeting reloads.
+      onRenamed: (_) =>
+          unawaited(controller.selectMeeting(meeting.summary.meetingId)),
     );
   }
 

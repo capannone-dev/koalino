@@ -18,6 +18,7 @@ import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/infrastructure/speaker_rename_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
 import 'package:note_taker_ui/presentation/new_meeting_dialog.dart';
@@ -52,6 +53,7 @@ final class MeetingListScreen extends StatefulWidget {
     this.projectsController,
     this.summariesController,
     this.editController,
+    this.speakerRenamer,
     this.searchBridge,
     this.chatBridge,
     this.recordingsBridge,
@@ -72,6 +74,9 @@ final class MeetingListScreen extends StatefulWidget {
 
   /// Shows the open meeting's notes and lets the owner correct its transcript when given (#96).
   final MeetingEditController? editController;
+
+  /// Lets the owner rename speakers from the transcript when given (#186).
+  final SpeakerRenamer? speakerRenamer;
 
   /// Adds Search over every meeting when given (#100).
   final SearchBridge? searchBridge;
@@ -171,6 +176,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         projectsController: widget.projectsController,
         summariesController: widget.summariesController,
         editController: widget.editController,
+        speakerRenamer: widget.speakerRenamer,
         chatBridge: widget.chatBridge,
         recordingsBridge: widget.recordingsBridge,
       ),
@@ -345,7 +351,8 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                     Expanded(
                         child: MeetingDetailView(
                             controller: widget.controller,
-                            editController: widget.editController)),
+                            editController: widget.editController,
+                            speakerRenamer: widget.speakerRenamer)),
                   ],
                 )
               : meetingList,

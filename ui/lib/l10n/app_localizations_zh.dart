@@ -2963,4 +2963,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get automaticBackupsNotSetUp => '需要重新设置自动备份：请将其关闭后再打开。';
+
+  @override
+  String get renameSpeaker => '重命名说话人';
+
+  @override
+  String get nameThisVoice => '为这个声音命名';
+
+  @override
+  String get doubleClickOrLongPressToRename => '双击或长按以重命名';
+
+  @override
+  String get theNewNameAppliesToEveryPassage =>
+      '新名称会应用到这个声音的每一段发言，包括你所有的会议和已配对的设备。';
+
+  @override
+  String anotherSavedPersonIsCalled(Object name) {
+    return '已有另一位保存的人叫“$name”。要把两者合并，请打开“声音”。';
+  }
+
+  @override
+  String get useOneTo100CharactersOnOneLine => '请在一行内输入 1 到 100 个字符。';
 }

@@ -821,5 +821,11 @@
   "lastAutomaticBackupFailed": "Il backup del {time} non è riuscito. Controlla la cartella.",
   "backUpNow": "Esegui backup ora",
   "backupFolderUnavailable": "Impossibile scrivere nella cartella dei backup. Controlla che esista ancora e che la sua app abbia l'accesso, oppure scegli un'altra cartella.",
-  "automaticBackupsNotSetUp": "I backup automatici vanno riconfigurati: disattivali e riattivali."
+  "automaticBackupsNotSetUp": "I backup automatici vanno riconfigurati: disattivali e riattivali.",
+  "renameSpeaker": "Rinomina chi parla",
+  "nameThisVoice": "Dai un nome a questa voce",
+  "doubleClickOrLongPressToRename": "Doppio clic o pressione prolungata per rinominare",
+  "theNewNameAppliesToEveryPassage": "Il nuovo nome vale per ogni passaggio di questa voce, in tutte le tue riunioni e sui dispositivi associati.",
+  "anotherSavedPersonIsCalled": "Un’altra persona salvata si chiama già “{name}”. Per unirle, apri Voci.",
+  "useOneTo100CharactersOnOneLine": "Usa da 1 a 100 caratteri su una riga."
 }

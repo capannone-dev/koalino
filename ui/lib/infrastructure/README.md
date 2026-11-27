@@ -19,6 +19,11 @@ domain structs are never represented in Dart or presented to widgets.
 
 `MeetingBridge.getMeeting` also decodes the meeting's `attachments`.
 
+`speaker_rename_bridge.dart` (#186) decodes each segment's `voice` (a saved person or an unknown
+voice) and defines `SpeakerRenamer`. `RustSpeakerRenamer` renames a person through
+`note_taker_rename_person` and names an unknown voice through `note_taker_assign_cluster`, each on
+a background isolate, and turns Rust's refusals into `SpeakerRenameException` codes.
+
 `telemetry_bridge.dart` defines the telemetry DTOs and `RustTelemetryBridge`, which calls
 `note_taker_get_devices`, `note_taker_get_telemetry_summary`, and
 `note_taker_get_device_telemetry` on a background isolate and frees each response there.

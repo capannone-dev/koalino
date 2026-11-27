@@ -50,6 +50,12 @@ own again, for good.
 optional title, then opens a meeting with no recording, to be filled by writing notes or adding
 files (#129).
 
+`speaker_label.dart` (#186) is a transcript segment's speaker label. Double-clicking or
+long-pressing it opens a dialog that names that voice, suggesting the saved people as the owner
+types. A saved person is renamed in every meeting; an unknown voice is named as in Voices. A name
+another saved person has is refused with a pointer to Voices, and the dialog stays open. The label
+does nothing for a segment without a voice. After a rename the meeting reloads.
+
 `rename_meeting_dialog.dart` holds `RenameMeetingDialog` and `showRenameMeetingDialog`, shared by
 the list's context menu (long-press, right-click, Shift+F10, and a screen-reader action) and the
 detail's pencil button. It validates locally, maps Rust failures to plain messages, and confirms

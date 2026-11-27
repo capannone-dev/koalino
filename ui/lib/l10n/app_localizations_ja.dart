@@ -3030,4 +3030,25 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get automaticBackupsNotSetUp =>
       '自動バックアップの再設定が必要です。いったんオフにしてからオンにしてください。';
+
+  @override
+  String get renameSpeaker => '話者の名前を変更';
+
+  @override
+  String get nameThisVoice => 'この声に名前を付ける';
+
+  @override
+  String get doubleClickOrLongPressToRename => 'ダブルクリックまたは長押しで名前を変更';
+
+  @override
+  String get theNewNameAppliesToEveryPassage =>
+      '新しい名前は、すべての会議とペアリングしたデバイスで、この声のすべての発言に適用されます。';
+
+  @override
+  String anotherSavedPersonIsCalled(Object name) {
+    return '保存済みの別の人がすでに「$name」という名前です。2人をまとめるには「声」を開いてください。';
+  }
+
+  @override
+  String get useOneTo100CharactersOnOneLine => '1〜100文字を1行で入力してください。';
 }

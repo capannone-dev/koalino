@@ -3225,4 +3225,27 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get automaticBackupsNotSetUp =>
       'Automatische Sicherungen müssen neu eingerichtet werden: aus- und wieder einschalten.';
+
+  @override
+  String get renameSpeaker => 'Sprecher umbenennen';
+
+  @override
+  String get nameThisVoice => 'Diese Stimme benennen';
+
+  @override
+  String get doubleClickOrLongPressToRename =>
+      'Doppelklicken oder lange drücken zum Umbenennen';
+
+  @override
+  String get theNewNameAppliesToEveryPassage =>
+      'Der neue Name gilt für jede Passage dieser Stimme, in allen deinen Besprechungen und auf deinen gekoppelten Geräten.';
+
+  @override
+  String anotherSavedPersonIsCalled(Object name) {
+    return 'Eine andere gespeicherte Person heißt bereits „$name“. Um beide zusammenzuführen, öffne Stimmen.';
+  }
+
+  @override
+  String get useOneTo100CharactersOnOneLine =>
+      'Verwende 1 bis 100 Zeichen in einer Zeile.';
 }

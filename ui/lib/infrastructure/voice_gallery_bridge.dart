@@ -446,6 +446,24 @@ Future<String> _assignClusterJson(String clusterId, String identityName) =>
           <String>[clusterId, identityName],
         ));
 
+/// Loads the voice library as Rust's JSON, on a background isolate (used by #186's renamer).
+Future<String> voiceLibraryJson() => _fetchVoiceLibraryJson();
+
+/// Names an unknown voice as Rust's JSON, on a background isolate (used by #186's renamer).
+Future<String> assignClusterJson(String clusterId, String identityName) =>
+    _assignClusterJson(clusterId, identityName);
+
+/// Calls `note_taker_rename_person` on a background isolate (#186) and returns its JSON answer.
+///
+/// Inputs: The saved person's ID and the typed name.
+/// Outputs: `{"ok":true,"identity_id","identity_name"}` or `{"ok":false,"error_code","error"}`.
+/// Side effects: Rust saves the person under the new name, which syncs to paired devices.
+Future<String> renamePersonJson(String identityId, String name) =>
+    Isolate.run(() => _callNativeJson(
+          'note_taker_rename_person',
+          <String>[identityId, name],
+        ));
+
 /// Calls `note_taker_assign_voice_group` on a background isolate.
 ///
 /// Declared at top level so the isolate closure captures only the two strings.

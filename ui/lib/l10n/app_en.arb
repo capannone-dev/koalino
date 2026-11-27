@@ -2429,5 +2429,17 @@
   "backupFolderUnavailable": "The backup folder cannot be written. Check that it still exists and that its app is signed in, or choose another folder.",
   "@backupFolderUnavailable": {},
   "automaticBackupsNotSetUp": "Automatic backups need setting up again: turn them off and on.",
-  "@automaticBackupsNotSetUp": {}
+  "@automaticBackupsNotSetUp": {},
+  "renameSpeaker": "Rename speaker",
+  "@renameSpeaker": {},
+  "nameThisVoice": "Name this voice",
+  "@nameThisVoice": {},
+  "doubleClickOrLongPressToRename": "Double-click or long-press to rename",
+  "@doubleClickOrLongPressToRename": {},
+  "theNewNameAppliesToEveryPassage": "The new name applies to every passage by this voice, in all your meetings and on your paired devices.",
+  "@theNewNameAppliesToEveryPassage": {},
+  "anotherSavedPersonIsCalled": "Another saved person is already called “{name}”. To join the two, open Voices.",
+  "@anotherSavedPersonIsCalled": {"placeholders": {"name": {"type": "Object"}}},
+  "useOneTo100CharactersOnOneLine": "Use 1 to 100 characters on one line.",
+  "@useOneTo100CharactersOnOneLine": {}
 }

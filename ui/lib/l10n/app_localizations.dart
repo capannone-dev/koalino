@@ -5049,6 +5049,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Automatic backups need setting up again: turn them off and on.'**
   String get automaticBackupsNotSetUp;
+
+  /// No description provided for @renameSpeaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename speaker'**
+  String get renameSpeaker;
+
+  /// No description provided for @nameThisVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Name this voice'**
+  String get nameThisVoice;
+
+  /// No description provided for @doubleClickOrLongPressToRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Double-click or long-press to rename'**
+  String get doubleClickOrLongPressToRename;
+
+  /// No description provided for @theNewNameAppliesToEveryPassage.
+  ///
+  /// In en, this message translates to:
+  /// **'The new name applies to every passage by this voice, in all your meetings and on your paired devices.'**
+  String get theNewNameAppliesToEveryPassage;
+
+  /// No description provided for @anotherSavedPersonIsCalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Another saved person is already called “{name}”. To join the two, open Voices.'**
+  String anotherSavedPersonIsCalled(Object name);
+
+  /// No description provided for @useOneTo100CharactersOnOneLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Use 1 to 100 characters on one line.'**
+  String get useOneTo100CharactersOnOneLine;
 }
 
 class _AppLocalizationsDelegate

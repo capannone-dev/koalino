@@ -3195,4 +3195,27 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get automaticBackupsNotSetUp =>
       'Les sauvegardes automatiques doivent être reconfigurées : désactivez-les puis réactivez-les.';
+
+  @override
+  String get renameSpeaker => 'Renommer l’intervenant';
+
+  @override
+  String get nameThisVoice => 'Nommer cette voix';
+
+  @override
+  String get doubleClickOrLongPressToRename =>
+      'Double-cliquez ou appuyez longuement pour renommer';
+
+  @override
+  String get theNewNameAppliesToEveryPassage =>
+      'Le nouveau nom s’applique à chaque passage de cette voix, dans toutes vos réunions et sur vos appareils associés.';
+
+  @override
+  String anotherSavedPersonIsCalled(Object name) {
+    return 'Une autre personne enregistrée s’appelle déjà « $name ». Pour les réunir, ouvrez Voix.';
+  }
+
+  @override
+  String get useOneTo100CharactersOnOneLine =>
+      'Utilisez de 1 à 100 caractères sur une ligne.';
 }

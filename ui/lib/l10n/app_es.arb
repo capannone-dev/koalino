@@ -821,5 +821,11 @@
   "lastAutomaticBackupFailed": "La copia del {time} falló. Revisa la carpeta.",
   "backUpNow": "Copiar ahora",
   "backupFolderUnavailable": "No se puede escribir en la carpeta de copias. Comprueba que siga existiendo y que su app tenga la sesión iniciada, o elige otra carpeta.",
-  "automaticBackupsNotSetUp": "Hay que volver a configurar las copias automáticas: desactívalas y vuelve a activarlas."
+  "automaticBackupsNotSetUp": "Hay que volver a configurar las copias automáticas: desactívalas y vuelve a activarlas.",
+  "renameSpeaker": "Cambiar el nombre del hablante",
+  "nameThisVoice": "Poner nombre a esta voz",
+  "doubleClickOrLongPressToRename": "Doble clic o mantén pulsado para cambiar el nombre",
+  "theNewNameAppliesToEveryPassage": "El nuevo nombre se aplica a cada fragmento de esta voz, en todas tus reuniones y en tus dispositivos vinculados.",
+  "anotherSavedPersonIsCalled": "Otra persona guardada ya se llama «{name}». Para unirlas, abre Voces.",
+  "useOneTo100CharactersOnOneLine": "Usa de 1 a 100 caracteres en una línea."
 }
