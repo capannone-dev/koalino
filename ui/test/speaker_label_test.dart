@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/speaker_rename_bridge.dart';
+import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
 import 'package:note_taker_ui/presentation/speaker_label.dart';
 
 /// Records renames and answers them as told.
@@ -15,9 +16,26 @@ final class FakeSpeakerRenamer implements SpeakerRenamer {
   /// When set, `rename` throws this code instead of succeeding.
   String? errorCode;
 
+  /// `(source, target)` pairs sent to `merge`.
+  final List<(String, String)> merges = <(String, String)>[];
+
   @override
-  Future<List<String>> savedNames() async =>
-      const <String>['Anna Verdi', 'Bruno Neri'];
+  Future<List<SavedPerson>> savedPeople() async => const <SavedPerson>[
+        SavedPerson(
+            identityId: 'p-anna',
+            displayName: 'Anna Verdi',
+            voiceVariantCount: 1),
+        SavedPerson(
+            identityId: 'p-bruno',
+            displayName: 'Bruno Neri',
+            voiceVariantCount: 1),
+      ];
+
+  @override
+  Future<String> merge(String sourceId, String targetId) async {
+    merges.add((sourceId, targetId));
+    return targetId == 'p-anna' ? 'Anna Verdi' : 'Bruno Neri';
+  }
 
   @override
   Future<String> rename(SpeakerVoice voice, String name) async {
@@ -124,8 +142,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AlertDialog), findsOneWidget);
-    expect(find.textContaining('Voices'), findsWidgets);
+    expect(find.textContaining('already called'), findsOneWidget);
+    expect(find.byKey(mergeSpeakerButtonKey), findsOneWidget);
     expect(renamed, isEmpty);
+  });
+
+  testWidgets('a taken name offers to merge the two people',
+      (WidgetTester tester) async {
+    final FakeSpeakerRenamer renamer = FakeSpeakerRenamer()
+      ..errorCode = 'name_taken';
+    final List<String> renamed = <String>[];
+    await _pumpLabel(tester,
+        renamer: renamer, voice: _person, name: 'Anna', renamed: renamed);
+
+    await tester.longPress(find.text('Anna · 0:05'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(speakerNameFieldKey), ' anna verdi');
+    await tester.tap(find.byKey(renameSpeakerButtonKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(mergeSpeakerButtonKey));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('cannot be undone'), findsOneWidget);
+    await tester.tap(find.byKey(confirmMergeSpeakerKey));
+    await tester.pumpAndSettle();
+
+    expect(renamer.merges, <(String, String)>[('p-1', 'p-anna')]);
+    expect(renamed, <String>['Anna Verdi']);
+    expect(find.byType(AlertDialog), findsNothing);
   });
 
   testWidgets('a label without a voice does not react',

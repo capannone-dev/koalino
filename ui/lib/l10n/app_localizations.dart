@@ -5077,7 +5077,7 @@ abstract class AppLocalizations {
   /// No description provided for @anotherSavedPersonIsCalled.
   ///
   /// In en, this message translates to:
-  /// **'Another saved person is already called “{name}”. To join the two, open Voices.'**
+  /// **'Another saved person is already called “{name}”. If they are the same person, merge the two.'**
   String anotherSavedPersonIsCalled(Object name);
 
   /// No description provided for @useOneTo100CharactersOnOneLine.
@@ -5175,6 +5175,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Turn off'**
   String get turnOff;
+
+  /// No description provided for @mergeIntoAnotherPerson.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge {name} into another person'**
+  String mergeIntoAnotherPerson(Object name);
+
+  /// No description provided for @mergeNameInto.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge {name} into…'**
+  String mergeNameInto(Object name);
+
+  /// No description provided for @mergeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'All of {source}’s passages and voice samples move to {target}, and {source} is deleted, on your paired devices too. This cannot be undone.'**
+  String mergeWarning(Object source, Object target);
+
+  /// No description provided for @merge.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge'**
+  String get merge;
+
+  /// No description provided for @mergeWithName.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge with {name}'**
+  String mergeWithName(Object name);
+
+  /// No description provided for @mergedInto.
+  ///
+  /// In en, this message translates to:
+  /// **'{source} is now part of {target}'**
+  String mergedInto(Object source, Object target);
+
+  /// No description provided for @thesePeopleCouldNotBeMerged.
+  ///
+  /// In en, this message translates to:
+  /// **'These people could not be merged. Try again.'**
+  String get thesePeopleCouldNotBeMerged;
+
+  /// No description provided for @peopleCannotBeMergedWhileRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'People cannot be merged while a meeting is being recorded.'**
+  String get peopleCannotBeMergedWhileRecording;
 }
 
 class _AppLocalizationsDelegate

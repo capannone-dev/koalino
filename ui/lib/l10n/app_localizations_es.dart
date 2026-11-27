@@ -3199,7 +3199,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String anotherSavedPersonIsCalled(Object name) {
-    return 'Otra persona guardada ya se llama «$name». Para unirlas, abre Voces.';
+    return 'Otra persona guardada ya se llama «$name». Si es la misma persona, únelas.';
   }
 
   @override
@@ -3269,4 +3269,40 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get turnOff => 'Desactivar';
+
+  @override
+  String mergeIntoAnotherPerson(Object name) {
+    return 'Unir a $name con otra persona';
+  }
+
+  @override
+  String mergeNameInto(Object name) {
+    return 'Unir a $name con…';
+  }
+
+  @override
+  String mergeWarning(Object source, Object target) {
+    return 'Todos los fragmentos y muestras de voz de $source pasan a $target, y $source se elimina, también en tus dispositivos vinculados. No se puede deshacer.';
+  }
+
+  @override
+  String get merge => 'Unir';
+
+  @override
+  String mergeWithName(Object name) {
+    return 'Unir con $name';
+  }
+
+  @override
+  String mergedInto(Object source, Object target) {
+    return '$source ahora forma parte de $target';
+  }
+
+  @override
+  String get thesePeopleCouldNotBeMerged =>
+      'No se pudo unir a estas personas. Inténtalo de nuevo.';
+
+  @override
+  String get peopleCannotBeMergedWhileRecording =>
+      'No se pueden unir personas mientras se graba una reunión.';
 }

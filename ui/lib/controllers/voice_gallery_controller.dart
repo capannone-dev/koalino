@@ -224,6 +224,25 @@ final class VoiceGalleryController extends ChangeNotifier {
     await load();
   }
 
+  /// Merges `source` into `kept` (#188) and refreshes the list.
+  ///
+  /// Side effects: Rust moves `source`'s passages, voice samples and links to `kept` and deletes
+  /// `source`, on paired devices too. A refusal keeps the list and reports a status message.
+  Future<void> mergeSavedPeople(SavedPerson source, SavedPerson kept) async {
+    try {
+      await _voiceGalleryBridge.mergePeople(
+          sourceId: source.identityId, targetId: kept.identityId);
+    } on Object catch (error) {
+      _statusMessage = '$error'.contains('(recording)')
+          ? l10n.peopleCannotBeMergedWhileRecording
+          : l10n.thesePeopleCouldNotBeMerged;
+      notifyListeners();
+      return;
+    }
+    _statusMessage = l10n.mergedInto(source.displayName, kept.displayName);
+    await load();
+  }
+
   /// Assigns `cluster` to the identity named `identityName` and refreshes the list.
   ///
   /// A blank name is rejected locally without calling Rust. A rejected assignment keeps the

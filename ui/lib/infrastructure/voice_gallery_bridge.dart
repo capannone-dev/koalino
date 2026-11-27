@@ -138,6 +138,42 @@ final class SavedPerson {
   final int voiceVariantCount;
 }
 
+/// The outcome of merging one saved person into another (#188).
+final class PersonMergeResult {
+  /// Creates the result.
+  const PersonMergeResult({
+    required this.identityId,
+    required this.identityName,
+    required this.segmentsUpdated,
+    required this.variantsMoved,
+  });
+
+  /// The person kept.
+  final String identityId;
+
+  /// The kept person's name.
+  final String identityName;
+
+  /// Passages that now name the person kept.
+  final int segmentsUpdated;
+
+  /// Voice samples that moved to the person kept.
+  final int variantsMoved;
+}
+
+/// Decodes the `note_taker_merge_people` response.
+///
+/// Throws `StateError` carrying the Rust error code (such as `recording`) for `{"ok":false,...}`.
+PersonMergeResult decodePersonMerge(String responseJson) {
+  final Map<String, Object?> json = _decodeOkObject(responseJson);
+  return PersonMergeResult(
+    identityId: json['identity_id']! as String,
+    identityName: json['identity_name']! as String,
+    segmentsUpdated: (json['segments_updated']! as num).toInt(),
+    variantsMoved: (json['variants_moved']! as num).toInt(),
+  );
+}
+
 /// The Voice Gallery's contents: voices to name and people already saved.
 final class VoiceLibrary {
   /// Creates an immutable library snapshot.
@@ -346,6 +382,13 @@ abstract interface class VoiceGalleryBridge {
   ///
   /// Throws `StateError` when Rust refuses.
   Future<void> deleteSavedPerson(String identityId);
+
+  /// Merges the saved person `sourceId` into `targetId` (#188): passages, voice samples and
+  /// links move, and `sourceId` is deleted, on paired devices too.
+  Future<PersonMergeResult> mergePeople({
+    required String sourceId,
+    required String targetId,
+  });
 }
 
 /// Implements Voice Gallery operations with C ABI calls and native file playback.
@@ -403,6 +446,13 @@ final class RustVoiceGalleryBridge implements VoiceGalleryBridge {
   @override
   Future<void> deleteSavedPerson(String identityId) =>
       _deleteByStatus('note_taker_delete_saved_person', identityId);
+
+  @override
+  Future<PersonMergeResult> mergePeople({
+    required String sourceId,
+    required String targetId,
+  }) async =>
+      decodePersonMerge(await mergePeopleJson(sourceId, targetId));
 }
 
 /// Calls a native delete function on a background isolate, because it writes to SQLite.
@@ -452,6 +502,15 @@ Future<String> voiceLibraryJson() => _fetchVoiceLibraryJson();
 /// Names an unknown voice as Rust's JSON, on a background isolate (used by #186's renamer).
 Future<String> assignClusterJson(String clusterId, String identityName) =>
     _assignClusterJson(clusterId, identityName);
+
+/// Calls `note_taker_merge_people` on a background isolate (#188) and returns its JSON answer.
+///
+/// Side effects: Rust relinks passages, moves voice samples and deletes `sourceId`.
+Future<String> mergePeopleJson(String sourceId, String targetId) =>
+    Isolate.run(() => _callNativeJson(
+          'note_taker_merge_people',
+          <String>[sourceId, targetId],
+        ));
 
 /// Calls `note_taker_rename_person` on a background isolate (#186) and returns its JSON answer.
 ///

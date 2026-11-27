@@ -3220,7 +3220,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String anotherSavedPersonIsCalled(Object name) {
-    return 'Другого сохранённого человека уже зовут «$name». Чтобы объединить их, откройте «Голоса».';
+    return 'Другого сохранённого человека уже зовут «$name». Если это один и тот же человек, объедините их.';
   }
 
   @override
@@ -3290,4 +3290,40 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get turnOff => 'Выключить';
+
+  @override
+  String mergeIntoAnotherPerson(Object name) {
+    return 'Объединить $name с другим человеком';
+  }
+
+  @override
+  String mergeNameInto(Object name) {
+    return 'Объединить $name с…';
+  }
+
+  @override
+  String mergeWarning(Object source, Object target) {
+    return 'Все фрагменты и образцы голоса $source перейдут к $target, а $source будет удалён, в том числе на связанных устройствах. Это нельзя отменить.';
+  }
+
+  @override
+  String get merge => 'Объединить';
+
+  @override
+  String mergeWithName(Object name) {
+    return 'Объединить с $name';
+  }
+
+  @override
+  String mergedInto(Object source, Object target) {
+    return '$source теперь объединён с $target';
+  }
+
+  @override
+  String get thesePeopleCouldNotBeMerged =>
+      'Не удалось объединить этих людей. Попробуйте ещё раз.';
+
+  @override
+  String get peopleCannotBeMergedWhileRecording =>
+      'Нельзя объединять людей во время записи встречи.';
 }

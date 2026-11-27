@@ -826,7 +826,7 @@
   "nameThisVoice": "تسمية هذا الصوت",
   "doubleClickOrLongPressToRename": "انقر نقرًا مزدوجًا أو اضغط مطولًا لإعادة التسمية",
   "theNewNameAppliesToEveryPassage": "ينطبق الاسم الجديد على كل مقطع لهذا الصوت، في جميع اجتماعاتك وعلى أجهزتك المقترنة.",
-  "anotherSavedPersonIsCalled": "يوجد شخص محفوظ آخر باسم \"{name}\". لدمجهما، افتح الأصوات.",
+  "anotherSavedPersonIsCalled": "يوجد شخص محفوظ آخر باسم \"{name}\". إذا كانا الشخص نفسه، فادمجهما.",
   "useOneTo100CharactersOnOneLine": "استخدم من 1 إلى 100 حرف في سطر واحد.",
   "versionNumber": "الإصدار {version}",
   "developerSettings": "إعدادات المطوّر",
@@ -842,5 +842,13 @@
   "resetAll": "إعادة ضبط الكل",
   "turnOffDeveloperSettings": "إيقاف إعدادات المطوّر",
   "turnOffDeveloperSettingsExplanation": "تعود كل قيمة إلى الافتراضي عند التشغيل التالي، ويُخفى هذا القسم مجددًا.",
-  "turnOff": "إيقاف"
+  "turnOff": "إيقاف",
+  "mergeIntoAnotherPerson": "دمج {name} في شخص آخر",
+  "mergeNameInto": "دمج {name} في…",
+  "mergeWarning": "تنتقل كل مقاطع {source} وعيّنات صوته إلى {target}، ويُحذف {source}، على أجهزتك المقترنة أيضًا. لا يمكن التراجع عن ذلك.",
+  "merge": "دمج",
+  "mergeWithName": "دمج مع {name}",
+  "mergedInto": "أصبح {source} جزءًا من {target}",
+  "thesePeopleCouldNotBeMerged": "تعذّر دمج هؤلاء الأشخاص. حاول مرة أخرى.",
+  "peopleCannotBeMergedWhileRecording": "لا يمكن دمج الأشخاص أثناء تسجيل اجتماع."
 }

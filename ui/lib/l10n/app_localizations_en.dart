@@ -3163,7 +3163,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String anotherSavedPersonIsCalled(Object name) {
-    return 'Another saved person is already called “$name”. To join the two, open Voices.';
+    return 'Another saved person is already called “$name”. If they are the same person, merge the two.';
   }
 
   @override
@@ -3232,4 +3232,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get turnOff => 'Turn off';
+
+  @override
+  String mergeIntoAnotherPerson(Object name) {
+    return 'Merge $name into another person';
+  }
+
+  @override
+  String mergeNameInto(Object name) {
+    return 'Merge $name into…';
+  }
+
+  @override
+  String mergeWarning(Object source, Object target) {
+    return 'All of $source’s passages and voice samples move to $target, and $source is deleted, on your paired devices too. This cannot be undone.';
+  }
+
+  @override
+  String get merge => 'Merge';
+
+  @override
+  String mergeWithName(Object name) {
+    return 'Merge with $name';
+  }
+
+  @override
+  String mergedInto(Object source, Object target) {
+    return '$source is now part of $target';
+  }
+
+  @override
+  String get thesePeopleCouldNotBeMerged =>
+      'These people could not be merged. Try again.';
+
+  @override
+  String get peopleCannotBeMergedWhileRecording =>
+      'People cannot be merged while a meeting is being recorded.';
 }

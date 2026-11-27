@@ -3218,7 +3218,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String anotherSavedPersonIsCalled(Object name) {
-    return 'يوجد شخص محفوظ آخر باسم \"$name\". لدمجهما، افتح الأصوات.';
+    return 'يوجد شخص محفوظ آخر باسم \"$name\". إذا كانا الشخص نفسه، فادمجهما.';
   }
 
   @override
@@ -3289,4 +3289,40 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get turnOff => 'إيقاف';
+
+  @override
+  String mergeIntoAnotherPerson(Object name) {
+    return 'دمج $name في شخص آخر';
+  }
+
+  @override
+  String mergeNameInto(Object name) {
+    return 'دمج $name في…';
+  }
+
+  @override
+  String mergeWarning(Object source, Object target) {
+    return 'تنتقل كل مقاطع $source وعيّنات صوته إلى $target، ويُحذف $source، على أجهزتك المقترنة أيضًا. لا يمكن التراجع عن ذلك.';
+  }
+
+  @override
+  String get merge => 'دمج';
+
+  @override
+  String mergeWithName(Object name) {
+    return 'دمج مع $name';
+  }
+
+  @override
+  String mergedInto(Object source, Object target) {
+    return 'أصبح $source جزءًا من $target';
+  }
+
+  @override
+  String get thesePeopleCouldNotBeMerged =>
+      'تعذّر دمج هؤلاء الأشخاص. حاول مرة أخرى.';
+
+  @override
+  String get peopleCannotBeMergedWhileRecording =>
+      'لا يمكن دمج الأشخاص أثناء تسجيل اجتماع.';
 }

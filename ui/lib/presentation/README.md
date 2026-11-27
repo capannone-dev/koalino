@@ -60,7 +60,8 @@ running ones. Reset all clears them; Turn off developer settings clears them and
 `speaker_label.dart` (#186) is a transcript segment's speaker label. Double-clicking or
 long-pressing it opens a dialog that names that voice, suggesting the saved people as the owner
 types. A saved person is renamed in every meeting; an unknown voice is named as in Voices. A name
-another saved person has is refused with a pointer to Voices, and the dialog stays open. The label
+another saved person has is refused, and the dialog offers to merge the two, after a warning that
+it cannot be undone (#188). The label
 does nothing for a segment without a voice. After a rename the meeting reloads.
 
 `rename_meeting_dialog.dart` holds `RenameMeetingDialog` and `showRenameMeetingDialog`, shared by
@@ -157,7 +158,8 @@ gallery (`voice_gallery_screen.dart`) for that meeting and reloads the meeting o
 transcript shows the new names. The desktop two-pane layout shows it once a meeting is selected.
 The Voices destination opens the same screen for all meetings, with each voice's meeting and the
 Saved people section (Issue #63). The name field's menu picks a saved person, and Rust writes a
-clip to a file only when Play is pressed.
+clip to a file only when Play is pressed. With two or more saved people, each has Merge into… (#188): pick the
+person to keep, confirm, and their passages and voice samples become one person.
 
 Beside it, Export (`ExportMeetingButton`, Issue #48) offers Markdown, PDF, and JSON, shows a
 spinner while exporting, and reports the result in a snack bar.

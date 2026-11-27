@@ -134,6 +134,16 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                             onPressed: () => _pickVoicesForPerson(
                                 context, controller, person),
                           ),
+                        if (controller.savedPeople.length > 1)
+                          IconButton(
+                            key: ValueKey<String>(
+                                'merge-person-${person.identityId}'),
+                            tooltip:
+                                l10n.mergeIntoAnotherPerson(person.displayName),
+                            icon: const Icon(Icons.merge),
+                            onPressed: () =>
+                                _mergePerson(context, controller, person),
+                          ),
                         IconButton(
                           key: ValueKey<String>(
                               'delete-person-${person.identityId}'),
@@ -563,6 +573,56 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
       message: l10n.itsVoiceSampleGoesForGood,
     )) {
       await controller.deleteUnknownVoice(cluster);
+    }
+  }
+
+  /// Picks the person to merge `source` into, warns that it cannot be undone, then merges
+  /// (#188).
+  Future<void> _mergePerson(
+    BuildContext context,
+    VoiceGalleryController controller,
+    SavedPerson source,
+  ) async {
+    final SavedPerson? kept = await showDialog<SavedPerson>(
+      context: context,
+      builder: (BuildContext context) => SimpleDialog(
+        title: Text(l10n.mergeNameInto(source.displayName)),
+        children: <Widget>[
+          for (final SavedPerson person in controller.savedPeople)
+            if (person.identityId != source.identityId)
+              ListTile(
+                key: ValueKey<String>('merge-into-${person.identityId}'),
+                leading: const Icon(Icons.person_outline),
+                title: Text(person.displayName),
+                subtitle: Text(l10n.voiceSampleCount(person.voiceVariantCount)),
+                onTap: () => Navigator.of(context).pop(person),
+              ),
+        ],
+      ),
+    );
+    if (kept == null || !context.mounted) {
+      return;
+    }
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: Text(l10n.mergeWithName(kept.displayName)),
+        content: Text(l10n.mergeWarning(source.displayName, kept.displayName)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            key: const ValueKey<String>('confirm-merge'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.merge),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await controller.mergeSavedPeople(source, kept);
     }
   }
 

@@ -3242,7 +3242,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String anotherSavedPersonIsCalled(Object name) {
-    return 'Eine andere gespeicherte Person heißt bereits „$name“. Um beide zusammenzuführen, öffne Stimmen.';
+    return 'Eine andere gespeicherte Person heißt bereits „$name“. Wenn es dieselbe Person ist, führe beide zusammen.';
   }
 
   @override
@@ -3313,4 +3313,40 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get turnOff => 'Ausschalten';
+
+  @override
+  String mergeIntoAnotherPerson(Object name) {
+    return '$name mit einer anderen Person zusammenführen';
+  }
+
+  @override
+  String mergeNameInto(Object name) {
+    return '$name zusammenführen mit…';
+  }
+
+  @override
+  String mergeWarning(Object source, Object target) {
+    return 'Alle Passagen und Stimmproben von $source gehen an $target, und $source wird gelöscht, auch auf deinen gekoppelten Geräten. Das kann nicht rückgängig gemacht werden.';
+  }
+
+  @override
+  String get merge => 'Zusammenführen';
+
+  @override
+  String mergeWithName(Object name) {
+    return 'Mit $name zusammenführen';
+  }
+
+  @override
+  String mergedInto(Object source, Object target) {
+    return '$source gehört jetzt zu $target';
+  }
+
+  @override
+  String get thesePeopleCouldNotBeMerged =>
+      'Diese Personen konnten nicht zusammengeführt werden. Versuche es erneut.';
+
+  @override
+  String get peopleCannotBeMergedWhileRecording =>
+      'Personen können nicht zusammengeführt werden, während eine Besprechung aufgenommen wird.';
 }

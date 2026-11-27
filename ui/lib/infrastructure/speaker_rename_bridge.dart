@@ -1,7 +1,8 @@
 // Renames a speaker from a meeting's transcript (#186): which voice a transcript segment belongs
 // to, and the calls that name it. A saved person is renamed everywhere through
 // `note_taker_rename_person`; an unknown voice is named through `note_taker_assign_cluster`, as
-// in Voices, which joins an existing person of the same name.
+// in Voices, which joins an existing person of the same name. Renaming a person to another
+// saved person's name offers to merge the two (`note_taker_merge_people`, #188).
 import 'dart:convert';
 
 import 'voice_gallery_bridge.dart';
@@ -67,8 +68,15 @@ final class SpeakerRenameException implements Exception {
 
 /// Names speakers for the meeting screen.
 abstract interface class SpeakerRenamer {
-  /// The saved people's names, offered as suggestions.
-  Future<List<String>> savedNames();
+  /// The saved people, whose names are offered as suggestions.
+  Future<List<SavedPerson>> savedPeople();
+
+  /// Merges the saved person `sourceId` into `targetId` (#188), when the owner renames someone to
+  /// another person's name.
+  ///
+  /// Outputs: The kept person's name. Throws `SpeakerRenameException` when Rust refuses.
+  /// Side effects: Passages, voice samples and links move; `sourceId` is deleted everywhere.
+  Future<String> merge(String sourceId, String targetId);
 
   /// Gives `voice` the name `name`.
   ///
@@ -83,11 +91,18 @@ final class RustSpeakerRenamer implements SpeakerRenamer {
   const RustSpeakerRenamer();
 
   @override
-  Future<List<String>> savedNames() async =>
-      decodeVoiceLibrary(await voiceLibraryJson())
-          .savedPeople
-          .map((SavedPerson person) => person.displayName)
-          .toList(growable: false);
+  Future<List<SavedPerson>> savedPeople() async =>
+      decodeVoiceLibrary(await voiceLibraryJson()).savedPeople;
+
+  @override
+  Future<String> merge(String sourceId, String targetId) async {
+    try {
+      return decodePersonMerge(await mergePeopleJson(sourceId, targetId))
+          .identityName;
+    } on StateError catch (error) {
+      throw SpeakerRenameException(_codeIn(error.message));
+    }
+  }
 
   @override
   Future<String> rename(SpeakerVoice voice, String name) async {

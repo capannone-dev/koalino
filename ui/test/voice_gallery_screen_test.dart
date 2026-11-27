@@ -145,6 +145,28 @@ final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
         (UnknownSpeakerCluster cluster) => cluster.clusterId == clusterId);
   }
 
+  /// `(source, target)` pairs sent to `mergePeople`.
+  final List<(String, String)> mergedPeople = <(String, String)>[];
+
+  @override
+  Future<PersonMergeResult> mergePeople({
+    required String sourceId,
+    required String targetId,
+  }) async {
+    mergedPeople.add((sourceId, targetId));
+    final SavedPerson kept = savedPeople
+        .firstWhere((SavedPerson person) => person.identityId == targetId);
+    savedPeople = savedPeople
+        .where((SavedPerson person) => person.identityId != sourceId)
+        .toList(growable: false);
+    return PersonMergeResult(
+      identityId: targetId,
+      identityName: kept.displayName,
+      segmentsUpdated: 3,
+      variantsMoved: 1,
+    );
+  }
+
   @override
   Future<void> deleteSavedPerson(String identityId) async {
     if (deleteError case final Object error) {
@@ -412,6 +434,36 @@ void main() {
 
     expect(bridge.deletedPeople, <String>['identity-1']);
     expect(find.text('Ada Lovelace'), findsNothing);
+  });
+
+  testWidgets('a saved person can be merged into another, after a warning',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: const <UnknownSpeakerCluster>[],
+      savedPeople: const <SavedPerson>[
+        savedAda,
+        SavedPerson(
+            identityId: 'identity-2',
+            displayName: 'Ada L.',
+            voiceVariantCount: 1),
+      ],
+    );
+    await pumpGallery(tester, bridge, meetingId: null);
+
+    await tester
+        .tap(find.byKey(const ValueKey<String>('merge-person-identity-2')));
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.byKey(const ValueKey<String>('merge-into-identity-1')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('cannot be undone'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey<String>('confirm-merge')));
+    await tester.pumpAndSettle();
+
+    expect(
+        bridge.mergedPeople, <(String, String)>[('identity-2', 'identity-1')]);
+    expect(find.text('Ada L.'), findsNothing);
+    expect(find.text('Ada Lovelace'), findsOneWidget);
   });
 
   testWidgets('a failed deletion keeps the voice and says so',

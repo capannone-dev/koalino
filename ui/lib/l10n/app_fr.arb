@@ -826,7 +826,7 @@
   "nameThisVoice": "Nommer cette voix",
   "doubleClickOrLongPressToRename": "Double-cliquez ou appuyez longuement pour renommer",
   "theNewNameAppliesToEveryPassage": "Le nouveau nom s’applique à chaque passage de cette voix, dans toutes vos réunions et sur vos appareils associés.",
-  "anotherSavedPersonIsCalled": "Une autre personne enregistrée s’appelle déjà « {name} ». Pour les réunir, ouvrez Voix.",
+  "anotherSavedPersonIsCalled": "Une autre personne enregistrée s’appelle déjà « {name} ». Si c’est la même personne, fusionnez-les.",
   "useOneTo100CharactersOnOneLine": "Utilisez de 1 à 100 caractères sur une ligne.",
   "versionNumber": "Version {version}",
   "developerSettings": "Paramètres développeur",
@@ -842,5 +842,13 @@
   "resetAll": "Tout réinitialiser",
   "turnOffDeveloperSettings": "Désactiver les paramètres développeur",
   "turnOffDeveloperSettingsExplanation": "Chaque valeur revient à sa valeur par défaut au prochain démarrage, et cette section est de nouveau masquée.",
-  "turnOff": "Désactiver"
+  "turnOff": "Désactiver",
+  "mergeIntoAnotherPerson": "Fusionner {name} avec une autre personne",
+  "mergeNameInto": "Fusionner {name} avec…",
+  "mergeWarning": "Tous les passages et échantillons de voix de {source} passent à {target}, et {source} est supprimé, aussi sur vos appareils associés. Cette action ne peut pas être annulée.",
+  "merge": "Fusionner",
+  "mergeWithName": "Fusionner avec {name}",
+  "mergedInto": "{source} fait maintenant partie de {target}",
+  "thesePeopleCouldNotBeMerged": "Ces personnes n’ont pas pu être fusionnées. Réessayez.",
+  "peopleCannotBeMergedWhileRecording": "Impossible de fusionner des personnes pendant l’enregistrement d’une réunion."
 }

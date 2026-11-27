@@ -826,7 +826,7 @@
   "nameThisVoice": "Diese Stimme benennen",
   "doubleClickOrLongPressToRename": "Doppelklicken oder lange drücken zum Umbenennen",
   "theNewNameAppliesToEveryPassage": "Der neue Name gilt für jede Passage dieser Stimme, in allen deinen Besprechungen und auf deinen gekoppelten Geräten.",
-  "anotherSavedPersonIsCalled": "Eine andere gespeicherte Person heißt bereits „{name}“. Um beide zusammenzuführen, öffne Stimmen.",
+  "anotherSavedPersonIsCalled": "Eine andere gespeicherte Person heißt bereits „{name}“. Wenn es dieselbe Person ist, führe beide zusammen.",
   "useOneTo100CharactersOnOneLine": "Verwende 1 bis 100 Zeichen in einer Zeile.",
   "versionNumber": "Version {version}",
   "developerSettings": "Entwicklereinstellungen",
@@ -842,5 +842,13 @@
   "resetAll": "Alle zurücksetzen",
   "turnOffDeveloperSettings": "Entwicklereinstellungen ausschalten",
   "turnOffDeveloperSettingsExplanation": "Jeder Wert kehrt beim nächsten Start zum Standard zurück, und dieser Bereich wird wieder ausgeblendet.",
-  "turnOff": "Ausschalten"
+  "turnOff": "Ausschalten",
+  "mergeIntoAnotherPerson": "{name} mit einer anderen Person zusammenführen",
+  "mergeNameInto": "{name} zusammenführen mit…",
+  "mergeWarning": "Alle Passagen und Stimmproben von {source} gehen an {target}, und {source} wird gelöscht, auch auf deinen gekoppelten Geräten. Das kann nicht rückgängig gemacht werden.",
+  "merge": "Zusammenführen",
+  "mergeWithName": "Mit {name} zusammenführen",
+  "mergedInto": "{source} gehört jetzt zu {target}",
+  "thesePeopleCouldNotBeMerged": "Diese Personen konnten nicht zusammengeführt werden. Versuche es erneut.",
+  "peopleCannotBeMergedWhileRecording": "Personen können nicht zusammengeführt werden, während eine Besprechung aufgenommen wird."
 }

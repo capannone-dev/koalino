@@ -826,7 +826,7 @@
   "nameThisVoice": "Dar nome a esta voz",
   "doubleClickOrLongPressToRename": "Clique duas vezes ou mantenha pressionado para mudar o nome",
   "theNewNameAppliesToEveryPassage": "O novo nome vale para cada trecho desta voz, em todas as suas reuniões e nos seus dispositivos emparelhados.",
-  "anotherSavedPersonIsCalled": "Outra pessoa salva já se chama “{name}”. Para juntá-las, abra Vozes.",
+  "anotherSavedPersonIsCalled": "Outra pessoa salva já se chama “{name}”. Se for a mesma pessoa, junte as duas.",
   "useOneTo100CharactersOnOneLine": "Use de 1 a 100 caracteres em uma linha.",
   "versionNumber": "Versão {version}",
   "developerSettings": "Configurações de desenvolvedor",
@@ -842,5 +842,13 @@
   "resetAll": "Redefinir tudo",
   "turnOffDeveloperSettings": "Desativar configurações de desenvolvedor",
   "turnOffDeveloperSettingsExplanation": "Cada valor volta ao padrão na próxima inicialização, e esta seção fica oculta de novo.",
-  "turnOff": "Desativar"
+  "turnOff": "Desativar",
+  "mergeIntoAnotherPerson": "Juntar {name} a outra pessoa",
+  "mergeNameInto": "Juntar {name} a…",
+  "mergeWarning": "Todos os trechos e amostras de voz de {source} passam para {target}, e {source} é excluído, também nos dispositivos emparelhados. Isso não pode ser desfeito.",
+  "merge": "Juntar",
+  "mergeWithName": "Juntar a {name}",
+  "mergedInto": "{source} agora faz parte de {target}",
+  "thesePeopleCouldNotBeMerged": "Não foi possível juntar essas pessoas. Tente novamente.",
+  "peopleCannotBeMergedWhileRecording": "Não é possível juntar pessoas enquanto uma reunião está sendo gravada."
 }

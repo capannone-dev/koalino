@@ -3212,7 +3212,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String anotherSavedPersonIsCalled(Object name) {
-    return 'Une autre personne enregistrée s’appelle déjà « $name ». Pour les réunir, ouvrez Voix.';
+    return 'Une autre personne enregistrée s’appelle déjà « $name ». Si c’est la même personne, fusionnez-les.';
   }
 
   @override
@@ -3283,4 +3283,40 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get turnOff => 'Désactiver';
+
+  @override
+  String mergeIntoAnotherPerson(Object name) {
+    return 'Fusionner $name avec une autre personne';
+  }
+
+  @override
+  String mergeNameInto(Object name) {
+    return 'Fusionner $name avec…';
+  }
+
+  @override
+  String mergeWarning(Object source, Object target) {
+    return 'Tous les passages et échantillons de voix de $source passent à $target, et $source est supprimé, aussi sur vos appareils associés. Cette action ne peut pas être annulée.';
+  }
+
+  @override
+  String get merge => 'Fusionner';
+
+  @override
+  String mergeWithName(Object name) {
+    return 'Fusionner avec $name';
+  }
+
+  @override
+  String mergedInto(Object source, Object target) {
+    return '$source fait maintenant partie de $target';
+  }
+
+  @override
+  String get thesePeopleCouldNotBeMerged =>
+      'Ces personnes n’ont pas pu être fusionnées. Réessayez.';
+
+  @override
+  String get peopleCannotBeMergedWhileRecording =>
+      'Impossible de fusionner des personnes pendant l’enregistrement d’une réunion.';
 }

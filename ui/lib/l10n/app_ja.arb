@@ -826,7 +826,7 @@
   "nameThisVoice": "この声に名前を付ける",
   "doubleClickOrLongPressToRename": "ダブルクリックまたは長押しで名前を変更",
   "theNewNameAppliesToEveryPassage": "新しい名前は、すべての会議とペアリングしたデバイスで、この声のすべての発言に適用されます。",
-  "anotherSavedPersonIsCalled": "保存済みの別の人がすでに「{name}」という名前です。2人をまとめるには「声」を開いてください。",
+  "anotherSavedPersonIsCalled": "保存済みの別の人がすでに「{name}」という名前です。同じ人なら統合してください。",
   "useOneTo100CharactersOnOneLine": "1〜100文字を1行で入力してください。",
   "versionNumber": "バージョン {version}",
   "developerSettings": "開発者向け設定",
@@ -842,5 +842,13 @@
   "resetAll": "すべてリセット",
   "turnOffDeveloperSettings": "開発者向け設定をオフにする",
   "turnOffDeveloperSettingsExplanation": "次回起動時にすべての値が既定に戻り、このセクションは再び非表示になります。",
-  "turnOff": "オフにする"
+  "turnOff": "オフにする",
+  "mergeIntoAnotherPerson": "{name} を別の人に統合",
+  "mergeNameInto": "{name} の統合先…",
+  "mergeWarning": "{source} のすべての発言と音声サンプルが {target} に移り、{source} はペアリングしたデバイスでも削除されます。元に戻せません。",
+  "merge": "統合",
+  "mergeWithName": "{name} と統合",
+  "mergedInto": "{source} は {target} に統合されました",
+  "thesePeopleCouldNotBeMerged": "この人たちを統合できませんでした。もう一度お試しください。",
+  "peopleCannotBeMergedWhileRecording": "会議の録音中は人を統合できません。"
 }

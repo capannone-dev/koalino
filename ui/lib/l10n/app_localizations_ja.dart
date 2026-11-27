@@ -3046,7 +3046,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String anotherSavedPersonIsCalled(Object name) {
-    return '保存済みの別の人がすでに「$name」という名前です。2人をまとめるには「声」を開いてください。';
+    return '保存済みの別の人がすでに「$name」という名前です。同じ人なら統合してください。';
   }
 
   @override
@@ -3111,4 +3111,38 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get turnOff => 'オフにする';
+
+  @override
+  String mergeIntoAnotherPerson(Object name) {
+    return '$name を別の人に統合';
+  }
+
+  @override
+  String mergeNameInto(Object name) {
+    return '$name の統合先…';
+  }
+
+  @override
+  String mergeWarning(Object source, Object target) {
+    return '$source のすべての発言と音声サンプルが $target に移り、$source はペアリングしたデバイスでも削除されます。元に戻せません。';
+  }
+
+  @override
+  String get merge => '統合';
+
+  @override
+  String mergeWithName(Object name) {
+    return '$name と統合';
+  }
+
+  @override
+  String mergedInto(Object source, Object target) {
+    return '$source は $target に統合されました';
+  }
+
+  @override
+  String get thesePeopleCouldNotBeMerged => 'この人たちを統合できませんでした。もう一度お試しください。';
+
+  @override
+  String get peopleCannotBeMergedWhileRecording => '会議の録音中は人を統合できません。';
 }

@@ -2979,7 +2979,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String anotherSavedPersonIsCalled(Object name) {
-    return '已有另一位保存的人叫“$name”。要把两者合并，请打开“声音”。';
+    return '已有另一位保存的人叫“$name”。如果是同一个人，请将两者合并。';
   }
 
   @override
@@ -3044,4 +3044,38 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get turnOff => '关闭';
+
+  @override
+  String mergeIntoAnotherPerson(Object name) {
+    return '将 $name 合并到另一个人';
+  }
+
+  @override
+  String mergeNameInto(Object name) {
+    return '将 $name 合并到…';
+  }
+
+  @override
+  String mergeWarning(Object source, Object target) {
+    return '$source 的所有发言和声音样本都会移到 $target，$source 将被删除，已配对的设备上也一样。此操作无法撤销。';
+  }
+
+  @override
+  String get merge => '合并';
+
+  @override
+  String mergeWithName(Object name) {
+    return '与 $name 合并';
+  }
+
+  @override
+  String mergedInto(Object source, Object target) {
+    return '$source 已并入 $target';
+  }
+
+  @override
+  String get thesePeopleCouldNotBeMerged => '无法合并这些人，请重试。';
+
+  @override
+  String get peopleCannotBeMergedWhileRecording => '录制会议时无法合并人员。';
 }

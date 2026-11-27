@@ -826,7 +826,7 @@
   "nameThisVoice": "Назвать этот голос",
   "doubleClickOrLongPressToRename": "Дважды щёлкните или нажмите и удерживайте, чтобы переименовать",
   "theNewNameAppliesToEveryPassage": "Новое имя применяется ко всем фрагментам этого голоса во всех ваших встречах и на связанных устройствах.",
-  "anotherSavedPersonIsCalled": "Другого сохранённого человека уже зовут «{name}». Чтобы объединить их, откройте «Голоса».",
+  "anotherSavedPersonIsCalled": "Другого сохранённого человека уже зовут «{name}». Если это один и тот же человек, объедините их.",
   "useOneTo100CharactersOnOneLine": "Используйте от 1 до 100 символов в одной строке.",
   "versionNumber": "Версия {version}",
   "developerSettings": "Настройки разработчика",
@@ -842,5 +842,13 @@
   "resetAll": "Сбросить всё",
   "turnOffDeveloperSettings": "Выключить настройки разработчика",
   "turnOffDeveloperSettingsExplanation": "При следующем запуске все значения вернутся к значениям по умолчанию, а этот раздел снова будет скрыт.",
-  "turnOff": "Выключить"
+  "turnOff": "Выключить",
+  "mergeIntoAnotherPerson": "Объединить {name} с другим человеком",
+  "mergeNameInto": "Объединить {name} с…",
+  "mergeWarning": "Все фрагменты и образцы голоса {source} перейдут к {target}, а {source} будет удалён, в том числе на связанных устройствах. Это нельзя отменить.",
+  "merge": "Объединить",
+  "mergeWithName": "Объединить с {name}",
+  "mergedInto": "{source} теперь объединён с {target}",
+  "thesePeopleCouldNotBeMerged": "Не удалось объединить этих людей. Попробуйте ещё раз.",
+  "peopleCannotBeMergedWhileRecording": "Нельзя объединять людей во время записи встречи."
 }

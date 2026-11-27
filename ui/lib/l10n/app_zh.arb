@@ -826,7 +826,7 @@
   "nameThisVoice": "为这个声音命名",
   "doubleClickOrLongPressToRename": "双击或长按以重命名",
   "theNewNameAppliesToEveryPassage": "新名称会应用到这个声音的每一段发言，包括你所有的会议和已配对的设备。",
-  "anotherSavedPersonIsCalled": "已有另一位保存的人叫“{name}”。要把两者合并，请打开“声音”。",
+  "anotherSavedPersonIsCalled": "已有另一位保存的人叫“{name}”。如果是同一个人，请将两者合并。",
   "useOneTo100CharactersOnOneLine": "请在一行内输入 1 到 100 个字符。",
   "versionNumber": "版本 {version}",
   "developerSettings": "开发者设置",
@@ -842,5 +842,13 @@
   "resetAll": "全部重置",
   "turnOffDeveloperSettings": "关闭开发者设置",
   "turnOffDeveloperSettingsExplanation": "下次启动时所有值都会恢复为默认值，此部分将再次隐藏。",
-  "turnOff": "关闭"
+  "turnOff": "关闭",
+  "mergeIntoAnotherPerson": "将 {name} 合并到另一个人",
+  "mergeNameInto": "将 {name} 合并到…",
+  "mergeWarning": "{source} 的所有发言和声音样本都会移到 {target}，{source} 将被删除，已配对的设备上也一样。此操作无法撤销。",
+  "merge": "合并",
+  "mergeWithName": "与 {name} 合并",
+  "mergedInto": "{source} 已并入 {target}",
+  "thesePeopleCouldNotBeMerged": "无法合并这些人，请重试。",
+  "peopleCannotBeMergedWhileRecording": "录制会议时无法合并人员。"
 }

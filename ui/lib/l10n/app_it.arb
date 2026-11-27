@@ -826,7 +826,7 @@
   "nameThisVoice": "Dai un nome a questa voce",
   "doubleClickOrLongPressToRename": "Doppio clic o pressione prolungata per rinominare",
   "theNewNameAppliesToEveryPassage": "Il nuovo nome vale per ogni passaggio di questa voce, in tutte le tue riunioni e sui dispositivi associati.",
-  "anotherSavedPersonIsCalled": "Un’altra persona salvata si chiama già “{name}”. Per unirle, apri Voci.",
+  "anotherSavedPersonIsCalled": "Un’altra persona salvata si chiama già “{name}”. Se è la stessa persona, uniscile.",
   "useOneTo100CharactersOnOneLine": "Usa da 1 a 100 caratteri su una riga.",
   "versionNumber": "Versione {version}",
   "developerSettings": "Impostazioni sviluppatore",
@@ -842,5 +842,13 @@
   "resetAll": "Ripristina tutto",
   "turnOffDeveloperSettings": "Disattiva impostazioni sviluppatore",
   "turnOffDeveloperSettingsExplanation": "Ogni valore torna al predefinito al prossimo avvio e questa sezione viene di nuovo nascosta.",
-  "turnOff": "Disattiva"
+  "turnOff": "Disattiva",
+  "mergeIntoAnotherPerson": "Unisci {name} a un’altra persona",
+  "mergeNameInto": "Unisci {name} a…",
+  "mergeWarning": "Tutti i passaggi e i campioni di voce di {source} passano a {target}, e {source} viene eliminato, anche sui dispositivi associati. Non si può annullare.",
+  "merge": "Unisci",
+  "mergeWithName": "Unisci a {name}",
+  "mergedInto": "{source} ora fa parte di {target}",
+  "thesePeopleCouldNotBeMerged": "Non è stato possibile unire queste persone. Riprova.",
+  "peopleCannotBeMergedWhileRecording": "Non si possono unire persone mentre si registra una riunione."
 }
