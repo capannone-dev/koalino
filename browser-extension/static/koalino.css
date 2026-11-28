@@ -1,24 +1,25 @@
 /* The extension pages' look (#212, #214): the same colour tokens as the web dashboard, light and
-   dark, so the popup and options page match Koalino everywhere else. */
+   dark, so the popup and options page match Koalino everywhere else. The accent values come from
+   branding/tokens.json (#206). */
 :root {
   color-scheme: light dark;
   --canvas: #f8fafc; --surface: #ffffff; --surface-muted: #f1f5f9; --ink: #0f172a; --muted: #475569;
-  --line: #e2e8f0; --accent: #1d4ed8; --accent-strong: #1e40af; --on-accent: #ffffff;
+  --line: #e2e8f0; --accent: #6b2290; --accent-strong: #571775; --accent-text: #6b2290; --on-accent: #ffffff;
   --success: #15803d; --success-soft: #dcfce7; --warning: #b45309; --warning-soft: #fef3c7;
-  --danger: #b91c1c; --danger-soft: #fee2e2; --focus: #2563eb;
+  --danger: #b91c1c; --danger-soft: #fee2e2; --focus: #8a3ab3;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --canvas: #020617; --surface: #0f172a; --surface-muted: #1e293b; --ink: #f1f5f9; --muted: #94a3b8;
-    --line: #334155; --accent: #60a5fa; --accent-strong: #93c5fd; --on-accent: #0f172a;
+    --line: #334155; --accent: #8f45b8; --accent-strong: #7a32a3; --accent-text: #d9b8ec; --on-accent: #ffffff;
     --success: #4ade80; --success-soft: #052e16; --warning: #fbbf24; --warning-soft: #422006;
-    --danger: #f87171; --danger-soft: #450a0a; --focus: #93c5fd;
+    --danger: #f87171; --danger-soft: #450a0a; --focus: #c48ee0;
   }
 }
 body { font: 13px/1.45 system-ui, sans-serif; margin: 0; color: var(--ink); background: var(--canvas); }
 h1 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
-h2 { font-size: 12px; margin: 18px 0 6px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
-a { color: var(--accent); }
+h2 { font-size: 12px; margin: 18px 0 6px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent-text); }
+a { color: var(--accent-text); }
 button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 10px; }
 button:hover { background: var(--surface-muted); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

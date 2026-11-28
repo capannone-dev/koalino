@@ -9,7 +9,10 @@ import { msg, textDirection } from "../lib/i18n";
 /** What the owner answered. */
 export type ConsentAnswer = "record" | "always" | "not-now" | "never";
 
-/** The overlay's styles. */
+/**
+ * The overlay's styles: a dark panel over any page, with the main button in the dark scheme's
+ * accent from branding/tokens.json (#206).
+ */
 const STYLE = `
   :host { all: initial; }
   .panel { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647;
@@ -18,7 +21,8 @@ const STYLE = `
   .dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; flex: none; }
   button { font: inherit; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer;
     background: #374151; color: #fff; }
-  button.primary { background: #4f46e5; }
+  button.primary { background: #8f45b8; }
+  button:focus-visible { outline: 2px solid #c48ee0; outline-offset: 2px; }
   .detail { opacity: .8; font-size: 12px; }
 `;
 

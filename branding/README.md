@@ -17,3 +17,11 @@
   - the F-Droid and store listing icon, `fastlane/metadata/android/en-US/images/icon.png`.
 
 After changing the SVG, run `branding/make-icons.sh` and commit the regenerated files.
+
+## Colour tokens (#206)
+
+`tokens.json` holds Koalino's shared colours: the brand colour (the logo's purple, `#571775`) and the accent values
+for light and dark schemes, each text pair at 4.5:1 contrast or better. The app seeds its Material 3 scheme from the
+brand colour (`ui/lib/presentation/app_theme.dart`); the web dashboard (`web/app/styles.css`) and the browser
+extension (`browser-extension/static/koalino.css`, the in-page banner) use the accent values. A test in each project
+fails when one drifts from this file.

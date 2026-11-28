@@ -2,8 +2,8 @@
  *
  * Components use only these semantic tokens (bg-surface, text-muted, border-line, bg-accent…),
  * so the whole UI follows the browser's light or dark preference from this one file. The values
- * are Tailwind's slate/blue/green/amber/red shades, chosen for at least 4.5:1 text contrast on
- * their surfaces in both schemes. */
+ * are Tailwind's slate/green/amber/red shades, chosen for at least 4.5:1 text contrast on
+ * their surfaces in both schemes; the accent is the logo's purple, from branding/tokens.json (#206). */
 
 @import "tailwindcss";
 
@@ -18,12 +18,12 @@
   --color-faint: #94a3b8;
   --color-line: #e2e8f0;
   --color-line-strong: #cbd5e1;
-  --color-accent: #1d4ed8;
-  --color-accent-strong: #1e40af;
-  --color-accent-text: #1d4ed8;
-  --color-accent-soft: #eff6ff;
+  --color-accent: #6b2290;
+  --color-accent-strong: #571775;
+  --color-accent-text: #6b2290;
+  --color-accent-soft: #f5ecfa;
   --color-on-accent: #ffffff;
-  --color-focus: #2563eb;
+  --color-focus: #8a3ab3;
   --color-disabled: #94a3b8;
   --color-emphasis: #0f172a;
   --color-on-emphasis: #ffffff;
@@ -47,12 +47,12 @@
     --color-faint: #64748b;
     --color-line: #334155;
     --color-line-strong: #475569;
-    --color-accent: #2563eb;
-    --color-accent-strong: #1d4ed8;
-    --color-accent-text: #93c5fd;
-    --color-accent-soft: #172554;
+    --color-accent: #8f45b8;
+    --color-accent-strong: #7a32a3;
+    --color-accent-text: #d9b8ec;
+    --color-accent-soft: #2a0f38;
     --color-on-accent: #ffffff;
-    --color-focus: #60a5fa;
+    --color-focus: #c48ee0;
     --color-disabled: #475569;
     --color-emphasis: #1e293b;
     --color-on-emphasis: #f8fafc;

@@ -3,8 +3,9 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
-/// The brand colour both schemes are generated from.
-const Color noteTakerSeedColor = Colors.indigo;
+/// The brand colour both schemes are generated from: the logo's purple, as in
+/// `branding/tokens.json` (#206), which the web dashboard and the browser extension also follow.
+const Color noteTakerSeedColor = Color(0xFF571775);
 
 /// Builds the app theme for `brightness`.
 ///
