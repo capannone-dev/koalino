@@ -912,5 +912,14 @@
   "tipUnsureWordsBefore": "Wörter wie ",
   "tipUnsureWordsExample": "dieses",
   "tipUnsureWordsAfter": ", grau und kursiv, sind solche, bei denen Koalino nicht sicher war. Um eine Passage zu korrigieren, tippe daneben auf ✎ Korrigieren, oder drücke lange bzw. klicke mit rechts darauf.",
-  "gotIt": "Verstanden"
+  "gotIt": "Verstanden",
+  "keyboardShortcuts": "Tastenkürzel",
+  "goToPlace": "Zu {place}",
+  "typeACommand": "Befehl eingeben",
+  "noMatchingCommands": "Keine passenden Befehle",
+  "openTheCommandPalette": "Befehlspalette öffnen",
+  "playOrPauseTheRecording": "Aufnahme abspielen oder pausieren",
+  "back10SecondsForward10Seconds": "10 Sekunden zurück, 10 Sekunden vor",
+  "showTheseShortcuts": "Diese Kürzel anzeigen",
+  "spaceKey": "Leertaste"
 }

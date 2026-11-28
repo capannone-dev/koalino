@@ -292,3 +292,7 @@ are left out.
 `meeting_edit_widgets.dart`, shared with long-press and right-click). `TranscriptTip` explains, once, that grey
 italic words are ones the transcription was unsure of and how to correct them; `infrastructure/seen_tips_store.dart`
 remembers its dismissal in the data directory (`ui-seen-tips`), reached through `MeetingEditController.tipsStore`.
+
+**Keyboard shortcuts (#215).** `keyboard_shortcuts.dart` has `AppShortcuts`, which binds keys while a page is in front
+(single keys never fire while typing in a field), the Ctrl/Cmd+K command palette and the `?` shortcut list. HomeShell
+binds Ctrl/Cmd+K, R (record) and ?; the meeting list binds / (search); the meeting player binds Space, J and L.

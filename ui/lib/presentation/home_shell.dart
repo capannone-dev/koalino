@@ -5,6 +5,7 @@
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/presentation/keyboard_shortcuts.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/presentation/koalino_logo.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
@@ -156,8 +157,45 @@ final class _HomeShellState extends State<HomeShell> {
 
   void _onRecordingChanged() => setState(() {});
 
+  /// The commands of the Ctrl/Cmd+K palette (#215): Record, every destination, the shortcuts.
+  List<PaletteCommand> _paletteCommands() => <PaletteCommand>[
+        (
+          icon: Icons.mic,
+          label: l10n.startRecording,
+          shortcut: 'R',
+          run: _openRecorder,
+        ),
+        for (final (int index, destination) in _destinations.indexed)
+          (
+            icon: destination.icon,
+            label: l10n.goToPlace(destination.label),
+            shortcut: null,
+            run: () => _selectDestination(index),
+          ),
+        (
+          icon: Icons.keyboard_outlined,
+          label: l10n.keyboardShortcuts,
+          shortcut: '?',
+          run: () => showKeyboardShortcuts(context),
+        ),
+      ];
+
   @override
   Widget build(BuildContext context) {
+    // Power-user keys on every main screen (#215).
+    return AppShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        commandPaletteActivator: () =>
+            showCommandPalette(context, _paletteCommands()),
+        const CharacterActivator('r'): _openRecorder,
+        const CharacterActivator('?'): () => showKeyboardShortcuts(context),
+      },
+      child: _layout(context),
+    );
+  }
+
+  /// The phone or desktop layout around the selected screen.
+  Widget _layout(BuildContext context) {
     final destinations = _destinations;
     final int selectedIndex =
         _selectedIndex < destinations.length ? _selectedIndex : 0;

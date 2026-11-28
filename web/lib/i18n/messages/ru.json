@@ -624,5 +624,16 @@
   "tipUnsureWordsExample": "этого",
   "tipUnsureWordsAfter": ", серым курсивом, Koalino мог расслышать неверно. Чтобы исправить фрагмент, нажмите на карандаш рядом с ним.",
   "gotIt": "Понятно",
-  "tip": "Подсказка"
+  "tip": "Подсказка",
+  "keyboardShortcuts": "Сочетания клавиш",
+  "typeACommand": "Введите команду",
+  "noMatchingCommands": "Нет подходящих команд",
+  "openTheCommandPalette": "Открыть палитру команд",
+  "spaceKey": "Пробел",
+  "playOrPauseTheRecording": "Воспроизвести или приостановить запись",
+  "back10SecondsForward10Seconds": "Назад на 10 секунд, вперёд на 10 секунд",
+  "showTheseShortcuts": "Показать эти сочетания",
+  "goToPlace": "Перейти: {place}",
+  "commandPalette": "Палитра команд",
+  "searchThisPage": "Поиск (Встречи, Проекты)"
 }

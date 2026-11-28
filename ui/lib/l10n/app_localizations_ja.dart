@@ -3314,4 +3314,33 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get gotIt => '了解';
+
+  @override
+  String get keyboardShortcuts => 'キーボードショートカット';
+
+  @override
+  String goToPlace(String place) {
+    return '$place へ移動';
+  }
+
+  @override
+  String get typeACommand => 'コマンドを入力';
+
+  @override
+  String get noMatchingCommands => '一致するコマンドはありません';
+
+  @override
+  String get openTheCommandPalette => 'コマンドパレットを開く';
+
+  @override
+  String get playOrPauseTheRecording => '録音を再生・一時停止';
+
+  @override
+  String get back10SecondsForward10Seconds => '10 秒戻る・10 秒進む';
+
+  @override
+  String get showTheseShortcuts => 'このショートカット一覧を表示';
+
+  @override
+  String get spaceKey => 'スペース';
 }

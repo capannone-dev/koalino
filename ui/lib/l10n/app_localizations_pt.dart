@@ -3485,4 +3485,34 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get gotIt => 'Entendi';
+
+  @override
+  String get keyboardShortcuts => 'Atalhos de teclado';
+
+  @override
+  String goToPlace(String place) {
+    return 'Ir para $place';
+  }
+
+  @override
+  String get typeACommand => 'Escreva um comando';
+
+  @override
+  String get noMatchingCommands => 'Nenhum comando corresponde';
+
+  @override
+  String get openTheCommandPalette => 'Abrir a paleta de comandos';
+
+  @override
+  String get playOrPauseTheRecording => 'Reproduzir ou pausar a gravação';
+
+  @override
+  String get back10SecondsForward10Seconds =>
+      'Recuar 10 segundos, avançar 10 segundos';
+
+  @override
+  String get showTheseShortcuts => 'Mostrar estes atalhos';
+
+  @override
+  String get spaceKey => 'Espaço';
 }

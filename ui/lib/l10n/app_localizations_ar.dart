@@ -3498,4 +3498,33 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get gotIt => 'فهمت';
+
+  @override
+  String get keyboardShortcuts => 'اختصارات لوحة المفاتيح';
+
+  @override
+  String goToPlace(String place) {
+    return 'انتقل إلى $place';
+  }
+
+  @override
+  String get typeACommand => 'اكتب أمرًا';
+
+  @override
+  String get noMatchingCommands => 'لا توجد أوامر مطابقة';
+
+  @override
+  String get openTheCommandPalette => 'افتح لوحة الأوامر';
+
+  @override
+  String get playOrPauseTheRecording => 'تشغيل التسجيل أو إيقافه مؤقتًا';
+
+  @override
+  String get back10SecondsForward10Seconds => 'رجوع 10 ثوانٍ، تقدّم 10 ثوانٍ';
+
+  @override
+  String get showTheseShortcuts => 'اعرض هذه الاختصارات';
+
+  @override
+  String get spaceKey => 'مسافة';
 }

@@ -592,5 +592,16 @@
   "tipUnsureWordsExample": "这样",
   "tipUnsureWordsAfter": "以灰色斜体显示的词，是 Koalino 不确定是否听对的。要修改某段，点旁边的铅笔。",
   "gotIt": "知道了",
-  "tip": "提示"
+  "tip": "提示",
+  "keyboardShortcuts": "键盘快捷键",
+  "typeACommand": "输入命令",
+  "noMatchingCommands": "没有匹配的命令",
+  "openTheCommandPalette": "打开命令面板",
+  "spaceKey": "空格",
+  "playOrPauseTheRecording": "播放或暂停录音",
+  "back10SecondsForward10Seconds": "后退 10 秒，前进 10 秒",
+  "showTheseShortcuts": "显示这些快捷键",
+  "goToPlace": "前往{place}",
+  "commandPalette": "命令面板",
+  "searchThisPage": "搜索（会议、项目）"
 }

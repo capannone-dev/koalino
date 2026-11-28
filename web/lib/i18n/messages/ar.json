@@ -623,5 +623,16 @@
   "tipUnsureWordsExample": "هذه",
   "tipUnsureWordsAfter": "، المكتوبة بخط مائل رمادي، هي كلمات لم يكن Koalino متأكدًا من سماعها جيدًا. لتصحيح مقطع، اضغط على القلم بجانبه.",
   "gotIt": "فهمت",
-  "tip": "نصيحة"
+  "tip": "نصيحة",
+  "keyboardShortcuts": "اختصارات لوحة المفاتيح",
+  "typeACommand": "اكتب أمرًا",
+  "noMatchingCommands": "لا توجد أوامر مطابقة",
+  "openTheCommandPalette": "افتح لوحة الأوامر",
+  "spaceKey": "مسافة",
+  "playOrPauseTheRecording": "تشغيل التسجيل أو إيقافه مؤقتًا",
+  "back10SecondsForward10Seconds": "رجوع 10 ثوانٍ، تقدّم 10 ثوانٍ",
+  "showTheseShortcuts": "اعرض هذه الاختصارات",
+  "goToPlace": "انتقل إلى {place}",
+  "commandPalette": "لوحة الأوامر",
+  "searchThisPage": "بحث (الاجتماعات، المشاريع)"
 }

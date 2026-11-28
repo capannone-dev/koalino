@@ -76,6 +76,8 @@ export function SearchPanel({ scope, label, projectId }: SearchPanelProps) {
           <input
             id={fieldId}
             type="search"
+            // "/" puts the cursor here (#215).
+            data-shortcut-search=""
             className={fieldClass}
             value={query}
             onChange={(event) => setQuery(event.target.value)}

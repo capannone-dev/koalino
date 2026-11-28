@@ -3242,4 +3242,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get gotIt => '知道了';
+
+  @override
+  String get keyboardShortcuts => '键盘快捷键';
+
+  @override
+  String goToPlace(String place) {
+    return '前往$place';
+  }
+
+  @override
+  String get typeACommand => '输入命令';
+
+  @override
+  String get noMatchingCommands => '没有匹配的命令';
+
+  @override
+  String get openTheCommandPalette => '打开命令面板';
+
+  @override
+  String get playOrPauseTheRecording => '播放或暂停录音';
+
+  @override
+  String get back10SecondsForward10Seconds => '后退 10 秒，前进 10 秒';
+
+  @override
+  String get showTheseShortcuts => '显示这些快捷键';
+
+  @override
+  String get spaceKey => '空格';
 }

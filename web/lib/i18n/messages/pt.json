@@ -596,5 +596,16 @@
   "tipUnsureWordsExample": "esta",
   "tipUnsureWordsAfter": ", em itálico cinzento, são as que o Koalino não tem a certeza de ter ouvido bem. Para corrigir uma passagem, clique no lápis ao lado.",
   "gotIt": "Entendi",
-  "tip": "Dica"
+  "tip": "Dica",
+  "keyboardShortcuts": "Atalhos de teclado",
+  "typeACommand": "Escreva um comando",
+  "noMatchingCommands": "Nenhum comando corresponde",
+  "openTheCommandPalette": "Abrir a paleta de comandos",
+  "spaceKey": "Espaço",
+  "playOrPauseTheRecording": "Reproduzir ou pausar a gravação",
+  "back10SecondsForward10Seconds": "Recuar 10 segundos, avançar 10 segundos",
+  "showTheseShortcuts": "Mostrar estes atalhos",
+  "goToPlace": "Ir para {place}",
+  "commandPalette": "Paleta de comandos",
+  "searchThisPage": "Pesquisar (Reuniões, Projetos)"
 }

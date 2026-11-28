@@ -10,6 +10,8 @@ import 'package:note_taker_ui/controllers/recording_player_controller.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:note_taker_ui/presentation/recording_player_bar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import 'package:note_taker_ui/presentation/keyboard_shortcuts.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent, ScrollDirection;
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/presentation/chat_screen.dart';
@@ -575,6 +577,22 @@ final class _MeetingWithPlayerState extends State<_MeetingWithPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    // Space plays or pauses, J and L go back or forward 10 seconds (#215), once there is a
+    // recording to play.
+    return AppShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        if (_available) ...<ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.space): _player.toggle,
+          const CharacterActivator('j'): () => _player.skip(-recordingSkipMs),
+          const CharacterActivator('l'): () => _player.skip(recordingSkipMs),
+        },
+      },
+      child: _withPlayerBar(context),
+    );
+  }
+
+  /// The page with the player bar under it.
+  Widget _withPlayerBar(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[

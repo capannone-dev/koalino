@@ -3501,4 +3501,35 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get gotIt => 'Понятно';
+
+  @override
+  String get keyboardShortcuts => 'Сочетания клавиш';
+
+  @override
+  String goToPlace(String place) {
+    return 'Перейти: $place';
+  }
+
+  @override
+  String get typeACommand => 'Введите команду';
+
+  @override
+  String get noMatchingCommands => 'Нет подходящих команд';
+
+  @override
+  String get openTheCommandPalette => 'Открыть палитру команд';
+
+  @override
+  String get playOrPauseTheRecording =>
+      'Воспроизвести или приостановить запись';
+
+  @override
+  String get back10SecondsForward10Seconds =>
+      'Назад на 10 секунд, вперёд на 10 секунд';
+
+  @override
+  String get showTheseShortcuts => 'Показать эти сочетания';
+
+  @override
+  String get spaceKey => 'Пробел';
 }

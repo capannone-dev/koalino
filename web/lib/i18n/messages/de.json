@@ -596,5 +596,16 @@
   "tipUnsureWordsExample": "dieses",
   "tipUnsureWordsAfter": ", grau und kursiv, sind solche, bei denen Koalino nicht sicher war. Um eine Passage zu korrigieren, klicke auf den Stift daneben.",
   "gotIt": "Verstanden",
-  "tip": "Tipp"
+  "tip": "Tipp",
+  "keyboardShortcuts": "Tastenkürzel",
+  "typeACommand": "Befehl eingeben",
+  "noMatchingCommands": "Keine passenden Befehle",
+  "openTheCommandPalette": "Befehlspalette öffnen",
+  "spaceKey": "Leertaste",
+  "playOrPauseTheRecording": "Aufnahme abspielen oder pausieren",
+  "back10SecondsForward10Seconds": "10 Sekunden zurück, 10 Sekunden vor",
+  "showTheseShortcuts": "Diese Kürzel anzeigen",
+  "goToPlace": "Zu {place}",
+  "commandPalette": "Befehlspalette",
+  "searchThisPage": "Suchen (Besprechungen, Projekte)"
 }

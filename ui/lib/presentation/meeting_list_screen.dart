@@ -4,6 +4,7 @@
 import 'package:note_taker_ui/presentation/meeting_time.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/presentation/keyboard_shortcuts.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
@@ -187,6 +188,18 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // "/" searches the meetings (#215).
+    return AppShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        if (widget.searchBridge case final SearchBridge bridge)
+          const CharacterActivator('/'): () => _search(bridge),
+      },
+      child: _layout(context),
+    );
+  }
+
+  /// The list, and the shown meeting beside it on wide screens.
+  Widget _layout(BuildContext context) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool isTwoPane = constraints.maxWidth >= twoPaneBreakpoint;

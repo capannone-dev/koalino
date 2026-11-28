@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LiveStatus } from "@/components/live-status";
 import { PrimaryNav } from "@/components/primary-nav";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { textDirection } from "@/lib/i18n";
 import { I18nProvider } from "@/lib/i18n/client";
 import { getT, requestLanguage } from "@/lib/i18n/server";
@@ -40,6 +41,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             <PrimaryNav />
           </header>
           <main className="mx-auto max-w-7xl p-4 pb-24 sm:pb-4">{children}</main>
+          {/* Ctrl/Cmd+K, "/" and "?" on every page (#215). */}
+          <KeyboardShortcuts />
         </I18nProvider>
       </body>
     </html>

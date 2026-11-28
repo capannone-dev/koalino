@@ -592,5 +592,16 @@
   "tipUnsureWordsExample": "このような語",
   "tipUnsureWordsAfter": "」のように灰色の斜体で表示されるのは、Koalino が正しく聞き取れたか自信のない語です。箇所を直すには横の鉛筆を押します。",
   "gotIt": "了解",
-  "tip": "ヒント"
+  "tip": "ヒント",
+  "keyboardShortcuts": "キーボードショートカット",
+  "typeACommand": "コマンドを入力",
+  "noMatchingCommands": "一致するコマンドはありません",
+  "openTheCommandPalette": "コマンドパレットを開く",
+  "spaceKey": "スペース",
+  "playOrPauseTheRecording": "録音を再生・一時停止",
+  "back10SecondsForward10Seconds": "10 秒戻る・10 秒進む",
+  "showTheseShortcuts": "このショートカット一覧を表示",
+  "goToPlace": "{place} へ移動",
+  "commandPalette": "コマンドパレット",
+  "searchThisPage": "検索（会議、プロジェクト）"
 }

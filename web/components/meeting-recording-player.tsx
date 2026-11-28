@@ -8,6 +8,8 @@
 
 import { PLAYBACK_RATES, SKIP_MS, recordingFileName, useRecordingPlayback } from "@/lib/recording-playback";
 import { useT } from "@/lib/i18n/client";
+import { hasCommandModifier, isTypingTarget } from "@/lib/shortcut-keys";
+import { useEffect, useRef } from "react";
 
 const iconButton =
   "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-line-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus";
@@ -19,6 +21,31 @@ export function formatPlaybackTime(milliseconds: number): string {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = String(totalSeconds % 60).padStart(2, "0");
   return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
+}
+
+/**
+ * Space plays or pauses, J and L go back or forward 10 seconds (#215), while a recording can be
+ * played and the owner is not typing or on a button.
+ *
+ * Side effects: a document key listener while mounted.
+ */
+function usePlayerKeys(playback: ReturnType<typeof useRecordingPlayback>) {
+  const latest = useRef(playback);
+  latest.current = playback;
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const current = latest.current;
+      if (!current?.available || hasCommandModifier(event) || isTypingTarget(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (key === " ") current.toggle();
+      else if (key === "j") current.skip(-SKIP_MS);
+      else if (key === "l") current.skip(SKIP_MS);
+      else return;
+      event.preventDefault();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 }
 
 /** Words a speed as `1.25×`. */
@@ -37,6 +64,7 @@ export function formatRate(rate: number): string {
 export function MeetingRecordingPlayer({ title }: { title: string | null | undefined }) {
   const t = useT();
   const playback = useRecordingPlayback();
+  usePlayerKeys(playback);
   if (!playback?.available) return null;
   const { playing, failed, positionMs, durationMs, rate, follow } = playback;
   return (

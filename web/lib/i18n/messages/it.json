@@ -596,5 +596,16 @@
   "tipUnsureWordsExample": "questa",
   "tipUnsureWordsAfter": ", in corsivo grigio, sono quelle che Koalino non è sicuro di aver sentito bene. Per correggere un passaggio premi la matita accanto.",
   "gotIt": "Ho capito",
-  "tip": "Suggerimento"
+  "tip": "Suggerimento",
+  "keyboardShortcuts": "Scorciatoie da tastiera",
+  "typeACommand": "Scrivi un comando",
+  "noMatchingCommands": "Nessun comando corrispondente",
+  "openTheCommandPalette": "Apri la palette dei comandi",
+  "spaceKey": "Spazio",
+  "playOrPauseTheRecording": "Riproduci o metti in pausa la registrazione",
+  "back10SecondsForward10Seconds": "Indietro di 10 secondi, avanti di 10 secondi",
+  "showTheseShortcuts": "Mostra queste scorciatoie",
+  "goToPlace": "Vai a {place}",
+  "commandPalette": "Palette dei comandi",
+  "searchThisPage": "Cerca (Riunioni, Progetti)"
 }

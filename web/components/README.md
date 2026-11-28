@@ -138,3 +138,7 @@ each of them.
 
 `meeting-transcript.tsx` also shows a one-time tip (#213) over the transcript: grey italic words are ones Koalino was
 unsure of, and the pencil beside a passage corrects it. Dismissal is remembered in this browser's `localStorage`.
+
+`keyboard-shortcuts.tsx` (#215), in the layout, gives every page Ctrl/Cmd+K (a command palette that goes to any
+page), `/` (focus the field marked `data-shortcut-search`) and `?` (the shortcut list); `meeting-recording-player.tsx`
+adds Space, J and L. `lib/shortcut-keys.ts` keeps single keys away from fields and buttons.

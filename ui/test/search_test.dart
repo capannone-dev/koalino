@@ -2,12 +2,14 @@
 // with the matched words marked, opening a result, and an open meeting scrolled to the passage.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/search_screen.dart';
+import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 
 import 'fake_llm_core.dart';
 import 'fake_meeting_bridge.dart';
@@ -149,6 +151,22 @@ void main() {
     await tester.tap(find.byTooltip('Search'));
     await tester.pumpAndSettle();
     expect(find.text('Type at least two letters.'), findsOneWidget);
+  });
+
+  testWidgets('/ opens the meeting search from the list (#215)',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: MeetingListScreen(
+        controller: MeetingListController(meetingBridge: FakeMeetingBridge()),
+        searchBridge: bridge,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await simulateKeyDownEvent(LogicalKeyboardKey.slash, character: '/');
+    await simulateKeyUpEvent(LogicalKeyboardKey.slash);
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchScreen), findsOneWidget);
   });
 
   testWidgets('an open meeting scrolls to the passage found and marks it',

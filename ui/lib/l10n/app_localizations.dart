@@ -5529,6 +5529,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Got it'**
   String get gotIt;
+
+  /// No description provided for @keyboardShortcuts.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard shortcuts'**
+  String get keyboardShortcuts;
+
+  /// No description provided for @goToPlace.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to {place}'**
+  String goToPlace(String place);
+
+  /// No description provided for @typeACommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a command'**
+  String get typeACommand;
+
+  /// No description provided for @noMatchingCommands.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching commands'**
+  String get noMatchingCommands;
+
+  /// No description provided for @openTheCommandPalette.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the command palette'**
+  String get openTheCommandPalette;
+
+  /// No description provided for @playOrPauseTheRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Play or pause the recording'**
+  String get playOrPauseTheRecording;
+
+  /// No description provided for @back10SecondsForward10Seconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Back 10 seconds, forward 10 seconds'**
+  String get back10SecondsForward10Seconds;
+
+  /// No description provided for @showTheseShortcuts.
+  ///
+  /// In en, this message translates to:
+  /// **'Show these shortcuts'**
+  String get showTheseShortcuts;
+
+  /// Name of the space bar on a key cap.
+  ///
+  /// In en, this message translates to:
+  /// **'Space'**
+  String get spaceKey;
 }
 
 class _AppLocalizationsDelegate

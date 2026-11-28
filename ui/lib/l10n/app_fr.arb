@@ -912,5 +912,14 @@
   "tipUnsureWordsBefore": "Les mots comme ",
   "tipUnsureWordsExample": "celui-ci",
   "tipUnsureWordsAfter": ", en italique gris, sont ceux que Koalino n'est pas sûr d'avoir bien entendus. Pour corriger un passage, appuyez sur ✎ Corriger à côté, ou faites un appui long ou un clic droit dessus.",
-  "gotIt": "Compris"
+  "gotIt": "Compris",
+  "keyboardShortcuts": "Raccourcis clavier",
+  "goToPlace": "Aller à {place}",
+  "typeACommand": "Tapez une commande",
+  "noMatchingCommands": "Aucune commande correspondante",
+  "openTheCommandPalette": "Ouvrir la palette de commandes",
+  "playOrPauseTheRecording": "Lire ou mettre en pause l'enregistrement",
+  "back10SecondsForward10Seconds": "Reculer de 10 secondes, avancer de 10 secondes",
+  "showTheseShortcuts": "Afficher ces raccourcis",
+  "spaceKey": "Espace"
 }

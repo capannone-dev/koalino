@@ -912,5 +912,14 @@
   "tipUnsureWordsBefore": "Palavras como ",
   "tipUnsureWordsExample": "esta",
   "tipUnsureWordsAfter": ", em itálico cinzento, são as que o Koalino não tem a certeza de ter ouvido bem. Para corrigir uma passagem, toque em ✎ Corrigir ao lado, ou mantenha-a premida ou clique com o botão direito.",
-  "gotIt": "Entendi"
+  "gotIt": "Entendi",
+  "keyboardShortcuts": "Atalhos de teclado",
+  "goToPlace": "Ir para {place}",
+  "typeACommand": "Escreva um comando",
+  "noMatchingCommands": "Nenhum comando corresponde",
+  "openTheCommandPalette": "Abrir a paleta de comandos",
+  "playOrPauseTheRecording": "Reproduzir ou pausar a gravação",
+  "back10SecondsForward10Seconds": "Recuar 10 segundos, avançar 10 segundos",
+  "showTheseShortcuts": "Mostrar estes atalhos",
+  "spaceKey": "Espaço"
 }

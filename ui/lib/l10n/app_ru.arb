@@ -912,5 +912,14 @@
   "tipUnsureWordsBefore": "Слова вроде ",
   "tipUnsureWordsExample": "этого",
   "tipUnsureWordsAfter": ", серым курсивом, Koalino мог расслышать неверно. Чтобы исправить фрагмент, нажмите ✎ Исправить рядом с ним или удерживайте его / щёлкните правой кнопкой.",
-  "gotIt": "Понятно"
+  "gotIt": "Понятно",
+  "keyboardShortcuts": "Сочетания клавиш",
+  "goToPlace": "Перейти: {place}",
+  "typeACommand": "Введите команду",
+  "noMatchingCommands": "Нет подходящих команд",
+  "openTheCommandPalette": "Открыть палитру команд",
+  "playOrPauseTheRecording": "Воспроизвести или приостановить запись",
+  "back10SecondsForward10Seconds": "Назад на 10 секунд, вперёд на 10 секунд",
+  "showTheseShortcuts": "Показать эти сочетания",
+  "spaceKey": "Пробел"
 }

@@ -3443,4 +3443,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get gotIt => 'Got it';
+
+  @override
+  String get keyboardShortcuts => 'Keyboard shortcuts';
+
+  @override
+  String goToPlace(String place) {
+    return 'Go to $place';
+  }
+
+  @override
+  String get typeACommand => 'Type a command';
+
+  @override
+  String get noMatchingCommands => 'No matching commands';
+
+  @override
+  String get openTheCommandPalette => 'Open the command palette';
+
+  @override
+  String get playOrPauseTheRecording => 'Play or pause the recording';
+
+  @override
+  String get back10SecondsForward10Seconds =>
+      'Back 10 seconds, forward 10 seconds';
+
+  @override
+  String get showTheseShortcuts => 'Show these shortcuts';
+
+  @override
+  String get spaceKey => 'Space';
 }

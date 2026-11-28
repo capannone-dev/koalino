@@ -4,9 +4,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
@@ -174,6 +174,24 @@ void main() {
     await tester.tap(find.byKey(recordingPlayPauseKey));
     await tester.pumpAndSettle();
     expect(playback.calls.last, 'pause');
+  });
+
+  testWidgets('Space plays and pauses, J and L skip 10 seconds (#215)',
+      (WidgetTester tester) async {
+    await pumpMeeting(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(playback.calls, contains('resume'));
+    await simulateKeyDownEvent(LogicalKeyboardKey.keyL, character: 'l');
+    await simulateKeyUpEvent(LogicalKeyboardKey.keyL);
+    await tester.pumpAndSettle();
+    expect(playback.calls.last, startsWith('seek '));
+    final int forward = int.parse(playback.calls.last.split(' ').last);
+    await simulateKeyDownEvent(LogicalKeyboardKey.keyJ, character: 'j');
+    await simulateKeyUpEvent(LogicalKeyboardKey.keyJ);
+    await tester.pumpAndSettle();
+    expect(int.parse(playback.calls.last.split(' ').last), forward - 10000);
   });
 
   testWidgets('the speed changes from the bar', (WidgetTester tester) async {

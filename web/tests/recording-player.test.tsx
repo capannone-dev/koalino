@@ -86,6 +86,31 @@ test("the audio loads only when played, and a passage plays from its start", asy
   expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
 });
 
+test("Space plays and pauses, L and J skip 10 seconds, not while typing (#215)", async () => {
+  vi.mocked(api.hasMeetingRecording).mockResolvedValue(true);
+  const { container } = renderPage();
+  await screen.findByRole("region", { name: "Recording player" });
+  const audio = container.querySelector("audio") as HTMLAudioElement;
+
+  fireEvent.keyDown(document.body, { key: " " });
+  expect(play).toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+  act(() => {
+    Object.defineProperty(audio, "duration", { configurable: true, value: 65 });
+    fireEvent.durationChange(audio);
+  });
+  fireEvent.keyDown(document.body, { key: "l" });
+  expect(audio.currentTime).toBe(10);
+  fireEvent.keyDown(document.body, { key: "j" });
+  expect(audio.currentTime).toBe(0);
+
+  const field = document.createElement("input");
+  document.body.append(field);
+  fireEvent.keyDown(field, { key: "l" });
+  expect(audio.currentTime).toBe(0);
+  field.remove();
+});
+
 test("the speed changes the audio's rate", async () => {
   vi.mocked(api.hasMeetingRecording).mockResolvedValue(true);
   const { container } = renderPage();

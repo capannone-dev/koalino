@@ -596,5 +596,16 @@
   "tipUnsureWordsExample": "this one",
   "tipUnsureWordsAfter": ", in grey italics, are ones Koalino wasn't sure it heard right. To fix a passage, press the pencil beside it.",
   "gotIt": "Got it",
-  "tip": "Tip"
+  "tip": "Tip",
+  "keyboardShortcuts": "Keyboard shortcuts",
+  "typeACommand": "Type a command",
+  "noMatchingCommands": "No matching commands",
+  "openTheCommandPalette": "Open the command palette",
+  "spaceKey": "Space",
+  "playOrPauseTheRecording": "Play or pause the recording",
+  "back10SecondsForward10Seconds": "Back 10 seconds, forward 10 seconds",
+  "showTheseShortcuts": "Show these shortcuts",
+  "goToPlace": "Go to {place}",
+  "commandPalette": "Command palette",
+  "searchThisPage": "Search (Meetings, Projects)"
 }
