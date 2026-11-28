@@ -109,6 +109,12 @@ start the daemon with `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
 | `amo-listing.json` | The public AMO listing (summary, description, category, and the licence as a custom one: AMO offers only "GPL-3.0-only", not "or later") and the notes for Mozilla's reviewers, sent by `sign-firefox.sh --listed`. |
 | `build.mjs` | Builds `dist/firefox` and `dist/chromium`, with each browser's manifest and `_locales`. |
 
+Mozilla reviews each listed version by hand, so the add-ons site can lag behind for days. The
+release's `koalino-browser-extension-firefox-VERSION.xpi` is therefore always the newest code,
+signed as an **unlisted** version (`./sign-firefox.sh`, signed within minutes): raise the
+version, sign it, and attach it to the release with the Chromium zip built from the same code
+(and update `SHA256SUMS.txt`). Then submit the same code with `--listed` under the next version.
+
 ## Build, test, install
 
 ```sh
