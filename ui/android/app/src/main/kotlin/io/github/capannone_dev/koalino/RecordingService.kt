@@ -89,12 +89,15 @@ class RecordingService : Service() {
             ACTION_PAUSE -> runCore(STATE_PAUSED) { NativeCore.pauseRecording() }
             ACTION_RESUME -> runCore(STATE_RECORDING) { NativeCore.resumeRecording() }
             ACTION_STOP -> stopFromNotification()
+            // Queued behind any pending ACTION_SHOW, which has already called startForeground.
+            ACTION_END -> end()
             else -> stopSelf()
         }
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        startRequested = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             getSystemService(AudioManager::class.java)
                 ?.unregisterAudioRecordingCallback(recordingCallback)
@@ -278,6 +281,11 @@ class RecordingService : Service() {
         private const val ACTION_PAUSE = "io.github.capannone_dev.koalino.recording.PAUSE"
         private const val ACTION_RESUME = "io.github.capannone_dev.koalino.recording.RESUME"
         private const val ACTION_STOP = "io.github.capannone_dev.koalino.recording.STOP"
+        private const val ACTION_END = "io.github.capannone_dev.koalino.recording.END"
+
+        /** Whether a start was asked for and the service has not been destroyed since. */
+        @Volatile
+        private var startRequested = false
         private const val EXTRA_STATE = "state"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_SILENCED_TEXT = "silencedText"
@@ -299,13 +307,27 @@ class RecordingService : Service() {
         fun show(context: Context, state: String, title: String?, silencedText: String? = null) {
             val intent = Intent(context, RecordingService::class.java)
             if (state == STATE_IDLE) {
-                context.stopService(intent)
+                if (!startRequested) {
+                    return
+                }
+                // Not stopService(): stopped before its first startForeground(), which a quick
+                // "recording" then "idle" (a refused start) can do, Android kills the app with
+                // ForegroundServiceDidNotStartInTimeException (seen on a Galaxy S25, #183). The
+                // service handles its intents in order, so this one ends it after the pending
+                // start has put it in the foreground.
+                try {
+                    context.startService(intent.setAction(ACTION_END))
+                } catch (refused: IllegalStateException) {
+                    // From the background with no service left to end: nothing is running.
+                    context.stopService(intent)
+                }
                 return
             }
             intent.setAction(ACTION_SHOW)
                 .putExtra(EXTRA_STATE, state)
                 .putExtra(EXTRA_TITLE, title)
                 .putExtra(EXTRA_SILENCED_TEXT, silencedText)
+            startRequested = true
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
