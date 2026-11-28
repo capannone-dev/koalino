@@ -4282,6 +4282,11 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Kept for later:** the branch has the build, GPU choice by backend name (with both backends ggml
   lists an Adreno GPU twice, Vulkan first), a developer setting and a Test Lab build switch. Retry
   it on Xclipse (Exynos 2200/2400) or PowerVR phones, or when ggml's Vulkan backend improves on Mali.
+- **Xclipse, measured 2026-11-28:** on a Galaxy S24 (Exynos 2400, Xclipse 940) Vulkan ran `base`
+  at 0.2× real time, without a crash. The normal build on the same phone ran `small` on its CPU at
+  0.3×, and `small` takes about 3–4× as long as `base`. So the CPU alone runs `base` at roughly 0.1×,
+  about twice as fast as Vulkan. The decision stands. A Galaxy A03s (PowerVR GE8320) run never
+  showed its speed check, so PowerVR is still unmeasured.
 
 ## 2026-11-27 — Automatic's model downloads by itself at first start (#189)
 
