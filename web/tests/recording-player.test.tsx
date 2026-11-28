@@ -49,7 +49,7 @@ function renderPage() {
   return render(
     <RecordingPlaybackProvider meetingId="m 1">
       <MeetingTranscript transcript={null} segments={segments} />
-      <MeetingRecordingPlayer fileName="Project sync.wav" />
+      <MeetingRecordingPlayer title="Project sync" />
     </RecordingPlaybackProvider>
   );
 }
@@ -110,7 +110,7 @@ test("times and passages are read as on the transcript", () => {
   expect(passageStartAt([5_000], 1_000)).toBeNull();
 });
 
-test("the recording downloads under the meeting's title (#199)", async () => {
+test("the recording downloads under the meeting's title (#199, #200)", async () => {
   vi.mocked(api.hasMeetingRecording).mockResolvedValue(true);
   renderPage();
   const link = await screen.findByRole("link", { name: "Download the recording" });

@@ -6,7 +6,7 @@
 
 "use client";
 
-import { PLAYBACK_RATES, SKIP_MS, useRecordingPlayback } from "@/lib/recording-playback";
+import { PLAYBACK_RATES, SKIP_MS, recordingFileName, useRecordingPlayback } from "@/lib/recording-playback";
 import { useT } from "@/lib/i18n/client";
 
 const iconButton =
@@ -29,10 +29,12 @@ export function formatRate(rate: number): string {
 /**
  * Shows the player bar, or nothing when the meeting has no kept recording.
  *
- * Inputs: `fileName`, the name the downloaded recording gets; the rest is the shared playback.
+ * Inputs: `title`, the meeting's title, which names the downloaded recording; the name is made
+ * here, on the client, because the server page cannot call this client module's helpers (#200).
+ * The rest is the shared playback.
  * Outputs: the bar. Side effects: plays the recording; the link downloads it.
  */
-export function MeetingRecordingPlayer({ fileName }: { fileName: string }) {
+export function MeetingRecordingPlayer({ title }: { title: string | null | undefined }) {
   const t = useT();
   const playback = useRecordingPlayback();
   if (!playback?.available) return null;
@@ -97,7 +99,7 @@ export function MeetingRecordingPlayer({ fileName }: { fileName: string }) {
       </label>
       <a
         href={playback.url}
-        download={fileName}
+        download={recordingFileName(title)}
         className={iconButton}
         aria-label={t("downloadTheRecording")}
         title={t("downloadTheRecording")}
