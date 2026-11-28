@@ -4311,3 +4311,29 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Decision (owner):** 60% on phones, 70% kept on computers. A 3 GB phone now flags `medium` and
   still accepts `small`; a 6 GB phone accepts `medium`. Automatic never picks `medium` on a phone,
   so this only guides a model picked by hand.
+
+## 2026-11-28 — A voice is saved from its consistent core (#196)
+
+- **Problem:** naming a voice saved a voice sample only when all its windows averaged 0.60 similarity
+  to their centre. The rule was tuned on the 15 clean test recordings. In real meetings a speaker's
+  windows average 0.45 to 0.60, because overlap, noise and turn changes scatter part of them. So most
+  people were named but never learned: 8 of 17 saved people on the owner's laptop had no voice sample.
+  They were never recognised later, and the Voice Gallery showed them with no voices.
+- **Measured** on the stored final-pass windows of AMI, NOTSOFAR and a real Italian meeting (121
+  speakers). Each rule saved voices from one meeting and named the speakers of another meeting
+  with the same people (388 meeting pairs):
+
+  | Rule | Voices saved | Speech named right | Named as the wrong person |
+  | --- | --- | --- | --- |
+  | Whole voice ≥ 0.60 (before) | 13 of 121 | 8.3% | 0.7% |
+  | Whole voice ≥ 0.50 | 93 | 68.4% | not measured |
+  | Core ≥ 0.60, core voice saved (chosen) | 103 | 73.5% | 3.8% |
+  | Every voice | 121 | 79.4% | 7.3% |
+- **Decision:** a voice's core is the half of its windows nearest its centre. The voice is saved
+  when the core averages 0.60 to the core's own centre, and the core's average is the voice saved.
+  Matching a speaker to saved voices still uses the whole voice, as before. A voice under 20
+  windows has no core and is judged on all its windows, because a lone window always looks
+  consistent.
+- **Existing people without a voice** stay that way until they are named again, or until the owner
+  adds voices to them in the Voice Gallery. The core of a meeting that has already ended can't be
+  recomputed: its windows were only ever kept in memory.

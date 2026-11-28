@@ -401,7 +401,8 @@ where
 ///
 /// Inputs: The members. A member's duration is its clean speech; the final pass records zero for a
 /// group that isn't clean.
-/// Outputs: The voice, or `None` with too little speech or inconsistent members. Side effects: None.
+/// Outputs: The voice of the members' core (see `CORE_SHARE`), or `None` with too little speech or an
+/// inconsistent core. Side effects: None.
 fn clean_voice_of(member_chunks: &[UnknownSpeakerChunk]) -> Option<Vec<f32>> {
     let clean_speech_ms: u64 = member_chunks
         .iter()
@@ -416,7 +417,7 @@ fn clean_voice_of(member_chunks: &[UnknownSpeakerChunk]) -> Option<Vec<f32>> {
         .collect();
     let voices = speaker_voices(&embeddings, &vec![0; embeddings.len()]);
     let voice = voices.into_iter().next()?;
-    (voice.consistency >= MIN_CLEAN_VOICE_CONSISTENCY).then_some(voice.centroid)
+    (voice.core_consistency >= MIN_CLEAN_VOICE_CONSISTENCY).then_some(voice.core_centroid)
 }
 
 /// Rejects embeddings that cannot take part in cosine comparison.

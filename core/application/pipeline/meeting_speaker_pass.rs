@@ -58,9 +58,18 @@ impl Default for SpeakerPassConfig {
 pub const SPEAKER_NAME_THRESHOLD: f32 = 0.60;
 /// Least windows, about seconds of speech, behind a voice worth saving.
 pub const MIN_CLEAN_VOICE_WINDOWS: usize = 20;
-/// Least average similarity of a group's windows to its centre for its voice to be saved. The mixed
-/// groups measured fell below this; some single-person groups do too, and that only delays learning.
+/// Least average similarity of a voice's core windows to their centre for the voice to be saved.
+///
+/// Measured first on the whole group, this kept out the mixed groups of the 15 test recordings but
+/// also almost every real speaker (#196): on AMI, NOTSOFAR and a real Italian meeting, whole groups
+/// average 0.45 to 0.60, so only 13 of 121 were saved and 8 of the owner's 17 people had no voice.
+/// Measured on the core (`CORE_SHARE`), 103 of 121 are saved; naming the next meeting's speakers with
+/// them, right names rose from 8% to 74% of speech and names of the wrong person from 0.7% to 3.8%.
 pub const MIN_CLEAN_VOICE_CONSISTENCY: f32 = 0.60;
+/// Share of a voice's windows, those nearest its centre, that make up its core: overlap, noise and
+/// turn changes scatter the rest. Only a voice with `MIN_CLEAN_VOICE_WINDOWS` has a core; a shorter
+/// one is judged on all its windows, since a lone window always looks consistent.
+pub const CORE_SHARE: f32 = 0.5;
 
 /// One short window's voice, in meeting time.
 #[derive(Clone, Debug, PartialEq)]
@@ -91,17 +100,22 @@ pub struct SpeakerVoice {
     pub window_count: usize,
     /// Average similarity of those windows to the centroid.
     pub consistency: f32,
+    /// The unit-length average of the core windows (`CORE_SHARE`), the voice that is saved.
+    pub core_centroid: Vec<f32>,
+    /// Average similarity of the core windows to `core_centroid`.
+    pub core_consistency: f32,
 }
 
 impl SpeakerVoice {
-    /// Says whether this voice is enough, and consistent enough, to save for later matching.
+    /// Says whether this voice is enough, and its core consistent enough, to save for later
+    /// matching. The voice to save is then `core_centroid`.
     pub fn is_clean(&self) -> bool {
         self.window_count >= MIN_CLEAN_VOICE_WINDOWS
-            && self.consistency >= MIN_CLEAN_VOICE_CONSISTENCY
+            && self.core_consistency >= MIN_CLEAN_VOICE_CONSISTENCY
     }
 }
 
-/// Summarizes each speaker's voice.
+/// Summarizes each speaker's voice, and its core.
 ///
 /// Inputs: One embedding and one dense speaker number per window.
 /// Outputs: One voice per speaker number. Side effects: None.
@@ -116,16 +130,44 @@ pub fn speaker_voices(embeddings: &[Vec<f32>], labels: &[usize]) -> Vec<SpeakerV
         .into_iter()
         .enumerate()
         .map(|(speaker, centroid)| {
-            let similarities: Vec<f32> = vectors
+            let mut members: Vec<(&Vec<f32>, f32)> = vectors
                 .iter()
                 .zip(labels)
                 .filter(|(_, label)| **label == speaker)
-                .map(|(vector, _)| dot(vector, &centroid))
+                .map(|(vector, _)| (vector, dot(vector, &centroid)))
                 .collect();
+            let window_count = members.len();
+            let consistency = average(members.iter().map(|(_, similarity)| *similarity));
+            if window_count < MIN_CLEAN_VOICE_WINDOWS {
+                return SpeakerVoice {
+                    core_centroid: centroid.clone(),
+                    core_consistency: consistency,
+                    centroid,
+                    window_count,
+                    consistency,
+                };
+            }
+            members.sort_by(|left, right| right.1.total_cmp(&left.1));
+            // Rounded up, and at least one window.
+            let core_count = ((window_count as f32 * CORE_SHARE).ceil() as usize).max(1);
+            let core: Vec<&Vec<f32>> = members
+                .iter()
+                .take(core_count)
+                .map(|(vector, _)| *vector)
+                .collect();
+            let mut core_sum = vec![0.0_f32; centroid.len()];
+            for vector in &core {
+                for (total, value) in core_sum.iter_mut().zip(vector.iter()) {
+                    *total += value;
+                }
+            }
+            let core_centroid = unit_vector(&core_sum);
             SpeakerVoice {
-                consistency: similarities.iter().sum::<f32>() / similarities.len().max(1) as f32,
-                window_count: similarities.len(),
+                core_consistency: average(core.iter().map(|vector| dot(vector, &core_centroid))),
+                core_centroid,
                 centroid,
+                window_count,
+                consistency,
             }
         })
         .collect()
@@ -176,6 +218,14 @@ pub fn unit_vector(vector: &[f32]) -> Vec<f32> {
     } else {
         vector.to_vec()
     }
+}
+
+/// Returns the mean of `values`, or 0 when there are none.
+fn average(values: impl Iterator<Item = f32>) -> f32 {
+    let (sum, count) = values.fold((0.0_f32, 0_usize), |(sum, count), value| {
+        (sum + value, count + 1)
+    });
+    sum / count.max(1) as f32
 }
 
 /// Returns the dot product, which is the cosine similarity of unit vectors.

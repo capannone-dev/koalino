@@ -599,6 +599,27 @@ fn naming_saves_one_voice_from_long_consistent_speech() {
     );
 }
 
+/// Real meetings (#196): long speech with scattered windows still saves its steady voice.
+#[test]
+fn naming_saves_a_voice_from_the_steady_part_of_long_speech() {
+    let steady: Vec<Vec<f32>> = (0..20)
+        .map(|_| vec![1.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        .collect();
+    let scattered: Vec<Vec<f32>> = (0..20)
+        .map(|index| {
+            let mut vector = vec![0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+            vector[2 + index % 6] = 1.0;
+            vector
+        })
+        .collect();
+    let members: Vec<(&[f32], u64)> = steady
+        .iter()
+        .chain(&scattered)
+        .map(|embedding| (embedding.as_slice(), 1_000))
+        .collect();
+    assert_eq!(voices_saved_for(&members), 1);
+}
+
 #[test]
 fn naming_saves_no_voice_from_brief_speech() {
     assert_eq!(

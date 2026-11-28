@@ -1,8 +1,8 @@
 //! Specifies the whole-meeting grouping with made-up voices whose answers are known.
 
 use super::meeting_speaker_pass::{
-    SpeakerPassConfig, SpeakerVoice, VoiceWindow, group_voice_windows, speaker_at, speaker_voices,
-    unit_vector,
+    MIN_CLEAN_VOICE_CONSISTENCY, SpeakerPassConfig, SpeakerVoice, VoiceWindow, group_voice_windows,
+    speaker_at, speaker_voices, unit_vector,
 };
 
 /// Makes `count` slightly different windows around a voice pointing along axis `axis`.
@@ -226,14 +226,54 @@ fn a_chunk_without_windows_uses_the_nearest_in_the_meeting() {
 
 #[test]
 fn only_a_long_consistent_voice_is_clean() {
-    let voice_of = |window_count, consistency| SpeakerVoice {
+    let voice_of = |window_count, core_consistency| SpeakerVoice {
         centroid: vec![1.0],
         window_count,
-        consistency,
+        consistency: 0.5,
+        core_centroid: vec![1.0],
+        core_consistency,
     };
     assert!(voice_of(20, 0.6).is_clean());
     assert!(!voice_of(19, 0.9).is_clean());
     assert!(!voice_of(40, 0.55).is_clean());
+}
+
+/// Makes `count` windows that each point a different way, away from every `voice`'s main axis.
+fn strays(count: usize) -> Vec<Vec<f32>> {
+    (0..count)
+        .map(|index| {
+            let mut vector = vec![0.0; 8];
+            vector[2 + index % 6] = 1.0;
+            vector
+        })
+        .collect()
+}
+
+/// Real meetings (#196): a person's voice is steady in most windows, while overlap, noise and
+/// turn changes scatter the rest. Their voice is saved from the windows nearest the centre.
+#[test]
+fn a_voice_with_scattered_windows_is_saved_from_its_core() {
+    let mut windows = voice(0, 20);
+    windows.extend(strays(20));
+    let voices = speaker_voices(&windows, &[0; 40]);
+    assert!(voices[0].consistency < MIN_CLEAN_VOICE_CONSISTENCY);
+    assert!(voices[0].core_consistency > 0.95);
+    assert!(voices[0].is_clean());
+    assert!(
+        voices[0].core_centroid[0] > 0.95,
+        "the core is the steady voice"
+    );
+    assert!(voices[0].centroid[0] < voices[0].core_centroid[0]);
+}
+
+/// A few windows have no core worth trusting: one window alone always looks consistent.
+#[test]
+fn a_short_voice_is_judged_on_all_its_windows() {
+    let mut windows = voice(0, 5);
+    windows.extend(strays(5));
+    let voices = speaker_voices(&windows, &[0; 10]);
+    assert_eq!(voices[0].core_consistency, voices[0].consistency);
+    assert_eq!(voices[0].core_centroid, voices[0].centroid);
 }
 
 #[test]

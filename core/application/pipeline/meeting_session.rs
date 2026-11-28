@@ -961,6 +961,7 @@ where
                     score,
                     windows = voice.window_count,
                     consistency = voice.consistency,
+                    core_consistency = voice.core_consistency,
                     "final speaker's closest saved voice"
                 );
             }
@@ -1015,9 +1016,10 @@ where
             created_at,
             None,
         );
+        // The member carries the voice that naming saves: the core, steadier than the whole (#196).
         let chunk = UnknownSpeakerChunk::new(
             chunk_id,
-            voice.centroid.clone(),
+            voice.core_centroid.clone(),
             if voice.is_clean() { speech_ms } else { 0 },
         );
         self.note_repository
