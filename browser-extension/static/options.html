@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- The extension's options page (#212): its settings, grouped as "All sites" and "Teams". Each switch saves when it
+     changes. Elements with data-i18n get their text in the browser's language (#124). -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Koalino</title>
+    <link rel="stylesheet" href="koalino.css" />
+    <style>
+      body { padding: 24px; max-width: 560px; margin: 0 auto; }
+    </style>
+  </head>
+  <body>
+    <h1><img src="icon-32.png" alt="" width="24" height="24" /><span data-i18n="optionsTitle">Koalino settings</span></h1>
+    <section class="card">
+      <h2 data-i18n="allSitesSettings">All sites</h2>
+      <label><input type="checkbox" id="watch-all-sites" /> <span><span data-i18n="watchAllSites">Watch every website for calls</span><br /><span class="hint" data-i18n="watchAllSitesHint">Offers to record a call on any site.</span></span></label>
+      <label><input type="checkbox" data-setting="captureSlides" /> <span data-i18n="keepSlides">Keep shared slides</span></label>
+      <div id="site-choices" class="hint" hidden><span id="site-choices-text"></span> <button id="forget-sites" type="button" data-i18n="forgetSiteChoices">Forget site choices</button></div>
+    </section>
+    <section class="card">
+      <h2 data-i18n="teamsSettings">Teams</h2>
+      <label><input type="checkbox" data-setting="alwaysRecordTeams" /> <span><span data-i18n="alwaysRecord">Always record Teams meetings</span><br /><span class="hint" data-i18n="alwaysRecordHint">Otherwise you are asked when a call starts.</span></span></label>
+      <label><input type="checkbox" data-setting="captureCaptions" /> <span><span data-i18n="useCaptions">Use Teams live captions</span><br /><span class="hint" data-i18n="useCaptionsHint">Names who spoke when; turned on in the call for you only.</span></span></label>
+      <label><input type="checkbox" data-setting="fetchTeamsTranscripts" /> <span><span data-i18n="fetchTranscript">Fetch the Teams transcript after the meeting</span><br /><span class="hint" data-i18n="fetchTranscriptHint">Whoever started it, when your account can see it.</span></span></label>
+      <label><input type="checkbox" data-setting="startTeamsTranscription" /> <span><span data-i18n="startTranscription">Start Teams transcription when I record</span><br /><span class="hint" data-i18n="startTranscriptionHint">Everyone sees it, and Microsoft stores the transcript.</span></span></label>
+      <label><input type="checkbox" data-setting="matchTeamsSpokenLanguage" /> <span><span data-i18n="matchSpokenLanguage">Set Teams' spoken language to Koalino's</span><br /><span class="hint" data-i18n="matchSpokenLanguageHint">When Koalino has a fixed language. It changes the language for the whole meeting, and others may see it.</span></span></label>
+    </section>
+    <script src="options.js"></script>
+  </body>
+</html>

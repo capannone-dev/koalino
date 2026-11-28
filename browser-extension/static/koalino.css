@@ -1,0 +1,37 @@
+/* The extension pages' look (#212, #214): the same colour tokens as the web dashboard, light and
+   dark, so the popup and options page match Koalino everywhere else. */
+:root {
+  color-scheme: light dark;
+  --canvas: #f8fafc; --surface: #ffffff; --surface-muted: #f1f5f9; --ink: #0f172a; --muted: #475569;
+  --line: #e2e8f0; --accent: #1d4ed8; --accent-strong: #1e40af; --on-accent: #ffffff;
+  --success: #15803d; --success-soft: #dcfce7; --warning: #b45309; --warning-soft: #fef3c7;
+  --danger: #b91c1c; --danger-soft: #fee2e2; --focus: #2563eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #020617; --surface: #0f172a; --surface-muted: #1e293b; --ink: #f1f5f9; --muted: #94a3b8;
+    --line: #334155; --accent: #60a5fa; --accent-strong: #93c5fd; --on-accent: #0f172a;
+    --success: #4ade80; --success-soft: #052e16; --warning: #fbbf24; --warning-soft: #422006;
+    --danger: #f87171; --danger-soft: #450a0a; --focus: #93c5fd;
+  }
+}
+body { font: 13px/1.45 system-ui, sans-serif; margin: 0; color: var(--ink); background: var(--canvas); }
+h1 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+h2 { font-size: 12px; margin: 18px 0 6px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+a { color: var(--accent); }
+button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 10px; }
+button:hover { background: var(--surface-muted); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.hint { color: var(--muted); font-size: 12px; }
+.ok { color: var(--success); } .warn { color: var(--warning); } .bad { color: var(--danger); } .checking { color: var(--muted); }
+.card { padding: 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); margin-bottom: 10px; }
+.banner { padding: 10px; border-radius: 10px; margin-bottom: 10px; background: var(--danger-soft); color: var(--danger); }
+.banner.ok { background: var(--success-soft); color: var(--success); }
+.banner button { margin-top: 8px; }
+.primary { width: 100%; min-height: 40px; border: none; background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.primary:hover { background: var(--accent-strong); }
+.primary.stop { background: var(--danger); color: #fff; }
+.primary:disabled { opacity: .5; cursor: default; }
+label { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
+.card > h2:first-child { margin-top: 0; }
+.primary + .hint { margin-top: 4px; }

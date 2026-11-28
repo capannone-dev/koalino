@@ -61,5 +61,10 @@
   "siteChoices": "Tus elecciones: siempre en {always}; nunca en {never}.",
   "noSites": "ninguno",
   "forgetSiteChoices": "Olvidar las elecciones por sitio",
-  "teamsSettings": "Teams"
+  "teamsSettings": "Teams",
+  "checking": "Comprobando la conexión…",
+  "checkAgain": "Comprobar de nuevo",
+  "settings": "Ajustes",
+  "optionsTitle": "Ajustes de Koalino",
+  "allSitesSettings": "Todos los sitios"
 }

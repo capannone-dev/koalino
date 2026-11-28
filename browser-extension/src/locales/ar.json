@@ -61,5 +61,10 @@
   "siteChoices": "اختياراتك: دائمًا على {always}؛ أبدًا على {never}.",
   "noSites": "لا شيء",
   "forgetSiteChoices": "نسيان الاختيارات لكل موقع",
-  "teamsSettings": "Teams"
+  "teamsSettings": "Teams",
+  "checking": "جارٍ التحقق من الاتصال…",
+  "checkAgain": "تحقق مرة أخرى",
+  "settings": "الإعدادات",
+  "optionsTitle": "إعدادات Koalino",
+  "allSitesSettings": "كل المواقع"
 }

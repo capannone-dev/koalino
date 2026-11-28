@@ -61,5 +61,10 @@
   "siteChoices": "你的选择：总是录制：{always}；从不询问：{never}。",
   "noSites": "无",
   "forgetSiteChoices": "忘记各网站的选择",
-  "teamsSettings": "Teams"
+  "teamsSettings": "Teams",
+  "checking": "正在检查连接…",
+  "checkAgain": "重新检查",
+  "settings": "设置",
+  "optionsTitle": "Koalino 设置",
+  "allSitesSettings": "所有网站"
 }

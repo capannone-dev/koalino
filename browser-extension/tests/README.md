@@ -17,3 +17,5 @@ The any-site specs (#174): `callSignal.test.ts` (when a page is in a call), `scr
 a face, a camera-off tile; and which video the tracker keeps), `sites.test.ts` (known services and
 titles) and `anySite.test.ts` (registering the every-site scripts and injecting into one tab,
 over a fake `chrome.scripting`).
+
+`popupStatus.test.ts` (#212) covers the popup's connection line.

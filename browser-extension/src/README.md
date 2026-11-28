@@ -11,5 +11,6 @@ entry point into one script (`build.mjs`).
 | `content/` | The isolated content-script world on call pages | `content.ts` → `content.js` |
 | `background/` | The background (Chrome service worker, Firefox event page) | `background.ts` → `background.js` |
 | `popup/` | The toolbar popup | `popup.ts` → `popup.js` |
+| `options/` | The settings page (#212) | `options.ts` → `options.js` |
 | `lib/` | Pure logic, used by the others and covered by `tests/` | — |
 | `locales/` | The text shown, one JSON file per language (#124) | — |

@@ -13,3 +13,7 @@ Since #174 it has **Record this tab** (Stop on a tab that records; through the b
 **Watch every website for calls**, which asks the browser for access to every https site before
 it turns on. It lists the per-site Always / Never choices with a button to forget them, and groups
 the Teams-only settings under their own heading.
+
+Since #212 the popup is only status and action: it checks the connection itself when opened (a "Check again"
+button appears only when something is wrong), has one main button (Record this tab, or Stop), shows the access
+banner only when access is missing, and links to the options page (`src/options/`), where the settings now live.

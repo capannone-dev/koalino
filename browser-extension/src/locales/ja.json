@@ -61,5 +61,10 @@
   "siteChoices": "あなたの選択：常に録音：{always}、尋ねない：{never}。",
   "noSites": "なし",
   "forgetSiteChoices": "サイトごとの選択を消去",
-  "teamsSettings": "Teams"
+  "teamsSettings": "Teams",
+  "checking": "接続を確認しています…",
+  "checkAgain": "もう一度確認",
+  "settings": "設定",
+  "optionsTitle": "Koalino の設定",
+  "allSitesSettings": "すべてのサイト"
 }

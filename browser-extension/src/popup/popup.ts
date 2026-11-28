@@ -1,20 +1,17 @@
 /**
  * The popup (Issue #102): shows whether the Koalino helper (native host) and app are
- * reachable, which meetings are being recorded, what happened to the last Teams transcript fetch,
- * and the settings as checkboxes. When the extension may not run on the meeting sites, it says so
- * first and offers to allow it.
+ * reachable, which meetings are being recorded, and what happened to the last Teams transcript
+ * fetch. When the extension may not run on the meeting sites, it says so first and offers to
+ * allow it. Since #174 it records the current tab on any site ("Record this tab").
  *
- * Since #174 it also records the current tab on any site ("Record this tab", through the
- * background), lets the owner watch every website for calls (asking the browser for access to
- * all sites), and shows and forgets the per-site Always / Never choices.
+ * Since #212 it checks the connection by itself when opened, has one main button (Record this tab
+ * or Stop), and leaves the settings to the options page, opened by its Settings link.
  */
 import type { PopupRequest, PopupState, TabRecordingReply } from "../background/background";
-import { ANY_SITE_PATTERNS } from "../lib/anySite";
-import { msg, textDirection, uiLanguage, type MessageKey } from "../lib/i18n";
-import { ExtensionSettings } from "../lib/settings";
+import { msg } from "../lib/i18n";
+import { translatePage } from "../lib/pageText";
+import { connectionStatus } from "../lib/popupStatus";
 import { hasTeamsAccess, requestTeamsAccess } from "../lib/siteAccess";
-import { MEETING_SERVICES } from "../lib/sites";
-import { loadSettings, saveSettings } from "../lib/storage";
 
 /** The tab the popup was opened on, or null (a window without tabs). */
 let currentTabId: number | null = null;
@@ -26,20 +23,11 @@ function render(state: PopupState): void {
   const host = document.getElementById("host");
   const recordings = document.getElementById("recordings");
   if (!host || !recordings) return;
-  const { connection } = state;
-  if (connection.host === "missing") {
-    host.className = "bad";
-    host.textContent = msg("helperMissing");
-  } else if (connection.bridge === "connected") {
-    host.className = "ok";
-    host.textContent = msg("connectedToApp");
-  } else if (connection.bridge === "unavailable") {
-    host.className = "warn";
-    host.textContent = msg("appNotRunning");
-  } else {
-    host.className = "";
-    host.textContent = msg("notCheckedYet");
-  }
+  const status = connectionStatus(state.connection);
+  host.className = status.tone;
+  host.textContent = msg(status.key);
+  // "Check again" only when something is wrong; a working connection needs no button.
+  document.getElementById("check")?.toggleAttribute("hidden", status.tone === "ok" || status.tone === "checking");
   recordings.textContent =
     state.recordings.length > 0
       ? msg("recordingMeetings", { meetings: state.recordings.join("\n") })
@@ -58,6 +46,7 @@ function renderTabButton(recording: boolean): void {
   const button = document.getElementById("record-tab");
   if (!button) return;
   button.textContent = msg(recording ? "stopThisTab" : "recordThisTab");
+  button.classList.toggle("stop", recording);
   button.toggleAttribute("disabled", currentTabId === null);
 }
 
@@ -73,66 +62,10 @@ async function toggleTabRecording(): Promise<void> {
   renderTabButton(reply.recording);
 }
 
-/** A site key as the owner knows it: the service's name, else the host. */
-function siteLabel(key: string): string {
-  return MEETING_SERVICES.find((service) => service.id === key)?.name ?? key;
-}
-
-/** Shows the per-site choices, or hides the line when there are none. */
-function renderSiteChoices(settings: ExtensionSettings): void {
-  const line = document.getElementById("site-choices");
-  const text = document.getElementById("site-choices-text");
-  if (!line || !text) return;
-  const list = (keys: string[]) => (keys.length > 0 ? keys.map(siteLabel).join(", ") : msg("noSites"));
-  text.textContent = msg("siteChoices", { always: list(settings.alwaysRecordSites), never: list(settings.neverAskSites) });
-  line.hidden = settings.alwaysRecordSites.length === 0 && settings.neverAskSites.length === 0;
-}
-
 /** Asks the background for its state. */
 async function refresh(kind: "get-state" | "check-host"): Promise<void> {
   const state = (await chrome.runtime.sendMessage({ kind })) as PopupState;
   render(state);
-}
-
-/** The settings shown as checkboxes. */
-type SwitchSetting = { [Key in keyof ExtensionSettings]: ExtensionSettings[Key] extends boolean ? Key : never }[keyof ExtensionSettings];
-
-/** Binds the checkboxes to the settings. */
-async function bindSettings(): Promise<void> {
-  const settings = await loadSettings();
-  for (const input of document.querySelectorAll<HTMLInputElement>("input[data-setting]")) {
-    const key = input.dataset.setting as SwitchSetting;
-    input.checked = settings[key];
-    input.addEventListener("change", () => {
-      void saveSettings({ [key]: input.checked });
-    });
-  }
-  renderSiteChoices(settings);
-  document.getElementById("forget-sites")?.addEventListener("click", () => {
-    void saveSettings({ alwaysRecordSites: [], neverAskSites: [] }).then(renderSiteChoices);
-  });
-  await bindWatchAllSites(settings);
-}
-
-/**
- * Binds "Watch every website for calls": on, it asks the browser for access to all sites first.
- * Side effects: May show the browser's permission prompt; writes the setting.
- */
-async function bindWatchAllSites(settings: ExtensionSettings): Promise<void> {
-  const input = document.getElementById("watch-all-sites") as HTMLInputElement | null;
-  if (!input) return;
-  input.checked = settings.watchAllSites && (await chrome.permissions.contains({ origins: ANY_SITE_PATTERNS }));
-  input.addEventListener("change", () => {
-    if (!input.checked) {
-      void saveSettings({ watchAllSites: false });
-      return;
-    }
-    // The request must start in the click itself, before any other await.
-    void chrome.permissions.request({ origins: ANY_SITE_PATTERNS }).then((granted) => {
-      input.checked = granted;
-      void saveSettings({ watchAllSites: granted });
-    });
-  });
 }
 
 /**
@@ -158,20 +91,6 @@ async function renderAccess(refused = false): Promise<void> {
 /** Set once access was granted from this page, to tell the owner to reload Teams. */
 let justGranted = false;
 
-/**
- * Puts the popup's fixed text in the browser's language.
- *
- * Inputs: None. Side effects: Sets `lang` and `dir` on the page and the text of every element
- * marked `data-i18n`.
- */
-function translatePage(): void {
-  document.documentElement.lang = uiLanguage();
-  document.documentElement.dir = textDirection();
-  for (const element of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
-    element.textContent = msg(element.dataset.i18n as MessageKey);
-  }
-}
-
 translatePage();
 document.getElementById("allow")?.addEventListener("click", () => {
   // The request must start in the click itself, before any other await.
@@ -182,12 +101,18 @@ document.getElementById("allow")?.addEventListener("click", () => {
 });
 
 document.getElementById("record-tab")?.addEventListener("click", () => void toggleTabRecording());
-document.getElementById("check")?.addEventListener("click", () => {
+/** Asks the background to reach the helper and app, then shows what it found. */
+function checkConnection(): void {
   void refresh("check-host");
   setTimeout(() => void refresh("get-state"), 1_500);
+}
+
+document.getElementById("check")?.addEventListener("click", checkConnection);
+document.getElementById("open-settings")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  void chrome.runtime.openOptionsPage();
 });
 void renderAccess();
-void bindSettings();
 void chrome.tabs
   .query({ active: true, currentWindow: true })
   .then(([tab]) => {
@@ -196,4 +121,5 @@ void chrome.tabs
     currentTabId = tab?.id !== undefined && !ownPage ? tab.id : null;
   })
   .catch(() => undefined)
-  .finally(() => void refresh("get-state"));
+  // Checked on every opening, so the owner never has to press a button to see the status.
+  .finally(checkConnection);

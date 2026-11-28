@@ -61,5 +61,10 @@
   "siteChoices": "Ваш выбор: всегда на {always}; никогда на {never}.",
   "noSites": "нет",
   "forgetSiteChoices": "Забыть выбор для сайтов",
-  "teamsSettings": "Teams"
+  "teamsSettings": "Teams",
+  "checking": "Проверка подключения…",
+  "checkAgain": "Проверить снова",
+  "settings": "Настройки",
+  "optionsTitle": "Настройки Koalino",
+  "allSitesSettings": "Все сайты"
 }

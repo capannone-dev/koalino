@@ -27,3 +27,6 @@ the Vitest specs under `tests/`.
 | `i18n.ts` | `msg(key, params)`: a message in the browser's language through `chrome.i18n`, else English; `textDirection` and `uiLanguage` for `dir` and `lang`, read from the messages so they match the text (#124). |
 | `localeFormat.ts` | Turns `src/locales/<lang>.json` into the browsers' `_locales/<dir>/messages.json` (`$NAME$` placeholders numbered in English order); `build.mjs` imports it. |
 | `siteAccess.ts` | Checks and asks for access to the meeting sites (the manifest's host permissions), which Firefox does not grant a hand-loaded Manifest V3 extension and Chrome lets the owner withhold (they include SharePoint, for the recap transcript frame), and `embeddedInTeams`, which tells a frame Teams opened from any other SharePoint page. |
+
+`popupStatus.ts` (#212) words the popup's connection line and its tone; `pageText.ts` puts the popup's and the
+options page's fixed text in the browser's language.

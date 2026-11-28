@@ -52,6 +52,8 @@ const baseManifest = {
   optional_host_permissions: ANY_SITE,
   icons: { 16: "icon-16.png", 32: "icon-32.png", 48: "icon-48.png", 128: "icon-128.png" },
   action: { default_popup: "popup.html", default_icon: { 16: "icon-16.png", 32: "icon-32.png", 48: "icon-48.png" } },
+  // The settings, grouped, in a page of their own (#212); the popup links to it.
+  options_ui: { page: "options.html", open_in_tab: true },
   content_scripts: [
     { matches: MEETING_SITES, js: ["hook.js"], run_at: "document_start", world: "MAIN" },
     { matches: MEETING_SITES, js: ["content.js"], run_at: "document_idle" },
@@ -108,6 +110,7 @@ for (const [browser, manifest] of Object.entries(manifests)) {
       content: "src/content/content.ts",
       hook: "src/page/hook.ts",
       popup: "src/popup/popup.ts",
+      options: "src/options/options.ts",
       "recap-frame": "src/recap/recapFrame.ts",
     },
     bundle: true,

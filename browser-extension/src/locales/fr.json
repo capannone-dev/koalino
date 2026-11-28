@@ -61,5 +61,10 @@
   "siteChoices": "Vos choix : toujours sur {always} ; jamais sur {never}.",
   "noSites": "aucun",
   "forgetSiteChoices": "Oublier les choix par site",
-  "teamsSettings": "Teams"
+  "teamsSettings": "Teams",
+  "checking": "Vérification de la connexion…",
+  "checkAgain": "Vérifier à nouveau",
+  "settings": "Paramètres",
+  "optionsTitle": "Paramètres de Koalino",
+  "allSitesSettings": "Tous les sites"
 }
