@@ -880,5 +880,7 @@
   "unableToShareTheRecording": "録音を共有できません",
   "@unableToShareTheRecording": {},
   "unableToSaveTheRecording": "録音を保存できません",
-  "@unableToSaveTheRecording": {}
+  "@unableToSaveTheRecording": {},
+  "todayAt": "今日 {time}",
+  "yesterdayAt": "昨日 {time}"
 }

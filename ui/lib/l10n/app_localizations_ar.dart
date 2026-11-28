@@ -3388,4 +3388,14 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get unableToSaveTheRecording => 'تعذّر حفظ التسجيل';
+
+  @override
+  String todayAt(String time) {
+    return 'اليوم $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return 'أمس $time';
+  }
 }

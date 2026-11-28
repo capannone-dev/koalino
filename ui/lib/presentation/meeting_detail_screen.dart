@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:io';
 
 // ignore: deprecated_member_use
+import 'package:note_taker_ui/presentation/meeting_time.dart';
 import 'package:note_taker_ui/controllers/recording_player_controller.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:note_taker_ui/presentation/recording_player_bar.dart';
@@ -708,7 +709,7 @@ final class _MeetingContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '${formatMeetingCreatedAt(summary.createdAt)} · '
+            '${formatMeetingWhen(summary.createdAt)} · '
             '${formatMeetingDuration(summary.durationMs)}',
             style: theme.textTheme.bodyMedium
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),

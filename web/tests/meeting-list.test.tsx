@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { MeetingList } from "@/components/meeting-list";
 import * as api from "@/lib/api";
+import { formatMeetingWhen } from "@/lib/meeting-metadata";
 
 vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), deleteMeeting: vi.fn(), renameMeeting: vi.fn() }));
 
@@ -34,6 +35,14 @@ test("lists each meeting title as a link to its detail page", () => {
 
   expect(screen.getByRole("link", { name: "Project Sync" })).toHaveAttribute("href", "/meetings/meeting-titled");
   expect(screen.getByRole("link", { name: "Meeting 2026-10-26 18:00 UTC" })).toBeInTheDocument();
+});
+
+test("rows show when the meeting happened in local words, not its internal ID (#210, #211)", () => {
+  const { container } = render(<MeetingList meetings={meetings} />);
+  expect(screen.queryByText("meeting-titled")).not.toBeInTheDocument();
+  const times = container.querySelectorAll("time");
+  expect(times[0]).toHaveAttribute("dateTime", "2026-10-27T09:05:00+00:00");
+  expect(times[0].textContent).toBe(formatMeetingWhen("2026-10-27T09:05:00+00:00", "en"));
 });
 
 test("the summary link says Summary in words, not only with an icon", () => {

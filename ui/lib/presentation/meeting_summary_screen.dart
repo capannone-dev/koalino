@@ -9,6 +9,7 @@ import 'dart:async';
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/presentation/meeting_time.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
@@ -540,17 +541,17 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                           summary.connectionLabel.isEmpty &&
                                   summary.model.isEmpty
                               ? l10n.writtenByYouOn(
-                                  formatMeetingCreatedAt(summary.createdAt))
+                                  formatMeetingWhen(summary.createdAt))
                               : summary.model.isEmpty
                                   // An answer from the owner's own AI app
                                   // or website has no model (#114, #126).
                                   ? l10n.writtenBySourceOn(
                                       summary.connectionLabel,
-                                      formatMeetingCreatedAt(summary.createdAt))
+                                      formatMeetingWhen(summary.createdAt))
                                   : l10n.writtenByOn(
                                       summary.model,
                                       summary.connectionLabel,
-                                      formatMeetingCreatedAt(summary.createdAt),
+                                      formatMeetingWhen(summary.createdAt),
                                       summary.edited ? ' · edited' : ''),
                           style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant),

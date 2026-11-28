@@ -880,5 +880,7 @@
   "unableToShareTheRecording": "Не удалось поделиться записью",
   "@unableToShareTheRecording": {},
   "unableToSaveTheRecording": "Не удалось сохранить запись",
-  "@unableToSaveTheRecording": {}
+  "@unableToSaveTheRecording": {},
+  "todayAt": "Сегодня {time}",
+  "yesterdayAt": "Вчера {time}"
 }

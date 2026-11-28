@@ -1,6 +1,7 @@
 // Renders the meeting list title-first, as a phone list or a desktop list-detail layout.
 
 // ignore: deprecated_member_use
+import 'package:note_taker_ui/presentation/meeting_time.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -450,7 +451,7 @@ final class _MeetingList extends StatelessWidget {
                         ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text(
-                    '${formatMeetingCreatedAt(meeting.createdAt)} · '
+                    '${formatMeetingWhen(meeting.createdAt)} · '
                     '${formatMeetingDuration(meeting.durationMs)}'
                     '${meeting.recordedOnLabel == null ? '' : ' · ${meeting.recordedOnLabel}'}',
                   ),

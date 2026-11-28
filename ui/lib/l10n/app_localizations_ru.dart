@@ -3391,4 +3391,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get unableToSaveTheRecording => 'Не удалось сохранить запись';
+
+  @override
+  String todayAt(String time) {
+    return 'Сегодня $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return 'Вчера $time';
+  }
 }

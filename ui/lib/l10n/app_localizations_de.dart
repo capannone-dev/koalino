@@ -3416,4 +3416,14 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get unableToSaveTheRecording =>
       'Die Aufnahme kann nicht gespeichert werden';
+
+  @override
+  String todayAt(String time) {
+    return 'Heute $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return 'Gestern $time';
+  }
 }

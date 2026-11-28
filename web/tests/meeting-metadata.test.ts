@@ -2,7 +2,7 @@
 
 import { describe, expect, it, test } from "vitest";
 import type { Combining } from "@/lib/api";
-import { describeCombining, describeRecordedOn, describeTranscriptionLanguages, formatMeetingCreatedAt, transcriptionLanguageName } from "@/lib/meeting-metadata";
+import { describeCombining, describeRecordedOn, describeTranscriptionLanguages, formatMeetingCreatedAt, formatMeetingWhen, transcriptionLanguageName } from "@/lib/meeting-metadata";
 
 describe("meeting metadata", () => {
   it("formats the creation time in UTC as the apps do", () => {
@@ -70,4 +70,27 @@ test("words how far combining a meeting's recordings got (#88)", () => {
     "Not combined: audio from Pixel did not arrive within three weeks."
   );
   expect(describeCombining(undefined)).toBeNull();
+});
+
+describe("meeting times for people (#210)", () => {
+  // Local wall-clock instants, so the expectations hold in any time zone.
+  const now = new Date(2026, 10, 28, 18, 0);
+  const time = (instant: Date) => new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" }).format(instant);
+
+  it("names today and yesterday", () => {
+    const morning = new Date(2026, 10, 28, 9, 32);
+    expect(formatMeetingWhen(morning.toISOString(), "en", now)).toBe(`Today ${time(morning)}`);
+    const lastNight = new Date(2026, 10, 27, 23, 50);
+    expect(formatMeetingWhen(lastNight.toISOString(), "it", now)).toMatch(/^Ieri /);
+  });
+
+  it("shows the weekday this week, day and month this year, else the full date", () => {
+    const monday = new Date(2026, 10, 23, 14, 0);
+    expect(formatMeetingWhen(monday.toISOString(), "en", now)).toBe(`Mon ${time(monday)}`);
+    const october = new Date(2026, 9, 28, 8, 5);
+    expect(formatMeetingWhen(october.toISOString(), "en", now)).toBe(`Oct 28 ${time(october)}`);
+    const lastYear = new Date(2025, 2, 2, 8, 5);
+    expect(formatMeetingWhen(lastYear.toISOString(), "en", now)).toBe(`Mar 2, 2025 ${time(lastYear)}`);
+    expect(formatMeetingWhen("not a date", "en", now)).toBe("not a date");
+  });
 });

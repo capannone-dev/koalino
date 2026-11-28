@@ -6,7 +6,9 @@ import 'dart:ffi';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:intl/intl.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
+import 'package:note_taker_ui/presentation/meeting_time.dart';
 
 import 'core_library.dart';
 import 'speaker_rename_bridge.dart';
@@ -401,13 +403,10 @@ String formatMeetingCreatedAt(DateTime createdAt) {
       '${twoDigits(utcTime.minute)} UTC';
 }
 
-/// Formats an instant's UTC calendar day as `YYYY-MM-DD`.
-String formatCalendarDay(DateTime instant) {
-  final DateTime utcTime = instant.toUtc();
-  String twoDigits(int value) => value.toString().padLeft(2, '0');
-  return '${utcTime.year.toString().padLeft(4, '0')}-${twoDigits(utcTime.month)}-'
-      '${twoDigits(utcTime.day)}';
-}
+/// Words an instant's calendar day in local time and the app's language, such as `Dec 19, 2026`
+/// (#210).
+String formatCalendarDay(DateTime instant) =>
+    DateFormat.yMMMd(dateLocale()).format(instant.toLocal());
 
 /// Formats milliseconds as `M:SS`, or `H:MM:SS` from one hour, truncating partial seconds.
 String formatMeetingDuration(int durationMs) {

@@ -880,5 +880,7 @@
   "unableToShareTheRecording": "无法分享录音",
   "@unableToShareTheRecording": {},
   "unableToSaveTheRecording": "无法保存录音",
-  "@unableToSaveTheRecording": {}
+  "@unableToSaveTheRecording": {},
+  "todayAt": "今天 {time}",
+  "yesterdayAt": "昨天 {time}"
 }

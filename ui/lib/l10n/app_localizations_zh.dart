@@ -3139,4 +3139,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unableToSaveTheRecording => '无法保存录音';
+
+  @override
+  String todayAt(String time) {
+    return '今天 $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return '昨天 $time';
+  }
 }

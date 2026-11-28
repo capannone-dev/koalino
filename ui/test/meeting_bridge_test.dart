@@ -47,10 +47,10 @@ void main() {
       expect(waiting?.state, CombiningState.waiting);
       expect(meetings[0].recordedOn[1].connected, isFalse);
       expect(waiting?.description,
-          'Waiting for audio from Pixel (not connected). It is kept encrypted until 2026-11-23.');
+          'Waiting for audio from Pixel (not connected). It is kept encrypted until ${formatCalendarDay(DateTime.utc(2026, 11, 23, 15))}.');
       expect(waiting?.isSettled, isFalse);
       expect(meetings[1].combining?.description,
-          'Recorded on this device only. A recording of it made on another device can still be combined until 2026-11-22.');
+          'Recorded on this device only. A recording of it made on another device can still be combined until ${formatCalendarDay(DateTime.utc(2026, 11, 22, 15))}.');
       expect(meetings[2].combining, isNull);
     });
 
@@ -79,7 +79,7 @@ void main() {
       expect(
           describe(CombiningState.sending,
               keptUntil: DateTime.utc(2026, 11, 29)),
-          'This device\'s audio still has to reach Laptop. It is kept encrypted until 2026-11-29.');
+          'This device\'s audio still has to reach Laptop. It is kept encrypted until ${formatCalendarDay(DateTime.utc(2026, 11, 29, 15))}.');
       expect(describe(CombiningState.combined),
           'Transcript combined from every device.');
       expect(

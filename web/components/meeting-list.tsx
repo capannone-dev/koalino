@@ -7,6 +7,7 @@ import Link from "next/link";
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { MeetingProjectDialog } from "@/components/meeting-project-dialog";
+import { MeetingTime } from "@/components/meeting-time";
 import { RenameMeetingDialog } from "@/components/rename-meeting-dialog";
 import type { MeetingSummary } from "@/lib/api";
 import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
@@ -105,7 +106,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                 >
                   {meeting.title}
                 </Link>
-                <small className="block truncate text-muted">{meeting.meeting_id}</small>
+                <MeetingTime createdAt={meeting.created_at} className="block truncate text-sm text-muted" />
                 {describeRecordedOn(meeting, t) === null ? null : (
                   <small className="block truncate text-muted">{describeRecordedOn(meeting, t)}</small>
                 )}

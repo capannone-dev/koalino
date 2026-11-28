@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_taker_ui/presentation/meeting_time.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
@@ -63,7 +64,10 @@ void main() {
       (WidgetTester tester) async {
     await pumpMeetingDetail(tester, 'meeting-titled');
 
-    expect(find.text('2026-10-27 09:05 UTC · 1:05'), findsOneWidget);
+    expect(
+        find.text(
+            '${formatMeetingWhen(DateTime.utc(2026, 10, 27, 9, 5))} · 1:05'),
+        findsOneWidget);
     expect(
         find.text('Transcription languages: Italian, English'), findsOneWidget);
     expect(find.text('meeting-titled'), findsOneWidget);
@@ -188,7 +192,7 @@ void main() {
         find.descendant(
             of: find.byKey(const ValueKey<String>('meeting-combining')),
             matching: find.text(
-                'Waiting for audio from Pixel (not connected). It is kept encrypted until 2026-11-23.')),
+                'Waiting for audio from Pixel (not connected). It is kept encrypted until ${formatCalendarDay(DateTime.utc(2026, 11, 23, 15))}.')),
         findsOneWidget);
     await tester.tap(find.byKey(const ValueKey<String>('split-open-meeting')));
     await tester.pumpAndSettle();

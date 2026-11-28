@@ -880,5 +880,7 @@
   "unableToShareTheRecording": "Die Aufnahme kann nicht geteilt werden",
   "@unableToShareTheRecording": {},
   "unableToSaveTheRecording": "Die Aufnahme kann nicht gespeichert werden",
-  "@unableToSaveTheRecording": {}
+  "@unableToSaveTheRecording": {},
+  "todayAt": "Heute {time}",
+  "yesterdayAt": "Gestern {time}"
 }

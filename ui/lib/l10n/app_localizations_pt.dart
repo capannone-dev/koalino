@@ -3375,4 +3375,14 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get unableToSaveTheRecording => 'Não foi possível salvar a gravação';
+
+  @override
+  String todayAt(String time) {
+    return 'Hoje $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return 'Ontem $time';
+  }
 }

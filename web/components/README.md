@@ -120,3 +120,7 @@ their manifest in one line (`describeCapabilities`, such as "8 CPU cores · Whis
 or "Not connected". A nearby device shows the name it told, with its short peer ID below
 (#121), and **Rename** opens an inline field for this server's name; a refused name stays there
 with its reason.
+
+`meeting-time.tsx` (#210) shows a meeting's time in the reader's time zone and words ("Today 9:32 AM"),
+formatted after mounting, since the server cannot know the browser's time zone. Meeting rows show it
+instead of the meeting's internal ID (#211).

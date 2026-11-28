@@ -3387,4 +3387,14 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get unableToSaveTheRecording =>
       'Impossible d\'enregistrer le fichier audio';
+
+  @override
+  String todayAt(String time) {
+    return 'Aujourd\'hui $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return 'Hier $time';
+  }
 }

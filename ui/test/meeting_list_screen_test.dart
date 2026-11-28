@@ -8,6 +8,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_taker_ui/presentation/meeting_time.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
@@ -57,8 +58,14 @@ void main() {
 
     expect(find.text('Project Sync'), findsOneWidget);
     expect(find.text('Meeting 2026-10-26 18:00 UTC'), findsOneWidget);
-    expect(find.text('2026-10-27 09:05 UTC · 1:05'), findsOneWidget);
-    expect(find.text('2026-10-26 18:00 UTC · 0:00'), findsOneWidget);
+    expect(
+        find.text(
+            '${formatMeetingWhen(DateTime.utc(2026, 10, 27, 9, 5))} · 1:05'),
+        findsOneWidget);
+    expect(
+        find.text(
+            '${formatMeetingWhen(DateTime.utc(2026, 10, 26, 18, 0))} · 0:00'),
+        findsOneWidget);
   });
 
   testWidgets('places the title above, and larger than, its metadata',
@@ -67,7 +74,8 @@ void main() {
         tester, FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting]));
 
     final Finder titleText = find.text('Project Sync');
-    final Finder metadataText = find.text('2026-10-27 09:05 UTC · 1:05');
+    final Finder metadataText = find
+        .text('${formatMeetingWhen(DateTime.utc(2026, 10, 27, 9, 5))} · 1:05');
     expect(tester.getTopLeft(titleText).dy,
         lessThan(tester.getTopLeft(metadataText).dy));
     final TextStyle titleStyle =
@@ -715,7 +723,9 @@ void main() {
       FakeMeetingBridge(meetings: <MeetingSummary>[combinedMeeting]),
     );
 
-    expect(find.text('2026-11-02 15:00 UTC · 2:00 · Laptop + Pixel'),
+    expect(
+        find.text(
+            '${formatMeetingWhen(DateTime.utc(2026, 11, 2, 15, 0))} · 2:00 · Laptop + Pixel'),
         findsOneWidget);
   });
 

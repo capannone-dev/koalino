@@ -3381,4 +3381,14 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get unableToSaveTheRecording => 'Impossibile salvare la registrazione';
+
+  @override
+  String todayAt(String time) {
+    return 'Oggi $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return 'Ieri $time';
+  }
 }

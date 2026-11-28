@@ -20,6 +20,33 @@ export function formatMeetingCreatedAt(createdAt: string): string {
   );
 }
 
+/**
+ * Words a meeting's time for people (#210), in the browser's time zone and the page's language:
+ * "Today 9:32 AM", "Yesterday …", the weekday within the last week, "Oct 28 …" within this year,
+ * else "Mar 2, 2025 …".
+ *
+ * Inputs: the daemon's `created_at`; the page language; `now` (for tests).
+ * Outputs: the text, or the input unchanged when it is not a date. Side effects: none.
+ */
+export function formatMeetingWhen(createdAt: string, language: string, now: Date = new Date()): string {
+  const instant = new Date(createdAt);
+  if (Number.isNaN(instant.getTime())) return createdAt;
+  const time = new Intl.DateTimeFormat(language, { hour: "numeric", minute: "2-digit" }).format(instant);
+  // Whole calendar days between the two local dates, immune to daylight-saving shifts.
+  const dayNumber = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000;
+  const daysAgo = dayNumber(now) - dayNumber(instant);
+  if (daysAgo === 0 || daysAgo === 1) {
+    const word = new Intl.RelativeTimeFormat(language, { numeric: "auto" }).format(-daysAgo, "day");
+    return `${word.charAt(0).toLocaleUpperCase(language)}${word.slice(1)} ${time}`;
+  }
+  if (daysAgo > 1 && daysAgo < 7) {
+    return `${new Intl.DateTimeFormat(language, { weekday: "short" }).format(instant)} ${time}`;
+  }
+  const sameYear = instant.getFullYear() === now.getFullYear();
+  const date = new Intl.DateTimeFormat(language, sameYear ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" }).format(instant);
+  return `${date} ${time}`;
+}
+
 /** Whisper codes that are not standard language tags, named as the apps name them. */
 const whisperOnlyNames: Record<string, string> = { jw: "Javanese" };
 

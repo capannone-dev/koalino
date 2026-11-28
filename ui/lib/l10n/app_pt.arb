@@ -880,5 +880,7 @@
   "unableToShareTheRecording": "Não foi possível compartilhar a gravação",
   "@unableToShareTheRecording": {},
   "unableToSaveTheRecording": "Não foi possível salvar a gravação",
-  "@unableToSaveTheRecording": {}
+  "@unableToSaveTheRecording": {},
+  "todayAt": "Hoje {time}",
+  "yesterdayAt": "Ontem {time}"
 }

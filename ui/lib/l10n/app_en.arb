@@ -2525,5 +2525,9 @@
   "unableToShareTheRecording": "Unable to share the recording",
   "@unableToShareTheRecording": {"description": "Sharing or saving a kept recording from the player (#199)."},
   "unableToSaveTheRecording": "Unable to save the recording",
-  "@unableToSaveTheRecording": {"description": "Sharing or saving a kept recording from the player (#199)."}
+  "@unableToSaveTheRecording": {"description": "Sharing or saving a kept recording from the player (#199)."},
+  "todayAt": "Today {time}",
+  "@todayAt": {"description": "A meeting's time when it happened today, e.g. 'Today 9:32 AM'.", "placeholders": {"time": {"type": "String"}}},
+  "yesterdayAt": "Yesterday {time}",
+  "@yesterdayAt": {"description": "A meeting's time when it happened yesterday.", "placeholders": {"time": {"type": "String"}}}
 }

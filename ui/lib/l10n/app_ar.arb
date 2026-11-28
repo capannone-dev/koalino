@@ -880,5 +880,7 @@
   "unableToShareTheRecording": "تعذّرت مشاركة التسجيل",
   "@unableToShareTheRecording": {},
   "unableToSaveTheRecording": "تعذّر حفظ التسجيل",
-  "@unableToSaveTheRecording": {}
+  "@unableToSaveTheRecording": {},
+  "todayAt": "اليوم {time}",
+  "yesterdayAt": "أمس {time}"
 }

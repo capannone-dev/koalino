@@ -14,7 +14,8 @@ import { MeetingSummaryPanel } from "@/components/meeting-summary-panel";
 import { MeetingTranscript } from "@/components/meeting-transcript";
 import { RecordingPlaybackProvider } from "@/lib/recording-playback";
 import { getMeeting, getMeetings } from "@/lib/api";
-import { describeTranscriptionLanguages, formatMeetingCreatedAt } from "@/lib/meeting-metadata";
+import { describeTranscriptionLanguages } from "@/lib/meeting-metadata";
+import { MeetingTime } from "@/components/meeting-time";
 import { getMeetingNotes } from "@/lib/edits-api";
 import { getLlmSettings, getMeetingSummary } from "@/lib/llm-api";
 import { getProjects, type ProjectSummary } from "@/lib/projects-api";
@@ -41,7 +42,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       />
       {projects === null ? null : <MeetingProjectPicker meetingId={meeting.meeting_id} projectId={projectId} projects={projects} />}
       <p className="text-muted">
-        <time dateTime={meeting.created_at}>{formatMeetingCreatedAt(meeting.created_at)}</time>
+        <MeetingTime createdAt={meeting.created_at} />
       </p>
       {languages === null ? null : <p className="text-muted">{languages}</p>}
       <MeetingRecordedOn meeting={meeting} />

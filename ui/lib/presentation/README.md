@@ -182,6 +182,9 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   HTML into text), and text files. Office documents say they can't be shown yet.
 - `markdown_view.dart` renders Markdown with the pure-Dart `markdown` parser. Links are inert and
   images show their description, so nothing reaches the network.
+- `meeting_time.dart` (#210) words a meeting's time for people, in the device's time zone and the
+  app's language: "Today 9:32 AM", "Yesterday …", the weekday this week, "Oct 28 …" this year,
+  else the full date. Untitled meetings' stored titles keep their UTC form.
 - `meeting_summary_screen.dart` (#95) is a meeting's summary page: the stored summary (Markdown,
   shown with `MarkdownView(embedded: true)`), "Summarize with" a connection, and the meeting's own
   prompt. `MeetingSummaryButton` (the summary icon beside each meeting in the meeting list, a

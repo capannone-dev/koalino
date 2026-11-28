@@ -5337,6 +5337,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unable to save the recording'**
   String get unableToSaveTheRecording;
+
+  /// A meeting's time when it happened today, e.g. 'Today 9:32 AM'.
+  ///
+  /// In en, this message translates to:
+  /// **'Today {time}'**
+  String todayAt(String time);
+
+  /// A meeting's time when it happened yesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday {time}'**
+  String yesterdayAt(String time);
 }
 
 class _AppLocalizationsDelegate

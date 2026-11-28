@@ -3207,4 +3207,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get unableToSaveTheRecording => '録音を保存できません';
+
+  @override
+  String todayAt(String time) {
+    return '今日 $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return '昨日 $time';
+  }
 }
