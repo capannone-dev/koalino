@@ -932,5 +932,21 @@
   "someMeetingsCouldNotBeMoved": "Certaines réunions n'ont pas pu être déplacées.",
   "someMeetingsCouldNotBeExported": "Certaines réunions n'ont pas pu être exportées.",
   "exportedMeetingsTo": "{count} réunions exportées dans {folder}",
-  "meetingsCount": "{count, plural, =1{1 réunion} other{{count} réunions}}"
+  "meetingsCount": "{count, plural, =1{1 réunion} other{{count} réunions}}",
+  "microphone": "Microphone",
+  "skip": "Passer",
+  "next": "Suivant",
+  "welcomeToKoalino": "Bienvenue dans Koalino",
+  "koalinoIntro": "Koalino enregistre vos réunions, note qui a dit quoi et garde les notes synchronisées entre vos propres appareils.",
+  "privacyPromise": "Privé par conception : les enregistrements sont transcrits sur cet appareil et vos notes ne circulent, chiffrées, qu'entre les appareils que vous associez. Rien ne part vers un serveur, sauf si vous connectez vous-même un service d'IA.",
+  "microphoneReason": "Koalino a besoin du microphone pour enregistrer vos réunions. Il n'écoute que pendant l'enregistrement.",
+  "notificationsReason": "Android demande aussi les notifications : pendant l'enregistrement, une notification affiche Pause et Arrêter.",
+  "allowMicrophone": "Autoriser le microphone",
+  "microphoneAllowed": "Microphone autorisé.",
+  "microphoneNotAllowedYet": "Pas encore autorisé. Koalino redemandera lors du premier enregistrement.",
+  "transcriptionLanguageReason": "La langue de la plupart de vos réunions. Automatique la détecte dans chaque réunion.",
+  "modelRecommended": "Modèle : Automatique (recommandé). Koalino choisit le meilleur modèle que cet appareil fait bien tourner et le télécharge en Wi-Fi.",
+  "chooseAnotherModel": "Choisir un autre modèle",
+  "startUsingKoalino": "Commencer avec Koalino",
+  "firstRunStep": "{step} sur {total}"
 }

@@ -3403,4 +3403,59 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get microphone => 'マイク';
+
+  @override
+  String get skip => 'スキップ';
+
+  @override
+  String get next => '次へ';
+
+  @override
+  String get welcomeToKoalino => 'Koalino へようこそ';
+
+  @override
+  String get koalinoIntro =>
+      'Koalino は会議を録音し、誰が何を話したかを書き起こし、あなた自身のデバイス間でメモを同期します。';
+
+  @override
+  String get privacyPromise =>
+      'プライバシー重視の設計：録音はこのデバイスで文字起こしされ、メモはペアリングしたデバイス間でのみ暗号化して送られます。AI サービスを自分で接続しない限り、サーバーには何も送られません。';
+
+  @override
+  String get microphoneReason => '会議を録音するためにマイクが必要です。録音中だけ音声を聞き取ります。';
+
+  @override
+  String get notificationsReason =>
+      'Android は通知についても確認します。録音中は一時停止と停止のボタン付きの通知が表示されます。';
+
+  @override
+  String get allowMicrophone => 'マイクを許可';
+
+  @override
+  String get microphoneAllowed => 'マイクが許可されました。';
+
+  @override
+  String get microphoneNotAllowedYet => 'まだ許可されていません。最初に録音するときに再度確認します。';
+
+  @override
+  String get transcriptionLanguageReason =>
+      'ほとんどの会議で使う言語です。「自動」は会議ごとに言語を判別します。';
+
+  @override
+  String get modelRecommended =>
+      'モデル：自動（推奨）。このデバイスで快適に動く最適なモデルを選び、Wi-Fi 接続時にダウンロードします。';
+
+  @override
+  String get chooseAnotherModel => '別のモデルを選ぶ';
+
+  @override
+  String get startUsingKoalino => 'Koalino を使い始める';
+
+  @override
+  String firstRunStep(int step, int total) {
+    return '$step / $total';
+  }
 }

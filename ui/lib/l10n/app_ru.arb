@@ -932,5 +932,21 @@
   "someMeetingsCouldNotBeMoved": "Некоторые встречи не удалось переместить.",
   "someMeetingsCouldNotBeExported": "Некоторые встречи не удалось экспортировать.",
   "exportedMeetingsTo": "Встречи ({count}) экспортированы в {folder}",
-  "meetingsCount": "{count, plural, =1{1 встреча} few{{count} встречи} many{{count} встреч} other{{count} встречи}}"
+  "meetingsCount": "{count, plural, =1{1 встреча} few{{count} встречи} many{{count} встреч} other{{count} встречи}}",
+  "microphone": "Микрофон",
+  "skip": "Пропустить",
+  "next": "Далее",
+  "welcomeToKoalino": "Добро пожаловать в Koalino",
+  "koalinoIntro": "Koalino записывает встречи, отмечает, кто что сказал, и синхронизирует заметки между вашими устройствами.",
+  "privacyPromise": "Конфиденциально по замыслу: записи расшифровываются на этом устройстве, а заметки передаются в зашифрованном виде только между сопряжёнными вами устройствами. Ничего не уходит на сервер, если вы сами не подключите ИИ-сервис.",
+  "microphoneReason": "Koalino нужен микрофон, чтобы записывать встречи. Он слушает только во время записи.",
+  "notificationsReason": "Android также спросит об уведомлениях: во время записи уведомление показывает «Пауза» и «Стоп».",
+  "allowMicrophone": "Разрешить микрофон",
+  "microphoneAllowed": "Микрофон разрешён.",
+  "microphoneNotAllowedYet": "Пока не разрешено. Koalino спросит снова при первой записи.",
+  "transcriptionLanguageReason": "Язык большинства ваших встреч. «Автоматически» определяет его в каждой встрече.",
+  "modelRecommended": "Модель: автоматически (рекомендуется). Koalino выберет лучшую модель для этого устройства и скачает её по Wi-Fi.",
+  "chooseAnotherModel": "Выбрать другую модель",
+  "startUsingKoalino": "Начать работу",
+  "firstRunStep": "{step} из {total}"
 }

@@ -3331,4 +3331,56 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get microphone => '麦克风';
+
+  @override
+  String get skip => '跳过';
+
+  @override
+  String get next => '下一步';
+
+  @override
+  String get welcomeToKoalino => '欢迎使用 Koalino';
+
+  @override
+  String get koalinoIntro => 'Koalino 会录下你的会议，记下谁说了什么，并在你自己的设备之间同步笔记。';
+
+  @override
+  String get privacyPromise =>
+      '隐私优先：录音在本设备上转写，笔记只在你配对的设备之间加密传输。除非你自己连接 AI 服务，否则不会发送到任何服务器。';
+
+  @override
+  String get microphoneReason => 'Koalino 需要麦克风来录制会议，只在你录音时收音。';
+
+  @override
+  String get notificationsReason => 'Android 还会询问通知权限：录音时，通知中会显示暂停和停止。';
+
+  @override
+  String get allowMicrophone => '允许使用麦克风';
+
+  @override
+  String get microphoneAllowed => '已允许使用麦克风。';
+
+  @override
+  String get microphoneNotAllowedYet => '尚未允许。首次录音时 Koalino 会再次询问。';
+
+  @override
+  String get transcriptionLanguageReason => '你大多数会议使用的语言。“自动”会在每场会议中识别语言。';
+
+  @override
+  String get modelRecommended =>
+      '模型：自动（推荐）。Koalino 会选择本设备能流畅运行的最佳模型，并在连接 Wi-Fi 时下载。';
+
+  @override
+  String get chooseAnotherModel => '选择其他模型';
+
+  @override
+  String get startUsingKoalino => '开始使用 Koalino';
+
+  @override
+  String firstRunStep(int step, int total) {
+    return '第 $step 步，共 $total 步';
+  }
 }

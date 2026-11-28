@@ -932,5 +932,21 @@
   "someMeetingsCouldNotBeMoved": "Algunas reuniones no se pudieron mover.",
   "someMeetingsCouldNotBeExported": "Algunas reuniones no se pudieron exportar.",
   "exportedMeetingsTo": "{count} reuniones exportadas a {folder}",
-  "meetingsCount": "{count, plural, =1{1 reunión} other{{count} reuniones}}"
+  "meetingsCount": "{count, plural, =1{1 reunión} other{{count} reuniones}}",
+  "microphone": "Micrófono",
+  "skip": "Omitir",
+  "next": "Siguiente",
+  "welcomeToKoalino": "Te damos la bienvenida a Koalino",
+  "koalinoIntro": "Koalino graba tus reuniones, anota quién dijo qué y mantiene las notas sincronizadas entre tus propios dispositivos.",
+  "privacyPromise": "Privado por diseño: las grabaciones se transcriben en este dispositivo y tus notas viajan cifradas solo entre los dispositivos que vinculas. Nada va a un servidor salvo que conectes tú un servicio de IA.",
+  "microphoneReason": "Koalino necesita el micrófono para grabar tus reuniones. Solo escucha mientras grabas.",
+  "notificationsReason": "Android también pregunta por las notificaciones: mientras grabas, una notificación muestra Pausa y Detener.",
+  "allowMicrophone": "Permitir el micrófono",
+  "microphoneAllowed": "Micrófono permitido.",
+  "microphoneNotAllowedYet": "Aún no permitido. Koalino volverá a preguntar cuando grabes por primera vez.",
+  "transcriptionLanguageReason": "El idioma de la mayoría de tus reuniones. Automático lo detecta en cada reunión.",
+  "modelRecommended": "Modelo: Automático (recomendado). Koalino elige el mejor modelo que este dispositivo ejecuta bien y lo descarga con wifi.",
+  "chooseAnotherModel": "Elegir otro modelo",
+  "startUsingKoalino": "Empezar a usar Koalino",
+  "firstRunStep": "{step} de {total}"
 }

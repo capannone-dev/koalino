@@ -932,5 +932,21 @@
   "someMeetingsCouldNotBeMoved": "تعذّر نقل بعض الاجتماعات.",
   "someMeetingsCouldNotBeExported": "تعذّر تصدير بعض الاجتماعات.",
   "exportedMeetingsTo": "صُدّرت {count} اجتماعات إلى {folder}",
-  "meetingsCount": "{count, plural, =1{اجتماع واحد} other{{count} اجتماعات}}"
+  "meetingsCount": "{count, plural, =1{اجتماع واحد} other{{count} اجتماعات}}",
+  "microphone": "الميكروفون",
+  "skip": "تخطٍّ",
+  "next": "التالي",
+  "welcomeToKoalino": "مرحبًا بك في Koalino",
+  "koalinoIntro": "يسجّل Koalino اجتماعاتك ويدوّن من قال ماذا، ويُبقي الملاحظات متزامنة بين أجهزتك.",
+  "privacyPromise": "الخصوصية أساس التصميم: تُفرَّغ التسجيلات على هذا الجهاز، ولا تنتقل ملاحظاتك إلا مشفّرة بين الأجهزة التي تقرنها. لا يُرسل شيء إلى خادم ما لم تربط بنفسك خدمة ذكاء اصطناعي.",
+  "microphoneReason": "يحتاج Koalino إلى الميكروفون لتسجيل اجتماعاتك، ولا يستمع إلا أثناء التسجيل.",
+  "notificationsReason": "يسأل Android أيضًا عن الإشعارات: أثناء التسجيل يظهر إشعار فيه إيقاف مؤقت وإيقاف.",
+  "allowMicrophone": "السماح بالميكروفون",
+  "microphoneAllowed": "تم السماح بالميكروفون.",
+  "microphoneNotAllowedYet": "لم يُسمح بعد. سيسأل Koalino مجددًا عند أول تسجيل.",
+  "transcriptionLanguageReason": "اللغة التي تُعقد بها معظم اجتماعاتك. الخيار التلقائي يكتشفها في كل اجتماع.",
+  "modelRecommended": "النموذج: تلقائي (موصى به). يختار Koalino أفضل نموذج يعمل جيدًا على هذا الجهاز وينزّله عبر Wi-Fi.",
+  "chooseAnotherModel": "اختيار نموذج آخر",
+  "startUsingKoalino": "ابدأ استخدام Koalino",
+  "firstRunStep": "{step} من {total}"
 }

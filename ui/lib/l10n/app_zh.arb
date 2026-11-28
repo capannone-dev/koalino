@@ -932,5 +932,21 @@
   "someMeetingsCouldNotBeMoved": "部分会议无法移动。",
   "someMeetingsCouldNotBeExported": "部分会议无法导出。",
   "exportedMeetingsTo": "已将 {count} 个会议导出到 {folder}",
-  "meetingsCount": "{count, plural, other{{count} 个会议}}"
+  "meetingsCount": "{count, plural, other{{count} 个会议}}",
+  "microphone": "麦克风",
+  "skip": "跳过",
+  "next": "下一步",
+  "welcomeToKoalino": "欢迎使用 Koalino",
+  "koalinoIntro": "Koalino 会录下你的会议，记下谁说了什么，并在你自己的设备之间同步笔记。",
+  "privacyPromise": "隐私优先：录音在本设备上转写，笔记只在你配对的设备之间加密传输。除非你自己连接 AI 服务，否则不会发送到任何服务器。",
+  "microphoneReason": "Koalino 需要麦克风来录制会议，只在你录音时收音。",
+  "notificationsReason": "Android 还会询问通知权限：录音时，通知中会显示暂停和停止。",
+  "allowMicrophone": "允许使用麦克风",
+  "microphoneAllowed": "已允许使用麦克风。",
+  "microphoneNotAllowedYet": "尚未允许。首次录音时 Koalino 会再次询问。",
+  "transcriptionLanguageReason": "你大多数会议使用的语言。“自动”会在每场会议中识别语言。",
+  "modelRecommended": "模型：自动（推荐）。Koalino 会选择本设备能流畅运行的最佳模型，并在连接 Wi-Fi 时下载。",
+  "chooseAnotherModel": "选择其他模型",
+  "startUsingKoalino": "开始使用 Koalino",
+  "firstRunStep": "第 {step} 步，共 {total} 步"
 }

@@ -932,5 +932,21 @@
   "someMeetingsCouldNotBeMoved": "Einige Besprechungen konnten nicht verschoben werden.",
   "someMeetingsCouldNotBeExported": "Einige Besprechungen konnten nicht exportiert werden.",
   "exportedMeetingsTo": "{count} Besprechungen nach {folder} exportiert",
-  "meetingsCount": "{count, plural, =1{1 Besprechung} other{{count} Besprechungen}}"
+  "meetingsCount": "{count, plural, =1{1 Besprechung} other{{count} Besprechungen}}",
+  "microphone": "Mikrofon",
+  "skip": "Überspringen",
+  "next": "Weiter",
+  "welcomeToKoalino": "Willkommen bei Koalino",
+  "koalinoIntro": "Koalino nimmt deine Besprechungen auf, schreibt mit, wer was gesagt hat, und hält die Notizen auf deinen eigenen Geräten synchron.",
+  "privacyPromise": "Privat von Grund auf: Aufnahmen werden auf diesem Gerät transkribiert, und deine Notizen reisen nur verschlüsselt zwischen Geräten, die du koppelst. Nichts geht an einen Server, außer du verbindest selbst einen KI-Dienst.",
+  "microphoneReason": "Koalino braucht das Mikrofon, um deine Besprechungen aufzunehmen. Es hört nur zu, während du aufnimmst.",
+  "notificationsReason": "Android fragt auch nach Benachrichtigungen: Während der Aufnahme zeigt eine Benachrichtigung Pause und Stopp.",
+  "allowMicrophone": "Mikrofon erlauben",
+  "microphoneAllowed": "Mikrofon erlaubt.",
+  "microphoneNotAllowedYet": "Noch nicht erlaubt. Koalino fragt bei der ersten Aufnahme erneut.",
+  "transcriptionLanguageReason": "Die Sprache der meisten deiner Besprechungen. Automatisch erkennt sie in jeder Besprechung.",
+  "modelRecommended": "Modell: Automatisch (empfohlen). Koalino wählt das beste Modell, das dieses Gerät gut ausführt, und lädt es im WLAN herunter.",
+  "chooseAnotherModel": "Anderes Modell wählen",
+  "startUsingKoalino": "Koalino verwenden",
+  "firstRunStep": "{step} von {total}"
 }

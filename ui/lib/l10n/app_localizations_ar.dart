@@ -3590,4 +3590,61 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get microphone => 'الميكروفون';
+
+  @override
+  String get skip => 'تخطٍّ';
+
+  @override
+  String get next => 'التالي';
+
+  @override
+  String get welcomeToKoalino => 'مرحبًا بك في Koalino';
+
+  @override
+  String get koalinoIntro =>
+      'يسجّل Koalino اجتماعاتك ويدوّن من قال ماذا، ويُبقي الملاحظات متزامنة بين أجهزتك.';
+
+  @override
+  String get privacyPromise =>
+      'الخصوصية أساس التصميم: تُفرَّغ التسجيلات على هذا الجهاز، ولا تنتقل ملاحظاتك إلا مشفّرة بين الأجهزة التي تقرنها. لا يُرسل شيء إلى خادم ما لم تربط بنفسك خدمة ذكاء اصطناعي.';
+
+  @override
+  String get microphoneReason =>
+      'يحتاج Koalino إلى الميكروفون لتسجيل اجتماعاتك، ولا يستمع إلا أثناء التسجيل.';
+
+  @override
+  String get notificationsReason =>
+      'يسأل Android أيضًا عن الإشعارات: أثناء التسجيل يظهر إشعار فيه إيقاف مؤقت وإيقاف.';
+
+  @override
+  String get allowMicrophone => 'السماح بالميكروفون';
+
+  @override
+  String get microphoneAllowed => 'تم السماح بالميكروفون.';
+
+  @override
+  String get microphoneNotAllowedYet =>
+      'لم يُسمح بعد. سيسأل Koalino مجددًا عند أول تسجيل.';
+
+  @override
+  String get transcriptionLanguageReason =>
+      'اللغة التي تُعقد بها معظم اجتماعاتك. الخيار التلقائي يكتشفها في كل اجتماع.';
+
+  @override
+  String get modelRecommended =>
+      'النموذج: تلقائي (موصى به). يختار Koalino أفضل نموذج يعمل جيدًا على هذا الجهاز وينزّله عبر Wi-Fi.';
+
+  @override
+  String get chooseAnotherModel => 'اختيار نموذج آخر';
+
+  @override
+  String get startUsingKoalino => 'ابدأ استخدام Koalino';
+
+  @override
+  String firstRunStep(int step, int total) {
+    return '$step من $total';
+  }
 }

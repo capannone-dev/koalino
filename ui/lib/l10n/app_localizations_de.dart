@@ -3621,4 +3621,61 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get microphone => 'Mikrofon';
+
+  @override
+  String get skip => 'Überspringen';
+
+  @override
+  String get next => 'Weiter';
+
+  @override
+  String get welcomeToKoalino => 'Willkommen bei Koalino';
+
+  @override
+  String get koalinoIntro =>
+      'Koalino nimmt deine Besprechungen auf, schreibt mit, wer was gesagt hat, und hält die Notizen auf deinen eigenen Geräten synchron.';
+
+  @override
+  String get privacyPromise =>
+      'Privat von Grund auf: Aufnahmen werden auf diesem Gerät transkribiert, und deine Notizen reisen nur verschlüsselt zwischen Geräten, die du koppelst. Nichts geht an einen Server, außer du verbindest selbst einen KI-Dienst.';
+
+  @override
+  String get microphoneReason =>
+      'Koalino braucht das Mikrofon, um deine Besprechungen aufzunehmen. Es hört nur zu, während du aufnimmst.';
+
+  @override
+  String get notificationsReason =>
+      'Android fragt auch nach Benachrichtigungen: Während der Aufnahme zeigt eine Benachrichtigung Pause und Stopp.';
+
+  @override
+  String get allowMicrophone => 'Mikrofon erlauben';
+
+  @override
+  String get microphoneAllowed => 'Mikrofon erlaubt.';
+
+  @override
+  String get microphoneNotAllowedYet =>
+      'Noch nicht erlaubt. Koalino fragt bei der ersten Aufnahme erneut.';
+
+  @override
+  String get transcriptionLanguageReason =>
+      'Die Sprache der meisten deiner Besprechungen. Automatisch erkennt sie in jeder Besprechung.';
+
+  @override
+  String get modelRecommended =>
+      'Modell: Automatisch (empfohlen). Koalino wählt das beste Modell, das dieses Gerät gut ausführt, und lädt es im WLAN herunter.';
+
+  @override
+  String get chooseAnotherModel => 'Anderes Modell wählen';
+
+  @override
+  String get startUsingKoalino => 'Koalino verwenden';
+
+  @override
+  String firstRunStep(int step, int total) {
+    return '$step von $total';
+  }
 }

@@ -5649,6 +5649,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 meeting} other{{count} meetings}}'**
   String meetingsCount(int count);
+
+  /// No description provided for @microphone.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone'**
+  String get microphone;
+
+  /// No description provided for @skip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get skip;
+
+  /// No description provided for @next.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get next;
+
+  /// No description provided for @welcomeToKoalino.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Koalino'**
+  String get welcomeToKoalino;
+
+  /// No description provided for @koalinoIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Koalino records your meetings, writes down who said what, and keeps the notes in sync between your own devices.'**
+  String get koalinoIntro;
+
+  /// No description provided for @privacyPromise.
+  ///
+  /// In en, this message translates to:
+  /// **'Private by design: recordings are transcribed on this device, and your notes travel only between devices you pair, encrypted. Nothing goes to a server unless you connect an AI service yourself.'**
+  String get privacyPromise;
+
+  /// No description provided for @microphoneReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Koalino needs the microphone to record your meetings. It listens only while you record.'**
+  String get microphoneReason;
+
+  /// No description provided for @notificationsReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Android also asks about notifications: while recording, a notification shows with Pause and Stop.'**
+  String get notificationsReason;
+
+  /// No description provided for @allowMicrophone.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow microphone'**
+  String get allowMicrophone;
+
+  /// No description provided for @microphoneAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone allowed.'**
+  String get microphoneAllowed;
+
+  /// No description provided for @microphoneNotAllowedYet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not allowed yet. Koalino asks again when you first record.'**
+  String get microphoneNotAllowedYet;
+
+  /// No description provided for @transcriptionLanguageReason.
+  ///
+  /// In en, this message translates to:
+  /// **'The language most of your meetings are in. Automatic detects it in each meeting.'**
+  String get transcriptionLanguageReason;
+
+  /// No description provided for @modelRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Model: Automatic (recommended). Koalino picks the best model this device runs well and downloads it on Wi-Fi.'**
+  String get modelRecommended;
+
+  /// No description provided for @chooseAnotherModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose another model'**
+  String get chooseAnotherModel;
+
+  /// No description provided for @startUsingKoalino.
+  ///
+  /// In en, this message translates to:
+  /// **'Start using Koalino'**
+  String get startUsingKoalino;
+
+  /// No description provided for @firstRunStep.
+  ///
+  /// In en, this message translates to:
+  /// **'{step} of {total}'**
+  String firstRunStep(int step, int total);
 }
 
 class _AppLocalizationsDelegate

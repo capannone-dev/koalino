@@ -932,5 +932,21 @@
   "someMeetingsCouldNotBeMoved": "一部の会議を移動できませんでした。",
   "someMeetingsCouldNotBeExported": "一部の会議を書き出せませんでした。",
   "exportedMeetingsTo": "{count} 件の会議を {folder} に書き出しました",
-  "meetingsCount": "{count, plural, other{{count} 件の会議}}"
+  "meetingsCount": "{count, plural, other{{count} 件の会議}}",
+  "microphone": "マイク",
+  "skip": "スキップ",
+  "next": "次へ",
+  "welcomeToKoalino": "Koalino へようこそ",
+  "koalinoIntro": "Koalino は会議を録音し、誰が何を話したかを書き起こし、あなた自身のデバイス間でメモを同期します。",
+  "privacyPromise": "プライバシー重視の設計：録音はこのデバイスで文字起こしされ、メモはペアリングしたデバイス間でのみ暗号化して送られます。AI サービスを自分で接続しない限り、サーバーには何も送られません。",
+  "microphoneReason": "会議を録音するためにマイクが必要です。録音中だけ音声を聞き取ります。",
+  "notificationsReason": "Android は通知についても確認します。録音中は一時停止と停止のボタン付きの通知が表示されます。",
+  "allowMicrophone": "マイクを許可",
+  "microphoneAllowed": "マイクが許可されました。",
+  "microphoneNotAllowedYet": "まだ許可されていません。最初に録音するときに再度確認します。",
+  "transcriptionLanguageReason": "ほとんどの会議で使う言語です。「自動」は会議ごとに言語を判別します。",
+  "modelRecommended": "モデル：自動（推奨）。このデバイスで快適に動く最適なモデルを選び、Wi-Fi 接続時にダウンロードします。",
+  "chooseAnotherModel": "別のモデルを選ぶ",
+  "startUsingKoalino": "Koalino を使い始める",
+  "firstRunStep": "{step} / {total}"
 }

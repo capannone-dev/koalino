@@ -301,3 +301,8 @@ binds Ctrl/Cmd+K, R (record) and ?; the meeting list binds / (search); the meeti
 checkboxes, taps add them, and the app bar moves, exports or deletes them all (`chooseProjectForMeetings`,
 `MeetingExportController.exportMeetings`). Back and Escape leave it. Rows have no delete icon: phones swipe a row to
 the start, desktops show Delete while the pointer is over a row.
+
+**First run (#202).** `first_run_flow.dart` shows at most three skippable screens on first launch, inside the core
+start-up gate: what Koalino does and the privacy promise; the microphone with its reason (Android only, where the
+system asks; the same request covers notifications); the default transcription language with the recommended model.
+Skipping or finishing records `first-run` in the seen-tips store, so it is never shown again.

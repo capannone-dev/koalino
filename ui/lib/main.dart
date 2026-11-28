@@ -9,6 +9,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:note_taker_ui/infrastructure/seen_tips_store.dart';
+import 'package:note_taker_ui/presentation/first_run_flow.dart';
 import 'package:note_taker_ui/presentation/resizable_pane.dart';
 import 'package:note_taker_ui/infrastructure/microphone_hearing.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
@@ -176,6 +178,10 @@ Future<void> main() async {
     incomingShareBridge: platformIncomingShareBridge(),
     pairingLinkBridge: Platform.isAndroid ? platformPairingLinkBridge() : null,
     callWatchController: callWatchController,
+    // First launch only (#202); the microphone screen only where the system asks (Android).
+    firstRunStore: const FileSeenTipsStore(),
+    firstRunMicrophonePermission:
+        Platform.isAndroid ? const AndroidMicrophonePermission() : null,
   ));
   unawaited(appLockController?.initialize());
   if (_handoffController case final HandoffController handoff) {
@@ -230,10 +236,18 @@ final class NoteTakerApp extends StatelessWidget {
     this.pairingLinkBridge,
     this.callWatchController,
     this.appLanguageController,
+    this.firstRunStore,
+    this.firstRunMicrophonePermission,
     super.key,
   });
 
   final RecordingController recordingController;
+
+  /// Remembers the first-run flow (#202); without it (tests) the flow is not shown.
+  final SeenTipsStore? firstRunStore;
+
+  /// Adds the first-run microphone screen, where the system asks at run time.
+  final MicrophonePermission? firstRunMicrophonePermission;
 
   /// The app's language (#124), when given.
   final AppLanguageController? appLanguageController;
@@ -333,9 +347,25 @@ final class NoteTakerApp extends StatelessWidget {
         : CallOfferBanner(controller: callWatch, child: linked);
     final CoreStartupController? startup = coreStartupController;
     final AppLockController? appLock = appLockController;
-    final Widget home = startup == null
+    // Inside the startup gate, so the default language can be stored in the core.
+    final SeenTipsStore? firstRun = firstRunStore;
+    final Widget introduced = firstRun == null
         ? offered
-        : CoreStartupGate(controller: startup, onQuit: _quit, child: offered);
+        : FirstRunFlow(
+            store: firstRun,
+            microphonePermission: firstRunMicrophonePermission,
+            languageController: languageController,
+            modelSettingsBuilder: (BuildContext context) =>
+                TranscriptionSettingsPage(
+              bridge: const RustTranscriptionSettingsBridge(),
+              languageCode: languageController?.defaultLanguage ?? 'auto',
+            ),
+            child: offered,
+          );
+    final Widget home = startup == null
+        ? introduced
+        : CoreStartupGate(
+            controller: startup, onQuit: _quit, child: introduced);
     final AppLanguageController? language = appLanguageController;
     Widget app(Locale? locale) => MaterialApp(
           title: 'Koalino',
