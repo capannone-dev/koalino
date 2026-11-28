@@ -10,7 +10,7 @@ import { dictionaries, languages, matchLanguage, textDirection, translator, type
 import { I18nProvider } from "@/lib/i18n/client";
 
 const refresh = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh }), usePathname: () => "/" }));
 
 afterEach(() => {
   document.cookie = "koalino-language=; path=/; max-age=0";

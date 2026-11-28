@@ -10,7 +10,7 @@ import { TelemetryEntry } from "@/components/telemetry-entry";
 test("the primary navigation has Projects after Meetings, then Chat, and no telemetry or devices entry", () => {
   render(<PrimaryNav />);
 
-  const links = screen.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")]);
+  const links = screen.getAllByRole("link").map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")]);
   expect(links).toEqual([
     ["Meetings", "/meetings"],
     ["Projects", "/projects"],

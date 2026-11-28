@@ -571,5 +571,6 @@
   "positionInTheRecording": "录音中的位置",
   "recordingPlayer": "录音播放器",
   "downloadTheRecording": "下载录音",
-  "unnamedDevice": "未命名设备"
+  "unnamedDevice": "未命名设备",
+  "voicesShort": "声音"
 }

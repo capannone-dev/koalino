@@ -603,5 +603,6 @@
   "positionInTheRecording": "Позиция в записи",
   "recordingPlayer": "Проигрыватель записи",
   "downloadTheRecording": "Скачать запись",
-  "unnamedDevice": "Устройство без имени"
+  "unnamedDevice": "Устройство без имени",
+  "voicesShort": "Голоса"
 }

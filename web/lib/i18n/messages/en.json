@@ -575,5 +575,6 @@
   "positionInTheRecording": "Position in the recording",
   "recordingPlayer": "Recording player",
   "downloadTheRecording": "Download the recording",
-  "unnamedDevice": "Unnamed device"
+  "unnamedDevice": "Unnamed device",
+  "voicesShort": "Voices"
 }

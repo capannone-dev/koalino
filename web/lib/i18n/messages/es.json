@@ -575,5 +575,6 @@
   "positionInTheRecording": "Posición en la grabación",
   "recordingPlayer": "Reproductor de la grabación",
   "downloadTheRecording": "Descargar la grabación",
-  "unnamedDevice": "Dispositivo sin nombre"
+  "unnamedDevice": "Dispositivo sin nombre",
+  "voicesShort": "Voces"
 }

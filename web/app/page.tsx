@@ -1,14 +1,9 @@
-// Renders the server home: live Axum WebSocket status. Telemetry is under Settings (Issue #53).
+// The web's home (#205): it opens the meetings, which are what people come for. The live-updates
+// status moved to the header (`LiveStatus`).
 
-import { LiveStatus } from "@/components/live-status";
-import { getT } from "@/lib/i18n/server";
+import { redirect } from "next/navigation";
 
-export default async function HomePage() {
-  const t = await getT();
-  return (
-    <section className="space-y-2">
-      <h1 className="text-2xl font-bold sm:text-3xl">{t("koalinoServer")}</h1>
-      <LiveStatus />
-    </section>
-  );
+/** Sends the visitor to the meeting list. Side effects: a redirect. */
+export default function HomePage() {
+  redirect("/meetings");
 }

@@ -124,3 +124,9 @@ with its reason.
 `meeting-time.tsx` (#210) shows a meeting's time in the reader's time zone and words ("Today 9:32 AM"),
 formatted after mounting, since the server cannot know the browser's time zone. Meeting rows show it
 instead of the meeting's internal ID (#211).
+
+`primary-nav.tsx` (#205) is the primary navigation: links with an icon and a word, the current
+section marked (`aria-current`); under 640 px it is a bar fixed to the bottom of the window.
+`icons.tsx` (#205, #207) holds the web's icon set, Material icons drawn inline, the same symbols as
+the app. `live-status.tsx` shows whether live updates arrive as a dot in the header; the home page
+now opens the meetings.
