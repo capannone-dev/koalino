@@ -921,5 +921,16 @@
   "playOrPauseTheRecording": "Aufnahme abspielen oder pausieren",
   "back10SecondsForward10Seconds": "10 Sekunden zurück, 10 Sekunden vor",
   "showTheseShortcuts": "Diese Kürzel anzeigen",
-  "spaceKey": "Leertaste"
+  "spaceKey": "Leertaste",
+  "select": "Auswählen",
+  "selectAll": "Alle auswählen",
+  "cancelSelection": "Auswahl aufheben",
+  "selectedCount": "{count, plural, =1{1 ausgewählt} other{{count} ausgewählt}}",
+  "deleteMeetingsCount": "{count, plural, =1{1 Besprechung löschen?} other{{count} Besprechungen löschen?}}",
+  "movedMeetingsTo": "{count} Besprechungen nach {project} verschoben",
+  "removedMeetingsFromTheirProjects": "{count} Besprechungen aus ihren Projekten entfernt",
+  "someMeetingsCouldNotBeMoved": "Einige Besprechungen konnten nicht verschoben werden.",
+  "someMeetingsCouldNotBeExported": "Einige Besprechungen konnten nicht exportiert werden.",
+  "exportedMeetingsTo": "{count} Besprechungen nach {folder} exportiert",
+  "meetingsCount": "{count, plural, =1{1 Besprechung} other{{count} Besprechungen}}"
 }

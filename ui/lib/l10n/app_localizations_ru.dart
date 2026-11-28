@@ -3532,4 +3532,75 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get spaceKey => 'Пробел';
+
+  @override
+  String get select => 'Выбрать';
+
+  @override
+  String get selectAll => 'Выбрать все';
+
+  @override
+  String get cancelSelection => 'Отменить выбор';
+
+  @override
+  String selectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выбрано $count',
+      many: 'Выбрано $count',
+      few: 'Выбрано $count',
+      one: 'Выбрана 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteMeetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удалить $count встречи?',
+      many: 'Удалить $count встреч?',
+      few: 'Удалить $count встречи?',
+      one: 'Удалить 1 встречу?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String movedMeetingsTo(int count, String project) {
+    return 'Встречи ($count) перемещены в $project';
+  }
+
+  @override
+  String removedMeetingsFromTheirProjects(int count) {
+    return 'Встречи ($count) убраны из проектов';
+  }
+
+  @override
+  String get someMeetingsCouldNotBeMoved =>
+      'Некоторые встречи не удалось переместить.';
+
+  @override
+  String get someMeetingsCouldNotBeExported =>
+      'Некоторые встречи не удалось экспортировать.';
+
+  @override
+  String exportedMeetingsTo(int count, String folder) {
+    return 'Встречи ($count) экспортированы в $folder';
+  }
+
+  @override
+  String meetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count встречи',
+      many: '$count встреч',
+      few: '$count встречи',
+      one: '1 встреча',
+    );
+    return '$_temp0';
+  }
 }

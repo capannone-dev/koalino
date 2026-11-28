@@ -193,6 +193,63 @@ void main() {
         'meeting.json');
   });
 
+  group('several meetings (#216)', () {
+    test('a desktop writes each to the export folder, with no dialog',
+        () async {
+      final FakeExportBridge bridge = FakeExportBridge(defaultDirectory: root);
+      final FakeExportSaver saver = FakeExportSaver(savesBytes: false);
+      final MeetingExportController controller =
+          MeetingExportController(exportBridge: bridge, exportSaver: saver);
+
+      final String? message =
+          await controller.exportMeetings(<({String meetingId, String title})>[
+        (meetingId: 'm1', title: 'Weekly sync'),
+        (meetingId: 'm2', title: 'Budget'),
+      ], MeetingExportFormat.pdf);
+
+      expect(saver.suggestedNames, isEmpty);
+      expect(bridge.requests.map((ExportRequest request) => request.outputPath),
+          <String?>[null, null]);
+      expect(message, 'Exported 2 meetings to ${root.path}');
+    });
+
+    test('Android shares them all in one sheet, even with the same title',
+        () async {
+      final Directory shareFolder = Directory('${root.path}/share')
+        ..createSync();
+      final FakeExportSharer sharer = FakeExportSharer(shareFolder);
+      final MeetingExportController controller = MeetingExportController(
+          exportBridge: FakeExportBridge(defaultDirectory: root),
+          exportSaver: FakeExportSaver(savesBytes: true),
+          exportSharer: sharer);
+
+      final String? message =
+          await controller.exportMeetings(<({String meetingId, String title})>[
+        (meetingId: 'm1', title: 'Sync'),
+        (meetingId: 'm2', title: 'Sync'),
+      ], MeetingExportFormat.json);
+
+      expect(message, isNull);
+      expect(sharer.shares.single.$1, <String>['Sync.json', 'Sync (2).json']);
+      expect(sharer.shares.single.$2, '2 meetings');
+    });
+
+    test('failures are said', () async {
+      final MeetingExportController controller = MeetingExportController(
+          exportBridge: FakeExportBridge(
+              defaultDirectory: root,
+              failure:
+                  const MeetingExportFailure(errorCode: 'meeting_not_found')),
+          exportSaver: FakeExportSaver(savesBytes: false));
+
+      expect(
+          await controller.exportMeetings(<({String meetingId, String title})>[
+            (meetingId: 'm1', title: 'Sync'),
+          ], MeetingExportFormat.pdf),
+          'Some meetings could not be exported.');
+    });
+  });
+
   group('desktop', () {
     test('the core writes where the owner chose', () async {
       final String chosen = '${root.path}/Weekly sync.pdf';

@@ -76,6 +76,66 @@ final class MeetingExportController extends ChangeNotifier {
     }
   }
 
+  /// Exports several meetings at once (#216): on Android they are shared in one share sheet; on
+  /// desktops the core writes each to its export folder, without a save dialog per meeting.
+  ///
+  /// Inputs: The meetings as (ID, displayed title) and the format.
+  /// Outputs: The message to show, or null once the share sheet opened or while another export
+  /// runs.
+  /// Side effects: Android: empties the share folder, writes the exports there and opens the share
+  /// sheet. Desktops: the core writes the files. Notifies listeners.
+  Future<String?> exportMeetings(
+      List<({String meetingId, String title})> meetings,
+      MeetingExportFormat format) async {
+    if (_isExporting || meetings.isEmpty) {
+      return null;
+    }
+    _isExporting = true;
+    notifyListeners();
+    try {
+      final ExportSharer? sharer = _exportSharer;
+      final Directory? shareFolder =
+          sharer == null ? null : Directory(await sharer.shareDirectory());
+      if (shareFolder != null) {
+        await emptyShareFolder(shareFolder);
+      }
+      final List<String> written = <String>[];
+      int failed = 0;
+      for (final (:String meetingId, :String title) in meetings) {
+        final String name = suggestedExportFileName(title, format);
+        final MeetingExportResult result = await _exportBridge.exportMeeting(
+            meetingId, format,
+            outputPath:
+                shareFolder == null ? null : _freeName(shareFolder, name),
+            includeAttachments:
+                shareFolder == null || format != MeetingExportFormat.markdown);
+        switch (result) {
+          case MeetingExportSuccess(:final String filePath):
+            written.add(filePath);
+          case MeetingExportFailure():
+            failed++;
+        }
+      }
+      if (sharer != null && written.isNotEmpty) {
+        await sharer.shareFiles(written, l10n.meetingsCount(written.length));
+        return failed == 0 ? null : l10n.someMeetingsCouldNotBeExported;
+      }
+      if (written.isEmpty) {
+        return l10n.someMeetingsCouldNotBeExported;
+      }
+      final String folder = File(written.first).parent.path;
+      return failed == 0
+          ? l10n.exportedMeetingsTo(written.length, folder)
+          : '${l10n.exportedMeetingsTo(written.length, folder)} '
+              '${l10n.someMeetingsCouldNotBeExported}';
+    } on Object {
+      return l10n.someMeetingsCouldNotBeExported;
+    } finally {
+      _isExporting = false;
+      notifyListeners();
+    }
+  }
+
   /// Exports one meeting and shares it with an app the owner picks.
   ///
   /// Inputs: The meeting, its displayed title (the file name and the share's text), the format.

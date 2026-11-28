@@ -3527,4 +3527,67 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get spaceKey => 'مسافة';
+
+  @override
+  String get select => 'تحديد';
+
+  @override
+  String get selectAll => 'تحديد الكل';
+
+  @override
+  String get cancelSelection => 'إلغاء التحديد';
+
+  @override
+  String selectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم تحديد $count',
+      one: 'تم تحديد 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteMeetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف $count اجتماعات؟',
+      one: 'حذف اجتماع واحد؟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String movedMeetingsTo(int count, String project) {
+    return 'نُقلت $count اجتماعات إلى $project';
+  }
+
+  @override
+  String removedMeetingsFromTheirProjects(int count) {
+    return 'أُزيلت $count اجتماعات من مشاريعها';
+  }
+
+  @override
+  String get someMeetingsCouldNotBeMoved => 'تعذّر نقل بعض الاجتماعات.';
+
+  @override
+  String get someMeetingsCouldNotBeExported => 'تعذّر تصدير بعض الاجتماعات.';
+
+  @override
+  String exportedMeetingsTo(int count, String folder) {
+    return 'صُدّرت $count اجتماعات إلى $folder';
+  }
+
+  @override
+  String meetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count اجتماعات',
+      one: 'اجتماع واحد',
+    );
+    return '$_temp0';
+  }
 }

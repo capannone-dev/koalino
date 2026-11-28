@@ -603,5 +603,18 @@
   "showTheseShortcuts": "显示这些快捷键",
   "goToPlace": "前往{place}",
   "commandPalette": "命令面板",
-  "searchThisPage": "搜索（会议、项目）"
+  "searchThisPage": "搜索（会议、项目）",
+  "select": "选择",
+  "selectAll": "全选",
+  "cancelSelection": "取消选择",
+  "selectedCount": {"other": "已选 {count} 个"},
+  "deleteMeetingsCount": {"other": "删除 {count} 个会议？"},
+  "movedMeetingsTo": "已将 {count} 个会议移到 {project}",
+  "removedMeetingsFromTheirProjects": "已将 {count} 个会议移出其项目",
+  "someMeetingsCouldNotBeMoved": "部分会议无法移动。",
+  "moveToProject": "移到项目",
+  "move": "移动",
+  "selectMeeting": "选择 {title}",
+  "meetingsDeletedCount": {"other": "已删除 {count} 个会议"},
+  "someMeetingsCouldNotBeDeleted": "部分会议无法删除。"
 }

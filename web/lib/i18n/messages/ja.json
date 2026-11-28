@@ -603,5 +603,18 @@
   "showTheseShortcuts": "このショートカット一覧を表示",
   "goToPlace": "{place} へ移動",
   "commandPalette": "コマンドパレット",
-  "searchThisPage": "検索（会議、プロジェクト）"
+  "searchThisPage": "検索（会議、プロジェクト）",
+  "select": "選択",
+  "selectAll": "すべて選択",
+  "cancelSelection": "選択を解除",
+  "selectedCount": {"other": "{count} 件を選択"},
+  "deleteMeetingsCount": {"other": "{count} 件の会議を削除しますか？"},
+  "movedMeetingsTo": "{count} 件の会議を {project} に移動しました",
+  "removedMeetingsFromTheirProjects": "{count} 件の会議をプロジェクトから外しました",
+  "someMeetingsCouldNotBeMoved": "一部の会議を移動できませんでした。",
+  "moveToProject": "プロジェクトに移動",
+  "move": "移動",
+  "selectMeeting": "{title} を選択",
+  "meetingsDeletedCount": {"other": "{count} 件の会議を削除しました"},
+  "someMeetingsCouldNotBeDeleted": "一部の会議を削除できませんでした。"
 }

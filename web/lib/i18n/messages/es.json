@@ -607,5 +607,18 @@
   "showTheseShortcuts": "Mostrar estos atajos",
   "goToPlace": "Ir a {place}",
   "commandPalette": "Paleta de comandos",
-  "searchThisPage": "Buscar (Reuniones, Proyectos)"
+  "searchThisPage": "Buscar (Reuniones, Proyectos)",
+  "select": "Seleccionar",
+  "selectAll": "Seleccionar todo",
+  "cancelSelection": "Cancelar la selección",
+  "selectedCount": {"=1": "1 seleccionada", "other": "{count} seleccionadas"},
+  "deleteMeetingsCount": {"=1": "¿Eliminar 1 reunión?", "other": "¿Eliminar {count} reuniones?"},
+  "movedMeetingsTo": "{count} reuniones movidas a {project}",
+  "removedMeetingsFromTheirProjects": "{count} reuniones quitadas de sus proyectos",
+  "someMeetingsCouldNotBeMoved": "Algunas reuniones no se pudieron mover.",
+  "moveToProject": "Mover al proyecto",
+  "move": "Mover",
+  "selectMeeting": "Seleccionar {title}",
+  "meetingsDeletedCount": {"=1": "1 reunión eliminada", "other": "{count} reuniones eliminadas"},
+  "someMeetingsCouldNotBeDeleted": "Algunas reuniones no se pudieron eliminar."
 }

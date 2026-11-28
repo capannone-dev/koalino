@@ -272,14 +272,18 @@ void main() {
   });
 
   group('deleting a meeting', () {
+    /// Swipes a phone row towards the start, which asks to delete it (#216).
+    Future<void> swipeToDelete(WidgetTester tester, String title) async {
+      await tester.drag(find.text(title), const Offset(-600, 0));
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('asks first, and Cancel keeps it', (WidgetTester tester) async {
       final FakeMeetingBridge bridge =
           FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting]);
       await pumpMeetingList(tester, bridge);
 
-      await tester
-          .tap(find.byKey(const ValueKey<String>('delete-meeting-titled')));
-      await tester.pumpAndSettle();
+      await swipeToDelete(tester, 'Project Sync');
       expect(find.text('Delete Project Sync?'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
@@ -294,9 +298,7 @@ void main() {
           meetings: <MeetingSummary>[titledMeeting, untitledMeeting]);
       await pumpMeetingList(tester, bridge);
 
-      await tester
-          .tap(find.byKey(const ValueKey<String>('delete-meeting-titled')));
-      await tester.pumpAndSettle();
+      await swipeToDelete(tester, 'Project Sync');
       await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
 
@@ -340,9 +342,7 @@ void main() {
             ..deleteError = StateError('recording');
       await pumpMeetingList(tester, bridge);
 
-      await tester
-          .tap(find.byKey(const ValueKey<String>('delete-meeting-titled')));
-      await tester.pumpAndSettle();
+      await swipeToDelete(tester, 'Project Sync');
       await tester.tap(find.text('Delete'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -774,5 +774,73 @@ void main() {
       expect(find.text('Summary…'), findsNothing);
       expect(find.byTooltip('Summary of Project Sync'), findsNothing);
     });
+  });
+
+  group('selecting meetings (#216)', () {
+    /// Opens the row menu of `title` and chooses Select.
+    Future<void> selectFromMenu(WidgetTester tester, String title) async {
+      await tester.longPress(find.text(title));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('row-select')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'Select starts a selection; taps add rows; Delete removes them all',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge bridge = FakeMeetingBridge(
+          meetings: <MeetingSummary>[titledMeeting, untitledMeeting]);
+      await pumpMeetingList(tester, bridge);
+
+      await selectFromMenu(tester, 'Project Sync');
+      expect(find.byKey(meetingSelectionBarKey), findsOneWidget);
+      expect(find.text('1 selected'), findsOneWidget);
+      await tester.tap(find.text('Meeting 2026-10-26 18:00 UTC'));
+      await tester.pumpAndSettle();
+      expect(find.text('2 selected'), findsOneWidget);
+      expect(find.byType(MeetingDetailScreen), findsNothing,
+          reason: 'a tap selects while selecting');
+
+      await tester.tap(find.byKey(const ValueKey<String>('delete-selected')));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete 2 meetings?'), findsOneWidget);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(bridge.deleteRequests.toSet(),
+          <String>{'meeting-titled', 'meeting-untitled'});
+      expect(find.byKey(meetingSelectionBarKey), findsNothing);
+    });
+
+    testWidgets('Back leaves the selection, not the screen',
+        (WidgetTester tester) async {
+      await pumpMeetingList(
+          tester, FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting]));
+      await selectFromMenu(tester, 'Project Sync');
+
+      await tester.tap(find.byTooltip('Cancel selection'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(meetingSelectionBarKey), findsNothing);
+      expect(find.text('Meetings'), findsOneWidget);
+    });
+
+    testWidgets('a desktop row shows Delete only under the pointer',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge bridge =
+          FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting]);
+      await pumpMeetingList(tester, bridge, size: const Size(1280, 800));
+      const Key delete = ValueKey<String>('delete-meeting-titled');
+      expect(find.byKey(delete), findsNothing);
+
+      final TestGesture mouse =
+          await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.text('Project Sync')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(delete), findsOneWidget);
+      await tester.tap(find.byKey(delete));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete Project Sync?'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 }

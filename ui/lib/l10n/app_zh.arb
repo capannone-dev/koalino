@@ -921,5 +921,16 @@
   "playOrPauseTheRecording": "播放或暂停录音",
   "back10SecondsForward10Seconds": "后退 10 秒，前进 10 秒",
   "showTheseShortcuts": "显示这些快捷键",
-  "spaceKey": "空格"
+  "spaceKey": "空格",
+  "select": "选择",
+  "selectAll": "全选",
+  "cancelSelection": "取消选择",
+  "selectedCount": "{count, plural, other{已选 {count} 个}}",
+  "deleteMeetingsCount": "{count, plural, other{删除 {count} 个会议？}}",
+  "movedMeetingsTo": "已将 {count} 个会议移到 {project}",
+  "removedMeetingsFromTheirProjects": "已将 {count} 个会议移出其项目",
+  "someMeetingsCouldNotBeMoved": "部分会议无法移动。",
+  "someMeetingsCouldNotBeExported": "部分会议无法导出。",
+  "exportedMeetingsTo": "已将 {count} 个会议导出到 {folder}",
+  "meetingsCount": "{count, plural, other{{count} 个会议}}"
 }

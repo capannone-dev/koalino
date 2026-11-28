@@ -607,5 +607,18 @@
   "showTheseShortcuts": "Afficher ces raccourcis",
   "goToPlace": "Aller à {place}",
   "commandPalette": "Palette de commandes",
-  "searchThisPage": "Rechercher (Réunions, Projets)"
+  "searchThisPage": "Rechercher (Réunions, Projets)",
+  "select": "Sélectionner",
+  "selectAll": "Tout sélectionner",
+  "cancelSelection": "Annuler la sélection",
+  "selectedCount": {"=1": "1 sélectionnée", "other": "{count} sélectionnées"},
+  "deleteMeetingsCount": {"=1": "Supprimer 1 réunion ?", "other": "Supprimer {count} réunions ?"},
+  "movedMeetingsTo": "{count} réunions déplacées dans {project}",
+  "removedMeetingsFromTheirProjects": "{count} réunions retirées de leurs projets",
+  "someMeetingsCouldNotBeMoved": "Certaines réunions n'ont pas pu être déplacées.",
+  "moveToProject": "Déplacer vers le projet",
+  "move": "Déplacer",
+  "selectMeeting": "Sélectionner {title}",
+  "meetingsDeletedCount": {"=1": "1 réunion supprimée", "other": "{count} réunions supprimées"},
+  "someMeetingsCouldNotBeDeleted": "Certaines réunions n'ont pas pu être supprimées."
 }

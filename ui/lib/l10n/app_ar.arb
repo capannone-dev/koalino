@@ -921,5 +921,16 @@
   "playOrPauseTheRecording": "تشغيل التسجيل أو إيقافه مؤقتًا",
   "back10SecondsForward10Seconds": "رجوع 10 ثوانٍ، تقدّم 10 ثوانٍ",
   "showTheseShortcuts": "اعرض هذه الاختصارات",
-  "spaceKey": "مسافة"
+  "spaceKey": "مسافة",
+  "select": "تحديد",
+  "selectAll": "تحديد الكل",
+  "cancelSelection": "إلغاء التحديد",
+  "selectedCount": "{count, plural, =1{تم تحديد 1} other{تم تحديد {count}}}",
+  "deleteMeetingsCount": "{count, plural, =1{حذف اجتماع واحد؟} other{حذف {count} اجتماعات؟}}",
+  "movedMeetingsTo": "نُقلت {count} اجتماعات إلى {project}",
+  "removedMeetingsFromTheirProjects": "أُزيلت {count} اجتماعات من مشاريعها",
+  "someMeetingsCouldNotBeMoved": "تعذّر نقل بعض الاجتماعات.",
+  "someMeetingsCouldNotBeExported": "تعذّر تصدير بعض الاجتماعات.",
+  "exportedMeetingsTo": "صُدّرت {count} اجتماعات إلى {folder}",
+  "meetingsCount": "{count, plural, =1{اجتماع واحد} other{{count} اجتماعات}}"
 }

@@ -921,5 +921,16 @@
   "playOrPauseTheRecording": "Воспроизвести или приостановить запись",
   "back10SecondsForward10Seconds": "Назад на 10 секунд, вперёд на 10 секунд",
   "showTheseShortcuts": "Показать эти сочетания",
-  "spaceKey": "Пробел"
+  "spaceKey": "Пробел",
+  "select": "Выбрать",
+  "selectAll": "Выбрать все",
+  "cancelSelection": "Отменить выбор",
+  "selectedCount": "{count, plural, =1{Выбрана 1} few{Выбрано {count}} many{Выбрано {count}} other{Выбрано {count}}}",
+  "deleteMeetingsCount": "{count, plural, =1{Удалить 1 встречу?} few{Удалить {count} встречи?} many{Удалить {count} встреч?} other{Удалить {count} встречи?}}",
+  "movedMeetingsTo": "Встречи ({count}) перемещены в {project}",
+  "removedMeetingsFromTheirProjects": "Встречи ({count}) убраны из проектов",
+  "someMeetingsCouldNotBeMoved": "Некоторые встречи не удалось переместить.",
+  "someMeetingsCouldNotBeExported": "Некоторые встречи не удалось экспортировать.",
+  "exportedMeetingsTo": "Встречи ({count}) экспортированы в {folder}",
+  "meetingsCount": "{count, plural, =1{1 встреча} few{{count} встречи} many{{count} встреч} other{{count} встречи}}"
 }

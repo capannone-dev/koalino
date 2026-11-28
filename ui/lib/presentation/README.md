@@ -296,3 +296,8 @@ remembers its dismissal in the data directory (`ui-seen-tips`), reached through 
 **Keyboard shortcuts (#215).** `keyboard_shortcuts.dart` has `AppShortcuts`, which binds keys while a page is in front
 (single keys never fire while typing in a field), the Ctrl/Cmd+K command palette and the `?` shortcut list. HomeShell
 binds Ctrl/Cmd+K, R (record) and ?; the meeting list binds / (search); the meeting player binds Space, J and L.
+
+**Selecting meetings (#216).** "Select" in a meeting row's menu (long-press, right-click) starts a selection: rows get
+checkboxes, taps add them, and the app bar moves, exports or deletes them all (`chooseProjectForMeetings`,
+`MeetingExportController.exportMeetings`). Back and Escape leave it. Rows have no delete icon: phones swipe a row to
+the start, desktops show Delete while the pointer is over a row.

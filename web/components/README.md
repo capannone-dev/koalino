@@ -142,3 +142,7 @@ unsure of, and the pencil beside a passage corrects it. Dismissal is remembered 
 `keyboard-shortcuts.tsx` (#215), in the layout, gives every page Ctrl/Cmd+K (a command palette that goes to any
 page), `/` (focus the field marked `data-shortcut-search`) and `?` (the shortcut list); `meeting-recording-player.tsx`
 adds Space, J and L. `lib/shortcut-keys.ts` keeps single keys away from fields and buttons.
+
+`meeting-list.tsx` selection (#216): "Select" in a row's menu adds checkboxes and a bar that moves
+(`batch-project-dialog.tsx`) or deletes the chosen meetings; Escape or ✕ leaves it. With a mouse, the row's ⋯ button
+appears on hover or focus.

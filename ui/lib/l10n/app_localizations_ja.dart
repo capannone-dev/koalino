@@ -3343,4 +3343,64 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get spaceKey => 'スペース';
+
+  @override
+  String get select => '選択';
+
+  @override
+  String get selectAll => 'すべて選択';
+
+  @override
+  String get cancelSelection => '選択を解除';
+
+  @override
+  String selectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件を選択',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteMeetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の会議を削除しますか？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String movedMeetingsTo(int count, String project) {
+    return '$count 件の会議を $project に移動しました';
+  }
+
+  @override
+  String removedMeetingsFromTheirProjects(int count) {
+    return '$count 件の会議をプロジェクトから外しました';
+  }
+
+  @override
+  String get someMeetingsCouldNotBeMoved => '一部の会議を移動できませんでした。';
+
+  @override
+  String get someMeetingsCouldNotBeExported => '一部の会議を書き出せませんでした。';
+
+  @override
+  String exportedMeetingsTo(int count, String folder) {
+    return '$count 件の会議を $folder に書き出しました';
+  }
+
+  @override
+  String meetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の会議',
+    );
+    return '$_temp0';
+  }
 }

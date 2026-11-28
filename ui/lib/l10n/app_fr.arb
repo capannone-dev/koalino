@@ -921,5 +921,16 @@
   "playOrPauseTheRecording": "Lire ou mettre en pause l'enregistrement",
   "back10SecondsForward10Seconds": "Reculer de 10 secondes, avancer de 10 secondes",
   "showTheseShortcuts": "Afficher ces raccourcis",
-  "spaceKey": "Espace"
+  "spaceKey": "Espace",
+  "select": "Sélectionner",
+  "selectAll": "Tout sélectionner",
+  "cancelSelection": "Annuler la sélection",
+  "selectedCount": "{count, plural, =1{1 sélectionnée} other{{count} sélectionnées}}",
+  "deleteMeetingsCount": "{count, plural, =1{Supprimer 1 réunion ?} other{Supprimer {count} réunions ?}}",
+  "movedMeetingsTo": "{count} réunions déplacées dans {project}",
+  "removedMeetingsFromTheirProjects": "{count} réunions retirées de leurs projets",
+  "someMeetingsCouldNotBeMoved": "Certaines réunions n'ont pas pu être déplacées.",
+  "someMeetingsCouldNotBeExported": "Certaines réunions n'ont pas pu être exportées.",
+  "exportedMeetingsTo": "{count} réunions exportées dans {folder}",
+  "meetingsCount": "{count, plural, =1{1 réunion} other{{count} réunions}}"
 }

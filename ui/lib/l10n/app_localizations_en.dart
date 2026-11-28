@@ -3473,4 +3473,68 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spaceKey => 'Space';
+
+  @override
+  String get select => 'Select';
+
+  @override
+  String get selectAll => 'Select all';
+
+  @override
+  String get cancelSelection => 'Cancel selection';
+
+  @override
+  String selectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count selected',
+      one: '1 selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteMeetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Delete $count meetings?',
+      one: 'Delete 1 meeting?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String movedMeetingsTo(int count, String project) {
+    return 'Moved $count meetings to $project';
+  }
+
+  @override
+  String removedMeetingsFromTheirProjects(int count) {
+    return 'Removed $count meetings from their projects';
+  }
+
+  @override
+  String get someMeetingsCouldNotBeMoved => 'Some meetings could not be moved.';
+
+  @override
+  String get someMeetingsCouldNotBeExported =>
+      'Some meetings could not be exported.';
+
+  @override
+  String exportedMeetingsTo(int count, String folder) {
+    return 'Exported $count meetings to $folder';
+  }
+
+  @override
+  String meetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count meetings',
+      one: '1 meeting',
+    );
+    return '$_temp0';
+  }
 }

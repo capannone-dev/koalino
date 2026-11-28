@@ -607,5 +607,18 @@
   "showTheseShortcuts": "Diese Kürzel anzeigen",
   "goToPlace": "Zu {place}",
   "commandPalette": "Befehlspalette",
-  "searchThisPage": "Suchen (Besprechungen, Projekte)"
+  "searchThisPage": "Suchen (Besprechungen, Projekte)",
+  "select": "Auswählen",
+  "selectAll": "Alle auswählen",
+  "cancelSelection": "Auswahl aufheben",
+  "selectedCount": {"=1": "1 ausgewählt", "other": "{count} ausgewählt"},
+  "deleteMeetingsCount": {"=1": "1 Besprechung löschen?", "other": "{count} Besprechungen löschen?"},
+  "movedMeetingsTo": "{count} Besprechungen nach {project} verschoben",
+  "removedMeetingsFromTheirProjects": "{count} Besprechungen aus ihren Projekten entfernt",
+  "someMeetingsCouldNotBeMoved": "Einige Besprechungen konnten nicht verschoben werden.",
+  "moveToProject": "In Projekt verschieben",
+  "move": "Verschieben",
+  "selectMeeting": "{title} auswählen",
+  "meetingsDeletedCount": {"=1": "1 Besprechung gelöscht", "other": "{count} Besprechungen gelöscht"},
+  "someMeetingsCouldNotBeDeleted": "Einige Besprechungen konnten nicht gelöscht werden."
 }

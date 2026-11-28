@@ -635,5 +635,18 @@
   "showTheseShortcuts": "Показать эти сочетания",
   "goToPlace": "Перейти: {place}",
   "commandPalette": "Палитра команд",
-  "searchThisPage": "Поиск (Встречи, Проекты)"
+  "searchThisPage": "Поиск (Встречи, Проекты)",
+  "select": "Выбрать",
+  "selectAll": "Выбрать все",
+  "cancelSelection": "Отменить выбор",
+  "selectedCount": {"=1": "Выбрана 1", "few": "Выбрано {count}", "many": "Выбрано {count}", "other": "Выбрано {count}"},
+  "deleteMeetingsCount": {"=1": "Удалить 1 встречу?", "few": "Удалить {count} встречи?", "many": "Удалить {count} встреч?", "other": "Удалить {count} встречи?"},
+  "movedMeetingsTo": "Встречи ({count}) перемещены в {project}",
+  "removedMeetingsFromTheirProjects": "Встречи ({count}) убраны из проектов",
+  "someMeetingsCouldNotBeMoved": "Некоторые встречи не удалось переместить.",
+  "moveToProject": "Переместить в проект",
+  "move": "Переместить",
+  "selectMeeting": "Выбрать {title}",
+  "meetingsDeletedCount": {"one": "Удалена {count} встреча", "few": "Удалено {count} встречи", "many": "Удалено {count} встреч", "other": "Удалено {count} встречи"},
+  "someMeetingsCouldNotBeDeleted": "Некоторые встречи не удалось удалить."
 }

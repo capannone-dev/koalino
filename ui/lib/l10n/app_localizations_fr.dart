@@ -3529,4 +3529,69 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get spaceKey => 'Espace';
+
+  @override
+  String get select => 'Sélectionner';
+
+  @override
+  String get selectAll => 'Tout sélectionner';
+
+  @override
+  String get cancelSelection => 'Annuler la sélection';
+
+  @override
+  String selectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sélectionnées',
+      one: '1 sélectionnée',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteMeetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Supprimer $count réunions ?',
+      one: 'Supprimer 1 réunion ?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String movedMeetingsTo(int count, String project) {
+    return '$count réunions déplacées dans $project';
+  }
+
+  @override
+  String removedMeetingsFromTheirProjects(int count) {
+    return '$count réunions retirées de leurs projets';
+  }
+
+  @override
+  String get someMeetingsCouldNotBeMoved =>
+      'Certaines réunions n\'ont pas pu être déplacées.';
+
+  @override
+  String get someMeetingsCouldNotBeExported =>
+      'Certaines réunions n\'ont pas pu être exportées.';
+
+  @override
+  String exportedMeetingsTo(int count, String folder) {
+    return '$count réunions exportées dans $folder';
+  }
+
+  @override
+  String meetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count réunions',
+      one: '1 réunion',
+    );
+    return '$_temp0';
+  }
 }

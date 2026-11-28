@@ -5583,6 +5583,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Space'**
   String get spaceKey;
+
+  /// No description provided for @select.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get select;
+
+  /// No description provided for @selectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get selectAll;
+
+  /// No description provided for @cancelSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel selection'**
+  String get cancelSelection;
+
+  /// No description provided for @selectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 selected} other{{count} selected}}'**
+  String selectedCount(int count);
+
+  /// No description provided for @deleteMeetingsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Delete 1 meeting?} other{Delete {count} meetings?}}'**
+  String deleteMeetingsCount(int count);
+
+  /// No description provided for @movedMeetingsTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Moved {count} meetings to {project}'**
+  String movedMeetingsTo(int count, String project);
+
+  /// No description provided for @removedMeetingsFromTheirProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed {count} meetings from their projects'**
+  String removedMeetingsFromTheirProjects(int count);
+
+  /// No description provided for @someMeetingsCouldNotBeMoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Some meetings could not be moved.'**
+  String get someMeetingsCouldNotBeMoved;
+
+  /// No description provided for @someMeetingsCouldNotBeExported.
+  ///
+  /// In en, this message translates to:
+  /// **'Some meetings could not be exported.'**
+  String get someMeetingsCouldNotBeExported;
+
+  /// No description provided for @exportedMeetingsTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported {count} meetings to {folder}'**
+  String exportedMeetingsTo(int count, String folder);
+
+  /// No description provided for @meetingsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 meeting} other{{count} meetings}}'**
+  String meetingsCount(int count);
 }
 
 class _AppLocalizationsDelegate

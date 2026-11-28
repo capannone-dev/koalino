@@ -23,6 +23,8 @@ import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/speaker_rename_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
+import 'package:note_taker_ui/presentation/confirm_delete_dialog.dart';
+import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
 import 'package:note_taker_ui/presentation/new_meeting_dialog.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
@@ -96,10 +98,138 @@ final class MeetingListScreen extends StatefulWidget {
 
 /// Requests the meetings once and chooses the layout from the available width.
 final class _MeetingListScreenState extends State<MeetingListScreen> {
+  /// The meetings chosen for a batch action (#216); empty outside selection mode.
+  final Set<String> _selection = <String>{};
+
   @override
   void initState() {
     super.initState();
     widget.controller.loadMeetings();
+  }
+
+  /// Adds `meeting` to the selection, or removes it.
+  void _toggleSelected(MeetingSummary meeting) => setState(() {
+        if (!_selection.remove(meeting.meetingId)) {
+          _selection.add(meeting.meetingId);
+        }
+      });
+
+  /// Leaves selection mode.
+  void _clearSelection() => setState(_selection.clear);
+
+  /// The selected meetings still in the list, newest first.
+  List<MeetingSummary> get _selectedMeetings => <MeetingSummary>[
+        for (final MeetingSummary meeting
+            in widget.controller.meetings.reversed)
+          if (_selection.contains(meeting.meetingId)) meeting,
+      ];
+
+  /// Deletes the selected meetings once the owner confirms.
+  ///
+  /// Side effects: Shows a dialog; deletes through the controller; a snack bar on refusals.
+  Future<void> _deleteSelected() async {
+    final List<MeetingSummary> meetings = _selectedMeetings;
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final bool confirmed = await confirmDelete(
+      context,
+      title: l10n.deleteMeetingsCount(meetings.length),
+      message: l10n.itsTranscriptAttachmentsAndUnknownVoices,
+    );
+    if (!confirmed) {
+      return;
+    }
+    int refused = 0;
+    for (final MeetingSummary meeting in meetings) {
+      if (!await widget.controller.deleteMeeting(meeting.meetingId)) {
+        refused++;
+      }
+    }
+    if (refused > 0) {
+      messenger.showSnackBar(
+          SnackBar(content: Text(l10n.unableToDeleteThisMeetingIf)));
+    }
+    if (mounted) {
+      _clearSelection();
+    }
+  }
+
+  /// Exports the selected meetings in `format` and reports the outcome.
+  Future<void> _exportSelected(
+      MeetingExportController exports, MeetingExportFormat format) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final String? message =
+        await exports.exportMeetings(<({String meetingId, String title})>[
+      for (final MeetingSummary meeting in _selectedMeetings)
+        (meetingId: meeting.meetingId, title: meeting.title),
+    ], format);
+    if (message != null) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  /// The app bar of selection mode (#216): how many are chosen, and what can be done to them.
+  AppBar _selectionBar() {
+    final List<MeetingSummary> meetings = _selectedMeetings;
+    return AppBar(
+      key: meetingSelectionBarKey,
+      leading: IconButton(
+        tooltip: l10n.cancelSelection,
+        icon: const Icon(Icons.close),
+        onPressed: _clearSelection,
+      ),
+      title: Text(l10n.selectedCount(meetings.length)),
+      actions: <Widget>[
+        IconButton(
+          tooltip: l10n.selectAll,
+          icon: const Icon(Icons.select_all),
+          onPressed: () => setState(() => _selection.addAll(<String>[
+                for (final MeetingSummary meeting in widget.controller.meetings)
+                  meeting.meetingId,
+              ])),
+        ),
+        if (widget.projectsController case final ProjectsController projects)
+          IconButton(
+            tooltip: l10n.moveToProject,
+            icon: const Icon(Icons.drive_file_move_outline),
+            onPressed: meetings.isEmpty
+                ? null
+                : () async {
+                    await chooseProjectForMeetings(context,
+                        controller: projects,
+                        meetingIds: <String>[
+                          for (final MeetingSummary meeting in meetings)
+                            meeting.meetingId,
+                        ]);
+                    if (mounted) {
+                      _clearSelection();
+                    }
+                  },
+          ),
+        if (widget.exportController case final MeetingExportController exports)
+          PopupMenuButton<MeetingExportFormat>(
+            tooltip: exports.canShare ? l10n.shareAction : l10n.export,
+            icon: Icon(exports.canShare
+                ? Icons.share_outlined
+                : Icons.file_download_outlined),
+            enabled: meetings.isNotEmpty,
+            onSelected: (MeetingExportFormat format) =>
+                _exportSelected(exports, format),
+            itemBuilder: (BuildContext context) =>
+                <PopupMenuEntry<MeetingExportFormat>>[
+              for (final MeetingExportFormat format
+                  in MeetingExportFormat.values)
+                PopupMenuItem<MeetingExportFormat>(
+                    value: format, child: Text(format.label)),
+            ],
+          ),
+        IconButton(
+          key: const ValueKey<String>('delete-selected'),
+          tooltip: l10n.delete,
+          icon: const Icon(Icons.delete_outline),
+          onPressed: meetings.isEmpty ? null : _deleteSelected,
+        ),
+      ],
+    );
   }
 
   /// Opens `meeting`: selects it, then on phones also pushes its detail route.
@@ -188,13 +318,23 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // "/" searches the meetings (#215).
-    return AppShortcuts(
-      bindings: <ShortcutActivator, VoidCallback>{
-        if (widget.searchBridge case final SearchBridge bridge)
-          const CharacterActivator('/'): () => _search(bridge),
+    // "/" searches the meetings (#215); Escape and Back leave selection mode (#216).
+    return PopScope(
+      canPop: _selection.isEmpty,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (!didPop) {
+          _clearSelection();
+        }
       },
-      child: _layout(context),
+      child: AppShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          if (widget.searchBridge case final SearchBridge bridge)
+            const CharacterActivator('/'): () => _search(bridge),
+          if (_selection.isNotEmpty)
+            const SingleActivator(LogicalKeyboardKey.escape): _clearSelection,
+        },
+        child: _layout(context),
+      ),
     );
   }
 
@@ -208,45 +348,51 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
           projectsController: widget.projectsController,
           summariesController: widget.summariesController,
           highlightSelection: isTwoPane,
+          selection: _selection,
+          onToggleSelected: _toggleSelected,
           onOpenMeeting: (MeetingSummary meeting) =>
               _openMeeting(meeting, isTwoPane: isTwoPane),
         );
         return Scaffold(
-          appBar: AppBar(
-            title: Text(l10n.meetings),
-            actions: <Widget>[
-              if (widget.editController case final MeetingEditController edits)
-                IconButton(
-                  key: const ValueKey<String>('new-meeting'),
-                  tooltip: l10n.newMeeting,
-                  icon: const Icon(Icons.note_add_outlined),
-                  onPressed: () => _newMeeting(edits, isTwoPane: isTwoPane),
+          appBar: _selection.isNotEmpty
+              ? _selectionBar()
+              : AppBar(
+                  title: Text(l10n.meetings),
+                  actions: <Widget>[
+                    if (widget.editController
+                        case final MeetingEditController edits)
+                      IconButton(
+                        key: const ValueKey<String>('new-meeting'),
+                        tooltip: l10n.newMeeting,
+                        icon: const Icon(Icons.note_add_outlined),
+                        onPressed: () =>
+                            _newMeeting(edits, isTwoPane: isTwoPane),
+                      ),
+                    if (widget.searchBridge case final SearchBridge bridge)
+                      IconButton(
+                        tooltip: l10n.searchMeetings,
+                        icon: const Icon(Icons.search),
+                        onPressed: () => _search(bridge),
+                      ),
+                    if (widget.chatBridge case final ChatBridge bridge)
+                      IconButton(
+                        tooltip: l10n.chatWithAllYourNotes,
+                        icon: const Icon(Icons.forum_outlined),
+                        onPressed: () => openChat(context,
+                            bridge: bridge,
+                            topic: const ChatTopic.everything(),
+                            title: l10n.chatWithAllNotes,
+                            openMeeting: _openCitedMeeting,
+                            projectsController: widget.projectsController,
+                            handoff: widget.summariesController?.handoff),
+                      ),
+                    IconButton(
+                      tooltip: l10n.refresh,
+                      icon: const Icon(Icons.refresh),
+                      onPressed: widget.controller.loadMeetings,
+                    ),
+                  ],
                 ),
-              if (widget.searchBridge case final SearchBridge bridge)
-                IconButton(
-                  tooltip: l10n.searchMeetings,
-                  icon: const Icon(Icons.search),
-                  onPressed: () => _search(bridge),
-                ),
-              if (widget.chatBridge case final ChatBridge bridge)
-                IconButton(
-                  tooltip: l10n.chatWithAllYourNotes,
-                  icon: const Icon(Icons.forum_outlined),
-                  onPressed: () => openChat(context,
-                      bridge: bridge,
-                      topic: const ChatTopic.everything(),
-                      title: l10n.chatWithAllNotes,
-                      openMeeting: _openCitedMeeting,
-                      projectsController: widget.projectsController,
-                      handoff: widget.summariesController?.handoff),
-                ),
-              IconButton(
-                tooltip: l10n.refresh,
-                icon: const Icon(Icons.refresh),
-                onPressed: widget.controller.loadMeetings,
-              ),
-            ],
-          ),
           body: isTwoPane
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -287,9 +433,15 @@ final class _MeetingList extends StatelessWidget {
     required this.controller,
     required this.highlightSelection,
     required this.onOpenMeeting,
+    required this.selection,
+    required this.onToggleSelected,
     this.projectsController,
     this.summariesController,
   });
+
+  /// The meetings chosen for a batch action; while any is, a tap selects instead of opening.
+  final Set<String> selection;
+  final ValueChanged<MeetingSummary> onToggleSelected;
 
   final MeetingListController controller;
 
@@ -357,15 +509,27 @@ final class _MeetingList extends StatelessWidget {
             itemCount: newestFirst.length,
             itemBuilder: (BuildContext context, int index) {
               final MeetingSummary meeting = newestFirst[index];
+              final bool selecting = selection.isNotEmpty;
+              final bool selected = selection.contains(meeting.meetingId);
               return _MeetingRow(
                 controller: controller,
                 projectsController: projectsController,
                 summariesController: summariesController,
                 meeting: meeting,
+                onSelect: () => onToggleSelected(meeting),
+                selecting: selecting,
                 child: ListTile(
-                  leading: const Icon(Icons.event_note),
-                  selected: highlightSelection &&
-                      controller.selectedMeetingId == meeting.meetingId,
+                  leading: selecting
+                      ? Checkbox(
+                          key: ValueKey<String>('select-${meeting.meetingId}'),
+                          value: selected,
+                          onChanged: (_) => onToggleSelected(meeting),
+                        )
+                      : const Icon(Icons.event_note),
+                  selected: selected ||
+                      (!selecting &&
+                          highlightSelection &&
+                          controller.selectedMeetingId == meeting.meetingId),
                   title: Text(
                     meeting.title,
                     maxLines: 2,
@@ -378,29 +542,20 @@ final class _MeetingList extends StatelessWidget {
                     '${formatMeetingDuration(meeting.durationMs)}'
                     '${meeting.recordedOnLabel == null ? '' : ' · ${meeting.recordedOnLabel}'}',
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      if (summariesController
-                          case final SummariesController summaries)
-                        MeetingSummaryButton(
-                          controller: summaries,
-                          meetingId: meeting.meetingId,
-                          title: meeting.title,
-                        ),
-                      IconButton(
-                        key: ValueKey<String>('delete-${meeting.meetingId}'),
-                        tooltip: l10n.deleteMeeting,
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => deleteMeetingAfterAsking(
-                          context,
-                          controller: controller,
-                          meeting: meeting,
-                        ),
-                      ),
-                    ],
-                  ),
-                  onTap: () => onOpenMeeting(meeting),
+                  trailing: selecting
+                      ? null
+                      : switch (summariesController) {
+                          final SummariesController summaries =>
+                            MeetingSummaryButton(
+                              controller: summaries,
+                              meetingId: meeting.meetingId,
+                              title: meeting.title,
+                            ),
+                          null => null,
+                        },
+                  onTap: selecting
+                      ? () => onToggleSelected(meeting)
+                      : () => onOpenMeeting(meeting),
                 ),
               );
             },
@@ -421,6 +576,12 @@ enum _MeetingRowAction {
 
   /// Opens the summary menu (#95).
   summary,
+
+  /// Starts selecting meetings for a batch action (#216).
+  select,
+
+  /// Deletes the meeting after asking (#216: rows have no delete icon any more).
+  delete,
 }
 
 /// Adds a context menu with "Rename" and, with projects, "Add to project…" to one meeting row.
@@ -432,12 +593,20 @@ final class _MeetingRow extends StatelessWidget {
     required this.controller,
     required this.meeting,
     required this.child,
+    required this.onSelect,
+    required this.selecting,
     this.projectsController,
     this.summariesController,
   });
 
   final MeetingListController controller;
   final MeetingSummary meeting;
+
+  /// Adds this meeting to the selection (#216).
+  final VoidCallback onSelect;
+
+  /// Whether a selection is being made: the row then has no swipe or hover actions.
+  final bool selecting;
 
   /// Offers "Add to project…" when given.
   final ProjectsController? projectsController;
@@ -471,6 +640,14 @@ final class _MeetingRow extends StatelessWidget {
           overlayPosition & Size.zero, Offset.zero & overlay.size),
       items: <PopupMenuEntry<_MeetingRowAction>>[
         PopupMenuItem<_MeetingRowAction>(
+          key: const ValueKey<String>('row-select'),
+          value: _MeetingRowAction.select,
+          child: ListTile(
+            leading: const Icon(Icons.check_box_outlined),
+            title: Text(l10n.select),
+          ),
+        ),
+        PopupMenuItem<_MeetingRowAction>(
           value: _MeetingRowAction.rename,
           child: ListTile(
             leading: Icon(Icons.edit_outlined),
@@ -493,6 +670,15 @@ final class _MeetingRow extends StatelessWidget {
               title: Text(l10n.summary2),
             ),
           ),
+        const PopupMenuDivider(),
+        PopupMenuItem<_MeetingRowAction>(
+          key: const ValueKey<String>('row-delete'),
+          value: _MeetingRowAction.delete,
+          child: ListTile(
+            leading: const Icon(Icons.delete_outline),
+            title: Text(l10n.delete),
+          ),
+        ),
       ],
     );
     if (!context.mounted) {
@@ -505,6 +691,11 @@ final class _MeetingRow extends StatelessWidget {
         await _addToProject(context);
       case _MeetingRowAction.summary:
         await _summary(context);
+      case _MeetingRowAction.select:
+        onSelect();
+      case _MeetingRowAction.delete:
+        await deleteMeetingAfterAsking(context,
+            controller: controller, meeting: meeting);
       case null:
         break;
     }
@@ -541,10 +732,49 @@ final class _MeetingRow extends StatelessWidget {
     }
   }
 
+  /// The row's quick delete (#216): a swipe to the start on phones and tablets, a button that
+  /// appears on hover (or keyboard focus) on desktops, instead of a delete icon in every row.
+  Widget _withRowActions(BuildContext context) {
+    final TargetPlatform platform = Theme.of(context).platform;
+    final bool touch =
+        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+    if (touch) {
+      final ColorScheme colors = Theme.of(context).colorScheme;
+      return Dismissible(
+        key: ValueKey<String>('swipe-${meeting.meetingId}'),
+        direction: DismissDirection.endToStart,
+        background: ColoredBox(
+          color: colors.errorContainer,
+          child: Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(end: 24),
+              child: Icon(Icons.delete_outline, color: colors.onErrorContainer),
+            ),
+          ),
+        ),
+        // The list drops the row itself once the meeting is gone.
+        confirmDismiss: (_) async {
+          await deleteMeetingAfterAsking(context,
+              controller: controller, meeting: meeting);
+          return false;
+        },
+        child: child,
+      );
+    }
+    return _HoverDelete(
+      onDelete: () => deleteMeetingAfterAsking(context,
+          controller: controller, meeting: meeting),
+      deleteKey: ValueKey<String>('delete-${meeting.meetingId}'),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
       customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
+        CustomSemanticsAction(label: l10n.select): onSelect,
         CustomSemanticsAction(label: l10n.rename): () => _rename(context),
         if (projectsController != null)
           CustomSemanticsAction(label: l10n.addToProject2): () =>
@@ -570,7 +800,59 @@ final class _MeetingRow extends StatelessWidget {
               _showContextMenu(context, details.globalPosition),
           onSecondaryTapUp: (TapUpDetails details) =>
               _showContextMenu(context, details.globalPosition),
-          child: child,
+          child: selecting ? child : _withRowActions(context),
+        ),
+      ),
+    );
+  }
+}
+
+/// The meeting list's app bar while selecting (#216), for tests.
+const Key meetingSelectionBarKey = ValueKey<String>('meeting-selection-bar');
+
+/// Shows a delete button over the end of a row while the pointer is over it or the keyboard focus
+/// is inside it (#216), so rows stay uncluttered on desktops.
+final class _HoverDelete extends StatefulWidget {
+  const _HoverDelete(
+      {required this.onDelete, required this.deleteKey, required this.child});
+
+  final VoidCallback onDelete;
+  final Key deleteKey;
+  final Widget child;
+
+  @override
+  State<_HoverDelete> createState() => _HoverDeleteState();
+}
+
+final class _HoverDeleteState extends State<_HoverDelete> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool shown = _hovered || _focused;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (bool focused) => setState(() => _focused = focused),
+        child: Stack(
+          alignment: AlignmentDirectional.centerEnd,
+          children: <Widget>[
+            widget.child,
+            if (shown)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: 8),
+                child: IconButton.filledTonal(
+                  key: widget.deleteKey,
+                  tooltip: l10n.deleteMeeting,
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: widget.onDelete,
+                ),
+              ),
+          ],
         ),
       ),
     );

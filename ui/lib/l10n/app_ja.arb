@@ -921,5 +921,16 @@
   "playOrPauseTheRecording": "録音を再生・一時停止",
   "back10SecondsForward10Seconds": "10 秒戻る・10 秒進む",
   "showTheseShortcuts": "このショートカット一覧を表示",
-  "spaceKey": "スペース"
+  "spaceKey": "スペース",
+  "select": "選択",
+  "selectAll": "すべて選択",
+  "cancelSelection": "選択を解除",
+  "selectedCount": "{count, plural, other{{count} 件を選択}}",
+  "deleteMeetingsCount": "{count, plural, other{{count} 件の会議を削除しますか？}}",
+  "movedMeetingsTo": "{count} 件の会議を {project} に移動しました",
+  "removedMeetingsFromTheirProjects": "{count} 件の会議をプロジェクトから外しました",
+  "someMeetingsCouldNotBeMoved": "一部の会議を移動できませんでした。",
+  "someMeetingsCouldNotBeExported": "一部の会議を書き出せませんでした。",
+  "exportedMeetingsTo": "{count} 件の会議を {folder} に書き出しました",
+  "meetingsCount": "{count, plural, other{{count} 件の会議}}"
 }

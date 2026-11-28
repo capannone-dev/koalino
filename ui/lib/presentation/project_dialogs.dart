@@ -279,14 +279,36 @@ Future<void> chooseProjectForMeeting(
   BuildContext context, {
   required ProjectsController controller,
   required String meetingId,
+}) =>
+    chooseProjectForMeetings(context,
+        controller: controller, meetingIds: <String>[meetingId]);
+
+/// The chooser's current value when the meetings are in different projects.
+const String _mixedProjects = '\u0000mixed';
+
+/// Asks which project several meetings belong to and moves them all there (#216); the
+/// one-meeting case is [chooseProjectForMeeting].
+///
+/// Inputs: A mounted context, the projects controller, and the meetings (at least one).
+/// Outputs: Completes when the chooser (and any naming dialog) closes.
+/// Side effects: Reads projects and memberships; may create a project; writes each meeting's
+/// document; shows one snack bar with the outcome.
+Future<void> chooseProjectForMeetings(
+  BuildContext context, {
+  required ProjectsController controller,
+  required List<String> meetingIds,
 }) async {
   final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
   await controller.loadProjects();
   final Map<String, String> memberships = await controller.meetingProjects();
-  if (!context.mounted) {
+  if (!context.mounted || meetingIds.isEmpty) {
     return;
   }
-  final String current = memberships[meetingId] ?? _noProject;
+  final Set<String> places = <String>{
+    for (final String meetingId in meetingIds)
+      memberships[meetingId] ?? _noProject,
+  };
+  final String current = places.length == 1 ? places.single : _mixedProjects;
   String? chosen = await showDialog<String>(
     context: context,
     builder: (BuildContext context) => SimpleDialog(
@@ -344,18 +366,33 @@ Future<void> chooseProjectForMeeting(
     return;
   }
   final String target = chosen;
-  final bool moved = await controller.moveMeeting(
-      meetingId, target == _noProject ? null : target);
+  bool moved = true;
+  for (final String meetingId in meetingIds) {
+    if (memberships[meetingId] == target) {
+      continue;
+    }
+    moved = await controller.moveMeeting(
+            meetingId, target == _noProject ? null : target) &&
+        moved;
+  }
   final String? targetName = controller.projects
       .where((ProjectSummary project) => project.projectId == target)
       .map((ProjectSummary project) => project.name)
       .firstOrNull;
+  final bool several = meetingIds.length > 1;
   messenger.showSnackBar(SnackBar(
     content: Text(!moved
-        ? l10n.theMeetingCouldNotBeMoved
+        ? (several
+            ? l10n.someMeetingsCouldNotBeMoved
+            : l10n.theMeetingCouldNotBeMoved)
         : target == _noProject
-            ? l10n.removedFromItsProject
-            : l10n.movedTo(targetName ?? 'the project')),
+            ? (several
+                ? l10n.removedMeetingsFromTheirProjects(meetingIds.length)
+                : l10n.removedFromItsProject)
+            : several
+                ? l10n.movedMeetingsTo(
+                    meetingIds.length, targetName ?? 'the project')
+                : l10n.movedTo(targetName ?? 'the project')),
   ));
 }
 

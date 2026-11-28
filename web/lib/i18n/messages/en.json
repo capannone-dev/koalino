@@ -607,5 +607,18 @@
   "showTheseShortcuts": "Show these shortcuts",
   "goToPlace": "Go to {place}",
   "commandPalette": "Command palette",
-  "searchThisPage": "Search (Meetings, Projects)"
+  "searchThisPage": "Search (Meetings, Projects)",
+  "select": "Select",
+  "selectAll": "Select all",
+  "cancelSelection": "Cancel selection",
+  "selectedCount": {"=1": "1 selected", "other": "{count} selected"},
+  "deleteMeetingsCount": {"=1": "Delete 1 meeting?", "other": "Delete {count} meetings?"},
+  "movedMeetingsTo": "Moved {count} meetings to {project}",
+  "removedMeetingsFromTheirProjects": "Removed {count} meetings from their projects",
+  "someMeetingsCouldNotBeMoved": "Some meetings could not be moved.",
+  "moveToProject": "Move to project",
+  "move": "Move",
+  "selectMeeting": "Select {title}",
+  "meetingsDeletedCount": {"=1": "1 meeting deleted", "other": "{count} meetings deleted"},
+  "someMeetingsCouldNotBeDeleted": "Some meetings could not be deleted."
 }

@@ -3271,4 +3271,64 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get spaceKey => '空格';
+
+  @override
+  String get select => '选择';
+
+  @override
+  String get selectAll => '全选';
+
+  @override
+  String get cancelSelection => '取消选择';
+
+  @override
+  String selectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已选 $count 个',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteMeetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个会议？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String movedMeetingsTo(int count, String project) {
+    return '已将 $count 个会议移到 $project';
+  }
+
+  @override
+  String removedMeetingsFromTheirProjects(int count) {
+    return '已将 $count 个会议移出其项目';
+  }
+
+  @override
+  String get someMeetingsCouldNotBeMoved => '部分会议无法移动。';
+
+  @override
+  String get someMeetingsCouldNotBeExported => '部分会议无法导出。';
+
+  @override
+  String exportedMeetingsTo(int count, String folder) {
+    return '已将 $count 个会议导出到 $folder';
+  }
+
+  @override
+  String meetingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个会议',
+    );
+    return '$_temp0';
+  }
 }

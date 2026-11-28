@@ -634,5 +634,18 @@
   "showTheseShortcuts": "اعرض هذه الاختصارات",
   "goToPlace": "انتقل إلى {place}",
   "commandPalette": "لوحة الأوامر",
-  "searchThisPage": "بحث (الاجتماعات، المشاريع)"
+  "searchThisPage": "بحث (الاجتماعات، المشاريع)",
+  "select": "تحديد",
+  "selectAll": "تحديد الكل",
+  "cancelSelection": "إلغاء التحديد",
+  "selectedCount": {"=1": "تم تحديد 1", "other": "تم تحديد {count}"},
+  "deleteMeetingsCount": {"=1": "حذف اجتماع واحد؟", "other": "حذف {count} اجتماعات؟"},
+  "movedMeetingsTo": "نُقلت {count} اجتماعات إلى {project}",
+  "removedMeetingsFromTheirProjects": "أُزيلت {count} اجتماعات من مشاريعها",
+  "someMeetingsCouldNotBeMoved": "تعذّر نقل بعض الاجتماعات.",
+  "moveToProject": "نقل إلى مشروع",
+  "move": "نقل",
+  "selectMeeting": "تحديد {title}",
+  "meetingsDeletedCount": {"=1": "حُذف اجتماع واحد", "other": "حُذفت {count} اجتماعات"},
+  "someMeetingsCouldNotBeDeleted": "تعذّر حذف بعض الاجتماعات."
 }
