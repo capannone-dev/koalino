@@ -20,7 +20,7 @@ use crate::{
     adapters::ai::{
         compute_resources::core_max_speeds,
         gpu_attempt_guard::{clear_gpu_block, gpu_is_blocked},
-        npu_whisper::install::{NpuInstall, supported_soc, this_soc},
+        npu_whisper::install::{NpuInstall, npu_build_for, supported_soc, this_soc},
         whisper_model_download::{
             HuggingFaceModelSource, ModelDownloadError, download_whisper_model,
         },
@@ -408,8 +408,22 @@ pub(crate) fn npu_json(
     json!({
         "available": available,
         "supported": available && soc_model.is_some_and(supported_soc),
+        // What the Android host downloads for this chip (#183); null on another chip.
+        "build": soc_model
+            .and_then(npu_build_for)
+            .filter(|_| available)
+            .map(|build| json!({
+                "chip": build.chip,
+                "url": build.url(),
+                "sha256": build.sha256,
+                "size_bytes": build.size_bytes,
+                "entry_prefix": build.entry_prefix(),
+                "hexagon": build.hexagon,
+            })),
         "directory": paths.npu_directory.display().to_string(),
         "installed": install.is_installed(),
+        // Whether the engine opened on the NPU at the last recording; null before any (#183).
+        "last_open": install.last_open().map(|opened| if opened { "loaded" } else { "failed" }),
         "enabled": saved.npu_whisper,
     })
 }

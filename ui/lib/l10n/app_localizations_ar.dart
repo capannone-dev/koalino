@@ -3350,6 +3350,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get youCanRecordOnceItIsReady => 'يمكنك التسجيل فور جاهزيته.';
 
   @override
+  String get npuUsedAtTheLastRecording => 'استُخدمت في التسجيل الأخير.';
+
+  @override
+  String get npuFailedAtTheLastRecording =>
+      'لم تجتز وحدة NPU في هذا الهاتف الفحص، لذا يتولى المعالج التفريغ النصي. لإعادة المحاولة، أزل ملفات NPU ونزّلها مجددًا.';
+
+  @override
   String get skipBack10Seconds => 'رجوع 10 ثوانٍ';
 
   @override

@@ -857,6 +857,8 @@
   "gettingAMoreAccurateModel": "جارٍ تنزيل نموذج أدق ({name}) لهذا الجهاز: {percent}",
   "recordingsUseTheCurrentModelMeanwhile": "تواصل التسجيلات استخدام النموذج الحالي حتى يصبح جاهزًا.",
   "youCanRecordOnceItIsReady": "يمكنك التسجيل فور جاهزيته.",
+  "npuUsedAtTheLastRecording": "استُخدمت في التسجيل الأخير.",
+  "npuFailedAtTheLastRecording": "لم تجتز وحدة NPU في هذا الهاتف الفحص، لذا يتولى المعالج التفريغ النصي. لإعادة المحاولة، أزل ملفات NPU ونزّلها مجددًا.",
   "skipBack10Seconds": "رجوع 10 ثوانٍ",
   "@skipBack10Seconds": {},
   "skipForward10Seconds": "تقديم 10 ثوانٍ",

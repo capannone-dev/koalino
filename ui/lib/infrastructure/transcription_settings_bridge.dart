@@ -139,6 +139,8 @@ final class NpuStatus {
     this.directory = '',
     this.installed = false,
     this.enabled = false,
+    this.build,
+    this.lastOpen,
   });
 
   /// Reads `npu` from the core's JSON.
@@ -148,12 +150,33 @@ final class NpuStatus {
         directory: json['directory'] as String? ?? '',
         installed: json['installed'] as bool? ?? false,
         enabled: json['enabled'] as bool? ?? false,
+        build: json['build'] == null
+            ? null
+            : NpuBuild.fromJson(json['build']! as Map<String, Object?>),
+        lastOpen: json['last_open'] as String?,
       );
+
+  /// A copy with the given fields changed. Side effects: None.
+  NpuStatus copyWith({bool? installed, bool? enabled}) => NpuStatus(
+        available: available,
+        supported: supported,
+        directory: directory,
+        installed: installed ?? this.installed,
+        enabled: enabled ?? this.enabled,
+        build: build,
+        lastOpen: lastOpen,
+      );
+
+  /// What to download for this phone's chip (#183), or `null` on another chip.
+  final NpuBuild? build;
+
+  /// Whether the NPU ran the last recording: `loaded`, `failed`, or `null` before any (#183).
+  final String? lastOpen;
 
   /// Whether this build has the NPU engine.
   final bool available;
 
-  /// Whether this phone's chip runs it (Snapdragon 8 Gen 2).
+  /// Whether this phone's chip runs it (Snapdragon 8 Gen 1, 2 or 3, or 8 Elite; #183).
   final bool supported;
 
   /// The core's NPU folder, where the files are downloaded.
@@ -164,6 +187,47 @@ final class NpuStatus {
 
   /// Whether the owner turned it on.
   final bool enabled;
+}
+
+/// The precompiled model for this phone's chip, as the core lists it (#183).
+final class NpuBuild {
+  /// Creates the description.
+  const NpuBuild({
+    required this.chip,
+    required this.url,
+    required this.sha256,
+    required this.sizeBytes,
+    required this.entryPrefix,
+    required this.hexagon,
+  });
+
+  /// Reads `npu.build` from the core's JSON.
+  factory NpuBuild.fromJson(Map<String, Object?> json) => NpuBuild(
+        chip: json['chip']! as String,
+        url: json['url']! as String,
+        sha256: json['sha256']! as String,
+        sizeBytes: json['size_bytes']! as int,
+        entryPrefix: json['entry_prefix']! as String,
+        hexagon: json['hexagon']! as int,
+      );
+
+  /// The chip's name, such as `Snapdragon 8 Gen 3`.
+  final String chip;
+
+  /// The model archive's address on Qualcomm AI Hub.
+  final String url;
+
+  /// The archive's SHA-256, checked before anything is installed.
+  final String sha256;
+
+  /// The archive's size.
+  final int sizeBytes;
+
+  /// The folder inside the archive holding the model files.
+  final String entryPrefix;
+
+  /// The NPU's Hexagon version, which names the QNN library pair to install.
+  final int hexagon;
 }
 
 /// Efficient mode's state on this device.

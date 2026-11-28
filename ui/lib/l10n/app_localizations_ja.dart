@@ -3169,6 +3169,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get youCanRecordOnceItIsReady => '準備ができ次第、録音できるようになります。';
 
   @override
+  String get npuUsedAtTheLastRecording => '前回の録音で使用されました。';
+
+  @override
+  String get npuFailedAtTheLastRecording =>
+      'このスマートフォンの NPU は確認に失敗したため、プロセッサーで文字起こしします。再試行するには、NPU のファイルを削除してもう一度ダウンロードしてください。';
+
+  @override
   String get skipBack10Seconds => '10秒戻る';
 
   @override

@@ -202,12 +202,7 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
     if (enabled && !npu.installed) {
       return transcriptionStatusInvalid;
     }
-    npu = NpuStatus(
-        available: npu.available,
-        supported: npu.supported,
-        directory: npu.directory,
-        installed: npu.installed,
-        enabled: enabled);
+    npu = npu.copyWith(enabled: enabled);
     return transcriptionStatusOk;
   }
 
@@ -232,6 +227,16 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   }
 }
 
+/// The Snapdragon 8 Gen 3's build, as the core reports it (#183).
+const NpuBuild _eightGen3 = NpuBuild(
+  chip: 'Snapdragon 8 Gen 3',
+  url: 'https://example.org/8gen3.zip',
+  sha256: '575cafbe',
+  sizeBytes: 285196969,
+  entryPrefix: 'whisper/',
+  hexagon: 75,
+);
+
 /// Downloads the NPU files on a script: each `progress` call returns the next state.
 final class _FakeNpuDownloader implements NpuDownloader {
   _FakeNpuDownloader(this.bridge);
@@ -241,8 +246,8 @@ final class _FakeNpuDownloader implements NpuDownloader {
   List<NpuDownloadProgress> script = <NpuDownloadProgress>[];
 
   @override
-  Future<void> download(String directory) async {
-    calls.add('download $directory');
+  Future<void> download(String directory, NpuBuild build) async {
+    calls.add('download $directory V${build.hexagon}');
   }
 
   @override
@@ -254,12 +259,7 @@ final class _FakeNpuDownloader implements NpuDownloader {
         ? const NpuDownloadProgress(state: 'idle')
         : script.removeAt(0);
     if (next.state == 'done') {
-      bridge.npu = NpuStatus(
-          available: true,
-          supported: true,
-          directory: bridge.npu.directory,
-          installed: true,
-          enabled: bridge.npu.enabled);
+      bridge.npu = bridge.npu.copyWith(installed: true);
     }
     return next;
   }
@@ -271,7 +271,10 @@ final class _FakeNpuDownloader implements NpuDownloader {
   Future<bool> remove(String directory) async {
     calls.add('remove $directory');
     bridge.npu = NpuStatus(
-        available: true, supported: true, directory: bridge.npu.directory);
+        available: true,
+        supported: true,
+        directory: bridge.npu.directory,
+        build: bridge.npu.build);
     return true;
   }
 }
@@ -879,8 +882,20 @@ void main() {
       'directory': '/data/npu',
       'installed': false,
       'enabled': false,
+      'last_open': 'failed',
+      'build': <String, Object?>{
+        'chip': 'Snapdragon 8 Gen 3',
+        'url': 'https://example.org/model.zip',
+        'sha256': 'ab',
+        'size_bytes': 285196969,
+        'entry_prefix': 'model/',
+        'hexagon': 75,
+      },
     });
     expect(status.supported, isTrue);
+    expect(status.build?.hexagon, 75);
+    expect(status.build?.sizeBytes, 285196969);
+    expect(status.lastOpen, 'failed');
     expect(status.directory, '/data/npu');
     expect(status.installed, isFalse);
     expect(const NpuStatus().supported, isFalse,
@@ -907,7 +922,10 @@ void main() {
       (WidgetTester tester) async {
     final _FakeBridge bridge = _FakeBridge()
       ..npu = const NpuStatus(
-          available: true, supported: true, directory: '/data/npu');
+          available: true,
+          supported: true,
+          directory: '/data/npu',
+          build: _eightGen3);
     final _FakeNpuDownloader downloader = _FakeNpuDownloader(bridge)
       ..script = <NpuDownloadProgress>[
         const NpuDownloadProgress(
@@ -932,7 +950,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Accept and download'));
     await tester.pump();
-    expect(downloader.calls, <String>['download /data/npu']);
+    expect(downloader.calls, <String>['download /data/npu V75'],
+        reason: 'the build and library pair for this chip (#183)');
     await tester.pump(const Duration(milliseconds: 10));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 10));
@@ -948,7 +967,10 @@ void main() {
       (WidgetTester tester) async {
     final _FakeBridge bridge = _FakeBridge()
       ..npu = const NpuStatus(
-          available: true, supported: true, directory: '/data/npu');
+          available: true,
+          supported: true,
+          directory: '/data/npu',
+          build: _eightGen3);
     final _FakeNpuDownloader downloader = _FakeNpuDownloader(bridge)
       ..script = <NpuDownloadProgress>[
         const NpuDownloadProgress(state: 'failed', error: 'corrupted'),
@@ -969,6 +991,7 @@ void main() {
           available: true,
           supported: true,
           directory: '/data/npu',
+          build: _eightGen3,
           installed: true,
           enabled: true);
     final _FakeNpuDownloader downloader = _FakeNpuDownloader(bridge);
@@ -989,4 +1012,27 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.byKey(npuDownloadKey), findsOneWidget);
   });
+
+  for (final (String lastOpen, String expected) in <(String, String)>[
+    ('loaded', 'Used at the last recording.'),
+    ('failed', "This phone's NPU failed its check"),
+  ]) {
+    testWidgets('the NPU switch says the NPU $lastOpen at the last recording',
+        (WidgetTester tester) async {
+      final _FakeBridge bridge = _FakeBridge()
+        ..npu = NpuStatus(
+            available: true,
+            supported: true,
+            directory: '/data/npu',
+            build: _eightGen3,
+            installed: true,
+            enabled: true,
+            lastOpen: lastOpen);
+      await _pump(tester, bridge);
+      await tester.scrollUntilVisible(find.byKey(npuSwitchKey), 200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining(expected), findsOneWidget);
+    });
+  }
 }

@@ -1,0 +1,180 @@
+[
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 15000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Settings\nTab 5 of 5"
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 3000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Transcription model\nChoose the Whisper model."
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 5000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Download"
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 3000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Accept and download"
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 480000
+  },
+  {
+    "eventType": "PRESSED_BACK",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 3000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Record\nTab 1 of 5"
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 3000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Start recording"
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 30000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Settings\nTab 5 of 5"
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 3000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Transcription model\nChoose the Whisper model."
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 8000
+  }
+]

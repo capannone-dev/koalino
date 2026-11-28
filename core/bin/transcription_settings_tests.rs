@@ -300,7 +300,9 @@ fn an_old_openai_choice_is_ignored_and_dropped() {
 /// and that the shipped multilingual model supplies its vocabulary (#75).
 #[test]
 fn the_npu_applies_only_when_turned_on_and_installed() {
-    use crate::adapters::ai::npu_whisper::install::{MODEL_FILES, NpuInstall, QNN_FILES};
+    use crate::adapters::ai::npu_whisper::install::{
+        MODEL_FILES, NpuInstall, QNN_COMMON_FILES, hexagon_files,
+    };
     let paths = paths("npu");
     assert_eq!(
         paths.npu_directory,
@@ -321,12 +323,15 @@ fn the_npu_applies_only_when_turned_on_and_installed() {
     let install = NpuInstall::new(&paths.npu_directory);
     for (folder, files) in [
         (install.model_dir(), MODEL_FILES.as_slice()),
-        (install.qnn_dir(), QNN_FILES.as_slice()),
+        (install.qnn_dir(), QNN_COMMON_FILES.as_slice()),
     ] {
         std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
         for file in files {
             std::fs::write(folder.join(file), b"x").unwrap_or_else(|e| panic!("{e}"));
         }
+    }
+    for file in hexagon_files(73) {
+        std::fs::write(install.qnn_dir().join(file), b"x").unwrap_or_else(|e| panic!("{e}"));
     }
     let applied = apply_saved_settings(config(&paths), &on, &paths);
     assert_eq!(applied.npu_directory(), Some(paths.npu_directory.as_path()));

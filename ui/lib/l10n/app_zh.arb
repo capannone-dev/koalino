@@ -857,6 +857,8 @@
   "gettingAMoreAccurateModel": "正在为此设备获取更准确的模型（{name}）：{percent}",
   "recordingsUseTheCurrentModelMeanwhile": "在它准备好之前，录音继续使用当前模型。",
   "youCanRecordOnceItIsReady": "准备好后即可录音。",
+  "npuUsedAtTheLastRecording": "上次录音时已使用。",
+  "npuFailedAtTheLastRecording": "此手机的 NPU 未通过检查，因此由处理器转写。要重试，请删除 NPU 文件并重新下载。",
   "skipBack10Seconds": "后退 10 秒",
   "@skipBack10Seconds": {},
   "skipForward10Seconds": "前进 10 秒",

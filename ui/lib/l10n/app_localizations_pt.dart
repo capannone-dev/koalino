@@ -3336,6 +3336,13 @@ class AppLocalizationsPt extends AppLocalizations {
       'Você poderá gravar assim que ele estiver pronto.';
 
   @override
+  String get npuUsedAtTheLastRecording => 'Usada na última gravação.';
+
+  @override
+  String get npuFailedAtTheLastRecording =>
+      'A NPU deste telefone não passou na verificação, então o processador transcreve. Para tentar de novo, remova os arquivos da NPU e baixe-os novamente.';
+
+  @override
   String get skipBack10Seconds => 'Voltar 10 segundos';
 
   @override

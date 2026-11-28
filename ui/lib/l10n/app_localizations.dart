@@ -5260,6 +5260,18 @@ abstract class AppLocalizations {
   /// **'You can record as soon as it\'s ready.'**
   String get youCanRecordOnceItIsReady;
 
+  /// No description provided for @npuUsedAtTheLastRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Used at the last recording.'**
+  String get npuUsedAtTheLastRecording;
+
+  /// No description provided for @npuFailedAtTheLastRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone\'s NPU failed its check, so the processor transcribes. To try again, remove the NPU files and download them again.'**
+  String get npuFailedAtTheLastRecording;
+
   /// Kept-recording player on the meeting page (#197).
   ///
   /// In en, this message translates to:

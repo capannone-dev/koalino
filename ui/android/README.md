@@ -63,8 +63,9 @@ Play Store distribution would need an asset pack instead.
 
 On a Snapdragon 8 Gen 2 phone (SM8550), Settings → Transcription model offers "Transcribe on the
 NPU". `NpuDownload.kt` serves `note_taker/npu`: after the owner accepts Qualcomm's terms it
-downloads Qualcomm's QNN runtime 2.50.0 (Maven Central) and AI Hub's precompiled Whisper Small,
-both pinned by size and SHA-256, extracts only the files needed into a staging folder, and moves
+downloads Qualcomm's QNN runtime 2.50.0 (Maven Central) and AI Hub's precompiled Whisper Small
+for the phone's chip (the core's table names the build and its Hexagon library pair, #183), both
+pinned by size and SHA-256, extracts only the files needed into a staging folder, and moves
 them into `<data directory>/npu/{qnn,model}` when both are complete. Dart polls its progress and
 turns the NPU on (`note_taker_set_npu_whisper`) once done. No Qualcomm code is in the APK; only
 Microsoft's `libonnxruntime.so` (MIT) is, beside the core.

@@ -3342,6 +3342,13 @@ class AppLocalizationsIt extends AppLocalizations {
   String get youCanRecordOnceItIsReady => 'Potrai registrare appena è pronto.';
 
   @override
+  String get npuUsedAtTheLastRecording => 'Usata nell\'ultima registrazione.';
+
+  @override
+  String get npuFailedAtTheLastRecording =>
+      'La NPU di questo telefono non ha superato la verifica, quindi trascrive il processore. Per riprovare, rimuovi i file della NPU e scaricali di nuovo.';
+
+  @override
   String get skipBack10Seconds => 'Indietro di 10 secondi';
 
   @override

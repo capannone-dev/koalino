@@ -83,6 +83,35 @@ pub fn load_record(record_file: &Path) -> SpeedCheckRecord {
         .unwrap_or_default()
 }
 
+/// Distinctive words of the clip's opening (VoxPopuli's transcript: "Sono inoltre d'accordo con il
+/// Commissario Füle e con i colleghi che mi hanno preceduto, che esistono ragioni morali e di
+/// giustizia…"), to tell a transcript of it from garbled output.
+const CLIP_WORDS: [&str; 8] = [
+    "inoltre",
+    "accordo",
+    "commissario",
+    "colleghi",
+    "preceduto",
+    "ragioni",
+    "morali",
+    "giustizia",
+];
+/// How many of them a transcript must contain: a model may miss or misspell a few.
+const CLIP_WORDS_NEEDED: usize = 4;
+
+/// Reports whether a text is a transcript of the clip, not garbled output (#183).
+///
+/// Inputs: The transcript. Outputs: `true` when it holds at least `CLIP_WORDS_NEEDED` of the clip's
+/// distinctive words, ignoring case and punctuation. Side effects: None.
+pub fn clip_is_understood(text: &str) -> bool {
+    let lowered = text.to_lowercase();
+    CLIP_WORDS
+        .iter()
+        .filter(|word| lowered.contains(*word))
+        .count()
+        >= CLIP_WORDS_NEEDED
+}
+
 /// The clip's samples.
 ///
 /// Outputs: The 16-bit samples; empty if the embedded file were not a mono 16-bit WAV.

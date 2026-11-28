@@ -306,7 +306,13 @@ final class _TranscriptionSettingsScreenState
         key: npuSwitchKey,
         secondary: icon,
         title: Text(l10n.transcribeOnTheNpu),
-        subtitle: Text(l10n.runsWhisperSmallOnThePhone),
+        subtitle: Text(switch ((npu.enabled, npu.lastOpen)) {
+          (true, 'loaded') =>
+            '${l10n.runsWhisperSmallOnThePhone} ${l10n.npuUsedAtTheLastRecording}',
+          (true, 'failed') =>
+            '${l10n.runsWhisperSmallOnThePhone} ${l10n.npuFailedAtTheLastRecording}',
+          _ => l10n.runsWhisperSmallOnThePhone,
+        }),
         value: npu.enabled,
         onChanged: controller.isBusy
             ? null

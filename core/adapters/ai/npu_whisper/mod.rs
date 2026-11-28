@@ -1,7 +1,7 @@
 //! Whisper on a Qualcomm NPU through ONNX Runtime's QNN provider (#75).
 //!
 //! Qualcomm's precompiled `whisper_small_quantized` (w8a16) runs entirely on the Hexagon NPU of
-//! Snapdragon 8 Gen 2 phones. The portable parts here are tested on every platform: the log-mel
+//! Snapdragon 8 Gen 1, 8 Gen 2, 8 Gen 3 and 8 Elite phones (`install::NPU_BUILDS`, #183). The portable parts here are tested on every platform: the log-mel
 //! input (`log_mel`), the vocabulary and mel filters read from the shipped whisper.cpp model
 //! (`ggml_vocab`), and the greedy decoder loop (`greedy_decoder`). The ONNX Runtime engine
 //! (`qnn_engine`) needs the `npu-whisper` feature; the QNN libraries and the model are

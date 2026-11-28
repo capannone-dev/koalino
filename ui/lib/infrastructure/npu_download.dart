@@ -6,6 +6,7 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
 
 /// Where a download stands.
 final class NpuDownloadProgress {
@@ -45,8 +46,8 @@ final class NpuDownloadProgress {
 
 /// Downloads and removes the NPU files.
 abstract interface class NpuDownloader {
-  /// Starts downloading into `directory` (the core's NPU folder).
-  Future<void> download(String directory);
+  /// Starts downloading `build` and its QNN libraries into `directory` (the core's NPU folder).
+  Future<void> download(String directory, NpuBuild build);
 
   /// Reports the running or latest download.
   Future<NpuDownloadProgress> progress();
@@ -64,7 +65,7 @@ final class NoNpuDownloader implements NpuDownloader {
   const NoNpuDownloader();
 
   @override
-  Future<void> download(String directory) async {}
+  Future<void> download(String directory, NpuBuild build) async {}
 
   @override
   Future<NpuDownloadProgress> progress() async =>
@@ -86,8 +87,15 @@ final class ChannelNpuDownloader implements NpuDownloader {
 
   /// Side effects: The host downloads about 360 MB in the background.
   @override
-  Future<void> download(String directory) => _channel.invokeMethod<void>(
-      'download', <String, Object?>{'directory': directory});
+  Future<void> download(String directory, NpuBuild build) =>
+      _channel.invokeMethod<void>('download', <String, Object?>{
+        'directory': directory,
+        'modelUrl': build.url,
+        'modelSha256': build.sha256,
+        'modelSizeBytes': build.sizeBytes,
+        'modelEntryPrefix': build.entryPrefix,
+        'hexagon': build.hexagon,
+      });
 
   @override
   Future<NpuDownloadProgress> progress() async {

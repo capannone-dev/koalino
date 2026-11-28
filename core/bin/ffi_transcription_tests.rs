@@ -141,8 +141,21 @@ fn the_npu_section_reports_support_files_and_choice() {
         on_a_supported_phone["directory"],
         paths.npu_directory.display().to_string()
     );
-    let elsewhere = npu_json(&paths, &saved, true, Some("SM8650"));
+    assert_eq!(on_a_supported_phone["build"]["hexagon"], 73);
+    assert!(
+        on_a_supported_phone["last_open"].is_null(),
+        "no recording yet"
+    );
+    assert_eq!(
+        on_a_supported_phone["build"]["size_bytes"], 285_198_576_u64,
+        "the download for this chip"
+    );
+    let eight_gen_3 = npu_json(&paths, &saved, true, Some("SM8650"));
+    assert_eq!(eight_gen_3["supported"], true, "#183");
+    assert_eq!(eight_gen_3["build"]["hexagon"], 75);
+    let elsewhere = npu_json(&paths, &saved, true, Some("Tensor G3"));
     assert_eq!(elsewhere["supported"], false, "another chip");
+    assert!(elsewhere["build"].is_null());
     let without_the_feature = npu_json(&paths, &saved, false, Some("SM8550"));
     assert_eq!(without_the_feature["supported"], false);
     assert_eq!(npu_json(&paths, &saved, true, None)["supported"], false);

@@ -2,7 +2,7 @@
 
 # NPU Whisper
 
-Runs Whisper Small on the Hexagon NPU of a Snapdragon 8 Gen 2 phone (SM8550). The model is
+Runs Whisper Small on the Hexagon NPU of a Snapdragon phone. The model is
 Qualcomm AI Hub's precompiled `whisper_small_quantized` (w8a16), loaded with Microsoft's ONNX
 Runtime and its QNN execution provider. The CPU fallback is turned off, so an NPU that cannot run
 the model is an error and the composition falls back to whisper.cpp.
@@ -10,6 +10,28 @@ the model is an error and the composition falls back to whisper.cpp.
 Nothing Qualcomm makes is shipped. The Android app downloads the QNN runtime and the model when
 the owner asks, in Settings → Transcription model → Transcribe on the NPU (`NpuDownload.kt`), and
 checks each archive's SHA-256. The files go into `<data directory>/npu`.
+
+## Chips (#183)
+
+A precompiled model runs only on the NPU it was compiled for, so `install.rs` keeps a table
+(`NPU_BUILDS`) from Android's SoC model to AI Hub's build for it, with the archive's hash and size and
+the NPU's Hexagon version. The QNN runtime is the same for all; the download keeps only the
+`libQnnHtpV<n>Stub/Skel.so` pair for that version. The SoC and version come from each build's
+context binary (`soc_type`, `arch`):
+
+| SoC | Chip | AI Hub target | Hexagon |
+| --- | --- | --- | --- |
+| SM8450 | Snapdragon 8 Gen 1 | `qualcomm_snapdragon_8gen1` | V69 |
+| SM8550 | Snapdragon 8 Gen 2 | `qualcomm_qcs8550_proxy` | V73 |
+| SM8650 | Snapdragon 8 Gen 3 | `qualcomm_snapdragon_8gen3` | V75 |
+| SM8750 | Snapdragon 8 Elite | `qualcomm_snapdragon_8_elite_for_galaxy` | V79 |
+
+The 7 Gen 4 build (SM7750, V73) also exists but stays out until a phone can test it. The first time
+the engine is needed after a download, it transcribes the speed-check clip (`core/assets`) on the
+NPU in Italian and must produce a recognisable transcript (`speed_check::clip_is_understood`); a
+build that loads but decodes garbage on a chip fails this. The outcome is kept in `<npu>/last-open`:
+after a failure recordings go straight to whisper.cpp, and Settings says so under the NPU switch,
+until the NPU files are removed and downloaded again.
 
 | File | Purpose |
 | --- | --- |
@@ -61,7 +83,7 @@ the live model if the NPU will not open.
 - The manifest declares `libcdsprpc.so` with `<uses-native-library>`. Without it the app cannot
   reach the NPU and device creation fails with `QNN_DEVICE_ERROR_INVALID_CONFIG`.
 - `ADSP_LIBRARY_PATH` names `<data directory>/npu/qnn` before the core starts
-  (`NpuDownload.prepareEnvironment`), so the NPU can load `libQnnHtpV73Skel.so`.
+  (`NpuDownload.prepareEnvironment`), so the NPU can load its `libQnnHtpV<n>Skel.so`.
 
 ## Running the on-device test
 

@@ -40,3 +40,25 @@ gcloud firebase test android run --type robo --app koalino.apk \
 List phone models with `gcloud firebase test android models list --filter=form=PHYSICAL`.
 Results, screenshots and logcat land in the project's Test Lab bucket. The free tier allows only
 a few physical-device runs a day.
+
+## npu-chips.robo.json
+
+Checks that a Snapdragon phone's NPU runs the precompiled Whisper build the core picks for its chip
+(#183):
+
+1. Opens **Settings → Transcription model** and taps the NPU's **Download**, then **Accept and
+   download** (Qualcomm's terms).
+2. Waits eight minutes on the page, which turns the NPU on once the files are complete.
+3. Starts a recording, which opens the NPU engine (Test Lab grants the microphone).
+4. Reopens the page: under **Transcribe on the NPU** it says "Used at the last recording." when
+   the engine opened on the NPU, or that the NPU couldn't run the model.
+
+```bash
+gcloud firebase test android run --type robo --app koalino.apk \
+  --robo-script tools/testlab/npu-chips.robo.json \
+  --device model=b0q,version=33 --device model=e3q,version=34 --device model=pa1q,version=36 \
+  --timeout 20m
+```
+
+`b0q` is a Galaxy S22 Ultra (Snapdragon 8 Gen 1, SM8450), `e3q` a Galaxy S24 Ultra (8 Gen 3,
+SM8650) and `pa1q` a Galaxy S25 (8 Elite, SM8750).

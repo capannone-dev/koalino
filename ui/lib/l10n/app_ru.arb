@@ -857,6 +857,8 @@
   "gettingAMoreAccurateModel": "Загружается более точная модель ({name}) для этого устройства: {percent}",
   "recordingsUseTheCurrentModelMeanwhile": "Пока она не готова, записи используют текущую модель.",
   "youCanRecordOnceItIsReady": "Записывать можно будет, как только она будет готова.",
+  "npuUsedAtTheLastRecording": "Использовался при последней записи.",
+  "npuFailedAtTheLastRecording": "NPU этого телефона не прошёл проверку, поэтому расшифровывает процессор. Чтобы попробовать снова, удалите файлы NPU и скачайте их заново.",
   "skipBack10Seconds": "Назад на 10 секунд",
   "@skipBack10Seconds": {},
   "skipForward10Seconds": "Вперёд на 10 секунд",

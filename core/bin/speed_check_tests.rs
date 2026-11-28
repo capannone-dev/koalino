@@ -269,3 +269,30 @@ fn nothing_is_timed_without_automatic_or_once_recordings_measured_it() {
 fn the_clip_is_fifteen_seconds_of_sixteen_kilohertz_speech() {
     assert_eq!(crate::speed_check::clip_samples().len(), 15 * 16_000);
 }
+
+#[test]
+fn a_transcript_of_the_clip_is_recognised_and_garbage_is_not() {
+    use crate::speed_check::clip_is_understood;
+    // whisper.cpp small's wording, and the reference (VoxPopuli's gold transcript).
+    assert!(clip_is_understood(
+        "Sono inoltre d'accordo con il commissario Füle e con i colleghi che mi hanno preceduto, \
+         che esistono ragioni morali e di giustizia"
+    ));
+    assert!(
+        clip_is_understood(
+            "sono inoltre daccordo col Commissario e coi colleghi che hanno preceduto: ragioni morali"
+        ),
+        "a few words missed or misspelled still pass"
+    );
+    assert!(
+        !clip_is_understood("@@@@@@@@@@@@@@@@@@@@@@@@"),
+        "garbled output (#183)"
+    );
+    assert!(!clip_is_understood(""), "nothing");
+    assert!(
+        !clip_is_understood(
+            "I also agree with the Commissioner and with colleagues who spoke before me"
+        ),
+        "another language is not this clip"
+    );
+}

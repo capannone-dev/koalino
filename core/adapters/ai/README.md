@@ -5,7 +5,7 @@
 `diarization/` holds the local speaker diarization adapter; see its README. Its ONNX Runtime
 models are compiled only with `--features diarization`.
 
-`npu_whisper/` runs Whisper Small on a Snapdragon 8 Gen 2 NPU through ONNX Runtime's QNN provider
+`npu_whisper/` runs Whisper Small on a Snapdragon NPU (8 Gen 1 to 8 Elite) through ONNX Runtime's QNN provider
 (#75); see its README. Its engine is compiled only with `--features npu-whisper` (Android builds),
 and its files are downloaded on the owner's request, never shipped.
 

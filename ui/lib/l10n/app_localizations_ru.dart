@@ -3353,6 +3353,13 @@ class AppLocalizationsRu extends AppLocalizations {
       'Записывать можно будет, как только она будет готова.';
 
   @override
+  String get npuUsedAtTheLastRecording => 'Использовался при последней записи.';
+
+  @override
+  String get npuFailedAtTheLastRecording =>
+      'NPU этого телефона не прошёл проверку, поэтому расшифровывает процессор. Чтобы попробовать снова, удалите файлы NPU и скачайте их заново.';
+
+  @override
   String get skipBack10Seconds => 'Назад на 10 секунд';
 
   @override

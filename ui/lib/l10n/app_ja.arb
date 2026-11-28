@@ -857,6 +857,8 @@
   "gettingAMoreAccurateModel": "このデバイス向けのより正確なモデル（{name}）を取得中：{percent}",
   "recordingsUseTheCurrentModelMeanwhile": "準備ができるまで、録音は現在のモデルを使います。",
   "youCanRecordOnceItIsReady": "準備ができ次第、録音できるようになります。",
+  "npuUsedAtTheLastRecording": "前回の録音で使用されました。",
+  "npuFailedAtTheLastRecording": "このスマートフォンの NPU は確認に失敗したため、プロセッサーで文字起こしします。再試行するには、NPU のファイルを削除してもう一度ダウンロードしてください。",
   "skipBack10Seconds": "10秒戻る",
   "@skipBack10Seconds": {},
   "skipForward10Seconds": "10秒進む",

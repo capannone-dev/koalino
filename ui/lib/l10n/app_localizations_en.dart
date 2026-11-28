@@ -3295,6 +3295,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'You can record as soon as it\'s ready.';
 
   @override
+  String get npuUsedAtTheLastRecording => 'Used at the last recording.';
+
+  @override
+  String get npuFailedAtTheLastRecording =>
+      'This phone\'s NPU failed its check, so the processor transcribes. To try again, remove the NPU files and download them again.';
+
+  @override
   String get skipBack10Seconds => 'Back 10 seconds';
 
   @override

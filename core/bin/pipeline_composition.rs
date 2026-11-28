@@ -462,6 +462,24 @@ fn npu_engine(
         qnn_dir: install.qnn_dir(),
         vocabulary_model: vocabulary_model.clone(),
     };
+    // A phone whose NPU failed before goes straight to whisper.cpp; removing and downloading the
+    // NPU files again forgets the failure (#183).
+    if install.last_open() == Some(false) {
+        tracing::info!("the NPU failed its check before; transcribing with whisper.cpp");
+        return None;
+    }
+    // The first time, the NPU must transcribe the speed-check clip recognisably: a build that
+    // loads but decodes garbage on this chip must not replace whisper.cpp.
+    if install.last_open().is_none() {
+        let understood = npu_understands_clip(&files);
+        install.record_open(understood);
+        if !understood {
+            tracing::warn!(
+                "the NPU did not transcribe the check clip; transcribing with whisper.cpp"
+            );
+            return None;
+        }
+    }
     match QnnWhisperEngine::open(
         &files,
         Some(config.whisper_language.as_str().to_owned()),
@@ -472,10 +490,52 @@ fn npu_engine(
             Some(SelectedTranscriptionEngine::Npu(Box::new(engine)))
         }
         Err(error) => {
+            install.record_open(false);
             tracing::warn!(%error, "the NPU could not be used; transcribing with whisper.cpp");
             None
         }
     }
+}
+
+/// Transcribes the speed-check clip (Italian speech) on the NPU, once per download (#183).
+///
+/// Inputs: The NPU files. Outputs: `true` when the engine opens and its transcript is recognisably
+/// the clip (`speed_check::clip_is_understood`). Side effects: Loads the model onto the NPU for a
+/// few seconds with its own audio store, then frees it; logs only the outcome.
+#[cfg(feature = "npu-whisper")]
+fn npu_understands_clip(
+    files: &crate::adapters::ai::npu_whisper::qnn_engine::NpuWhisperFiles,
+) -> bool {
+    use crate::adapters::ai::npu_whisper::qnn_engine::QnnWhisperEngine;
+    use crate::domain::models::{
+        AudioRecording, DeviceId, MeetingId, RecordingId, TranscriptionContext,
+    };
+    let audio = Arc::new(ChunkAudioStore::new());
+    let engine = match QnnWhisperEngine::open(files, Some("it".to_owned()), Arc::clone(&audio) as _)
+    {
+        Ok(engine) => engine,
+        Err(error) => {
+            tracing::warn!(%error, "the NPU could not open the model for its check");
+            return false;
+        }
+    };
+    let recording_id = RecordingId::new("npu-check");
+    audio.insert(&recording_id, crate::speed_check::clip_samples());
+    let recording = AudioRecording::new(
+        recording_id,
+        MeetingId::new("npu-check"),
+        DeviceId::new("npu-check"),
+    );
+    let understood = match engine.transcribe(&recording, &TranscriptionContext::default()) {
+        Ok(transcript) => crate::speed_check::clip_is_understood(transcript.content()),
+        Err(error) => {
+            tracing::warn!(%error, "the NPU could not transcribe its check clip");
+            false
+        }
+    };
+    audio.clear();
+    tracing::info!(understood, "NPU check clip transcribed");
+    understood
 }
 
 /// Describes how the selected engine's transcriptions appear in telemetry (Issue #53).

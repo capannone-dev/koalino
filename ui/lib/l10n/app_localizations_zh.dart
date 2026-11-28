@@ -3101,6 +3101,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get youCanRecordOnceItIsReady => '准备好后即可录音。';
 
   @override
+  String get npuUsedAtTheLastRecording => '上次录音时已使用。';
+
+  @override
+  String get npuFailedAtTheLastRecording =>
+      '此手机的 NPU 未通过检查，因此由处理器转写。要重试，请删除 NPU 文件并重新下载。';
+
+  @override
   String get skipBack10Seconds => '后退 10 秒';
 
   @override

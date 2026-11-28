@@ -166,14 +166,18 @@ final class TranscriptionSettingsController extends ChangeNotifier {
   /// polled until it ends, and the outcome is reported in `message`.
   Future<void> downloadNpu() async {
     final String? directory = _settings?.npu.directory;
-    if (directory == null || directory.isEmpty || _npuProgress != null) {
+    final NpuBuild? build = _settings?.npu.build;
+    if (directory == null ||
+        directory.isEmpty ||
+        build == null ||
+        _npuProgress != null) {
       return;
     }
     _message = null;
     _npuProgress = const NpuDownloadProgress(state: 'downloading');
     _notify();
     try {
-      await _npuDownloader.download(directory);
+      await _npuDownloader.download(directory, build);
     } on Object {
       _npuProgress = null;
       _message = l10n.theDownloadCouldNotStartPlease;

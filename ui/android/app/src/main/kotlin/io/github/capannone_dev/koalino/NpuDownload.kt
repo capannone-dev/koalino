@@ -2,8 +2,9 @@
 // owner asks, so the APK carries no Qualcomm code. Two pinned archives are fetched over HTTPS and
 // checked against their SHA-256 before anything is extracted:
 //   - Qualcomm's QNN runtime 2.50.0 (Maven Central), from which the HTP (NPU) libraries for the
-//     Snapdragon 8 Gen 2 are kept;
-//   - Qualcomm AI Hub's precompiled Whisper Small (w8a16, for the SM8550's NPU).
+//     phone's Hexagon version are kept;
+//   - Qualcomm AI Hub's precompiled Whisper Small (w8a16) for the phone's chip. The core's chip
+//     table (#183) names it, with its hash, size and Hexagon version; the app passes it here.
 // Files are extracted into a staging folder and moved into `<npu>/qnn` and `<npu>/model` only when
 // both archives are complete, so the core never sees a partial install. The archives are deleted
 // afterwards. `ADSP_LIBRARY_PATH` must name `<npu>/qnn` before the core opens the NPU, so the
@@ -37,11 +38,16 @@ class NpuDownload : MethodChannel.MethodCallHandler {
     @Volatile private var state = "idle"
     @Volatile private var receivedBytes = 0L
     @Volatile private var error: String? = null
+    /** The archives of the running or latest download. */
+    @Volatile private var archives: List<Archive> = emptyList()
 
     /**
-     * Answers `download(directory)`, `progress()`, `cancel()` and `remove(directory)`.
+     * Answers `download(directory, model…, hexagon)`, `progress()`, `cancel()` and
+     * `remove(directory)`.
      *
-     * Inputs: `directory` is the core's NPU folder (`<data directory>/npu`).
+     * Inputs: `directory` is the core's NPU folder (`<data directory>/npu`); `modelUrl`,
+     * `modelSha256`, `modelSizeBytes`, `modelEntryPrefix` and `hexagon` describe the build for
+     * this chip, from the core's table. A model outside Qualcomm AI Hub's bucket is refused.
      * Outputs: `download` and `cancel` answer null at once; `progress` answers
      * `{state, receivedBytes, totalBytes, error}` with state `idle`, `downloading`, `done`,
      * `cancelled` or `failed` (error `no_network`, `server`, `corrupted` or `storage`); `remove`
@@ -52,8 +58,9 @@ class NpuDownload : MethodChannel.MethodCallHandler {
         when (call.method) {
             "download" -> {
                 val directory = call.argument<String>("directory")
-                if (directory == null) {
-                    result.error("invalid_argument", "directory is required", null)
+                val wanted = archivesFor(call)
+                if (directory == null || wanted == null) {
+                    result.error("invalid_argument", "directory and a valid build are required", null)
                     return
                 }
                 if (state == "downloading") {
@@ -64,14 +71,15 @@ class NpuDownload : MethodChannel.MethodCallHandler {
                 state = "downloading"
                 receivedBytes = 0L
                 error = null
-                executor.execute { run(File(directory)) }
+                archives = wanted
+                executor.execute { run(File(directory), wanted) }
                 result.success(null)
             }
             "progress" -> result.success(
                 mapOf(
                     "state" to state,
                     "receivedBytes" to receivedBytes,
-                    "totalBytes" to ARCHIVES.sumOf { it.sizeBytes },
+                    "totalBytes" to archives.sumOf { it.sizeBytes },
                     "error" to error,
                 ),
             )
@@ -96,7 +104,7 @@ class NpuDownload : MethodChannel.MethodCallHandler {
     }
 
     /** Downloads both archives, then installs them; records the outcome in `state`. */
-    private fun run(directory: File) {
+    private fun run(directory: File, archives: List<Archive>) {
         val workFolder = File(directory, ".download")
         val staging = File(directory, ".staging")
         try {
@@ -106,14 +114,14 @@ class NpuDownload : MethodChannel.MethodCallHandler {
                 throw StorageFailure()
             }
             var finishedBytes = 0L
-            for (archive in ARCHIVES) {
+            for (archive in archives) {
                 val file = File(workFolder, archive.fileName)
                 fetch(archive, file, finishedBytes)
                 finishedBytes += archive.sizeBytes
                 extract(file, archive, File(staging, archive.folder))
                 file.delete()
             }
-            for (archive in ARCHIVES) {
+            for (archive in archives) {
                 val target = File(directory, archive.folder)
                 target.deleteRecursively()
                 if (!File(staging, archive.folder).renameTo(target)) {
@@ -255,42 +263,66 @@ class NpuDownload : MethodChannel.MethodCallHandler {
         /** The largest archive plus everything installed, with room to spare. */
         private const val REQUIRED_FREE_BYTES = 800L * 1024 * 1024
 
-        /** The archives, pinned by size and SHA-256. */
-        private val ARCHIVES = listOf(
-            Archive(
-                url = "https://repo1.maven.org/maven2/com/qualcomm/qti/qnn-runtime/2.50.0/" +
-                    "qnn-runtime-2.50.0.aar",
-                sha256 = "b507656e4031d8aa6a7ab0fecf725b941096737ad7440ad7ea288f7c9cc9d743",
-                sizeBytes = 71_270_746L,
-                fileName = "qnn-runtime.aar",
-                folder = "qnn",
-                entryPrefix = "jni/arm64-v8a/",
-                entries = setOf(
-                    "libQnnHtp.so",
-                    "libQnnSystem.so",
-                    "libQnnHtpPrepare.so",
-                    "libQnnHtpV73Stub.so",
-                    "libQnnHtpV73Skel.so",
+        /** Where AI Hub's precompiled models live; a model from anywhere else is refused. */
+        private const val AI_HUB_PREFIX =
+            "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/"
+
+        /** The Hexagon versions whose libraries the QNN runtime below carries. */
+        private val HEXAGON_VERSIONS = setOf(68, 69, 73, 75, 79, 81)
+
+        /**
+         * Builds the two archives for a call: the QNN runtime, keeping the chip's library pair, and
+         * the chip's model.
+         *
+         * Inputs: The `download` call's arguments. Outputs: The archives, or `null` when an argument
+         * is missing or not plausible. Side effects: None.
+         */
+        private fun archivesFor(call: MethodCall): List<Archive>? {
+            val url = call.argument<String>("modelUrl") ?: return null
+            val sha256 = call.argument<String>("modelSha256") ?: return null
+            val size = call.argument<Number>("modelSizeBytes")?.toLong() ?: return null
+            val prefix = call.argument<String>("modelEntryPrefix") ?: return null
+            val hexagon = call.argument<Int>("hexagon") ?: return null
+            val plausible = url.startsWith(AI_HUB_PREFIX) && url.endsWith(".zip") &&
+                sha256.matches(Regex("[0-9a-f]{64}")) && size in 1..1_000_000_000L &&
+                prefix.endsWith("/") && !prefix.contains("..") && hexagon in HEXAGON_VERSIONS
+            if (!plausible) {
+                return null
+            }
+            return listOf(
+                Archive(
+                    url = "https://repo1.maven.org/maven2/com/qualcomm/qti/qnn-runtime/2.50.0/" +
+                        "qnn-runtime-2.50.0.aar",
+                    sha256 = "b507656e4031d8aa6a7ab0fecf725b941096737ad7440ad7ea288f7c9cc9d743",
+                    sizeBytes = 71_270_746L,
+                    fileName = "qnn-runtime.aar",
+                    folder = "qnn",
+                    entryPrefix = "jni/arm64-v8a/",
+                    entries = setOf(
+                        "libQnnHtp.so",
+                        "libQnnSystem.so",
+                        "libQnnHtpPrepare.so",
+                        "libQnnHtpV${hexagon}Stub.so",
+                        "libQnnHtpV${hexagon}Skel.so",
+                    ),
                 ),
-            ),
-            Archive(
-                url = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/" +
-                    "models/whisper_small_quantized/releases/v0.66.0/" +
-                    "whisper_small_quantized-precompiled_qnn_onnx-w8a16-qualcomm_qcs8550_proxy.zip",
-                sha256 = "5cbdd8d050e5d66e747b16b9afec09ccd4c868115edba1ab90c3b75ca1a53437",
-                sizeBytes = 285_198_576L,
-                fileName = "whisper-small-npu.zip",
-                folder = "model",
-                entryPrefix = "whisper_small_quantized-precompiled_qnn_onnx-w8a16-qualcomm_qcs8550_proxy/",
-                entries = setOf(
-                    "encoder.onnx",
-                    "encoder.bin",
-                    "decoder.onnx",
-                    "decoder.bin",
-                    "metadata.json",
+                Archive(
+                    url = url,
+                    sha256 = sha256,
+                    sizeBytes = size,
+                    fileName = "whisper-small-npu.zip",
+                    folder = "model",
+                    entryPrefix = prefix,
+                    entries = setOf(
+                        "encoder.onnx",
+                        "encoder.bin",
+                        "decoder.onnx",
+                        "decoder.bin",
+                        "metadata.json",
+                    ),
                 ),
-            ),
-        )
+            )
+        }
 
         /**
          * Points the NPU's library search at the downloaded QNN folder.

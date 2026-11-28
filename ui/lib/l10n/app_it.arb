@@ -857,6 +857,8 @@
   "gettingAMoreAccurateModel": "Sto scaricando un modello più preciso ({name}) per questo dispositivo: {percent}",
   "recordingsUseTheCurrentModelMeanwhile": "Le registrazioni continuano a usare il modello attuale finché non è pronto.",
   "youCanRecordOnceItIsReady": "Potrai registrare appena è pronto.",
+  "npuUsedAtTheLastRecording": "Usata nell'ultima registrazione.",
+  "npuFailedAtTheLastRecording": "La NPU di questo telefono non ha superato la verifica, quindi trascrive il processore. Per riprovare, rimuovi i file della NPU e scaricali di nuovo.",
   "skipBack10Seconds": "Indietro di 10 secondi",
   "@skipBack10Seconds": {},
   "skipForward10Seconds": "Avanti di 10 secondi",

@@ -522,7 +522,7 @@ fn npu_folder(name: &str) -> std::path::PathBuf {
 
 #[test]
 fn the_npu_counts_as_installed_only_with_every_file() {
-    use super::install::{MODEL_FILES, NpuInstall, QNN_FILES};
+    use super::install::{MODEL_FILES, NpuInstall, QNN_COMMON_FILES, hexagon_files};
     let folder = npu_folder("install");
     let install = NpuInstall::new(&folder);
     assert_eq!(install.model_dir(), folder.join("model"));
@@ -534,20 +534,42 @@ fn the_npu_counts_as_installed_only_with_every_file() {
         std::fs::write(install.model_dir().join(file), b"x").unwrap_or_else(|e| panic!("{e}"));
     }
     assert!(!install.is_installed(), "the QNN libraries are missing");
-    for file in QNN_FILES {
+    for file in QNN_COMMON_FILES {
         std::fs::write(install.qnn_dir().join(file), b"x").unwrap_or_else(|e| panic!("{e}"));
     }
-    assert!(install.is_installed());
+    let [stub, skel] = hexagon_files(75);
+    std::fs::write(install.qnn_dir().join(&stub), b"x").unwrap_or_else(|e| panic!("{e}"));
+    assert!(!install.is_installed(), "a stub without its skel");
+    std::fs::write(install.qnn_dir().join(&skel), b"x").unwrap_or_else(|e| panic!("{e}"));
+    assert!(install.is_installed(), "any chip's pair, here an 8 Gen 3's");
     std::fs::remove_file(install.model_dir().join("decoder.bin")).unwrap_or_else(|e| panic!("{e}"));
     assert!(!install.is_installed(), "a partial model");
 }
 
 #[test]
-fn only_snapdragon_8_gen_2_runs_the_precompiled_model() {
-    use super::install::supported_soc;
-    assert!(supported_soc("SM8550"));
+fn each_supported_snapdragon_gets_the_build_compiled_for_its_npu() {
+    use super::install::{npu_build_for, supported_soc};
+    // The SoC and Hexagon version each AI Hub build records inside its context binary (#183).
+    for (soc, target, hexagon) in [
+        ("SM8450", "qualcomm_snapdragon_8gen1", 69),
+        ("SM8550", "qualcomm_qcs8550_proxy", 73),
+        ("SM8650", "qualcomm_snapdragon_8gen3", 75),
+        ("SM8750", "qualcomm_snapdragon_8_elite_for_galaxy", 79),
+    ] {
+        let build = npu_build_for(soc).unwrap_or_else(|| panic!("{soc} is supported"));
+        assert_eq!(build.hexagon, hexagon, "{soc}");
+        assert!(build.url().ends_with(&format!("-{target}.zip")), "{soc}");
+        assert_eq!(
+            build.entry_prefix(),
+            format!("whisper_small_quantized-precompiled_qnn_onnx-w8a16-{target}/")
+        );
+        assert_eq!(build.sha256.len(), 64);
+    }
     assert!(supported_soc(" sm8550 "));
-    assert!(!supported_soc("SM8650"), "another NPU generation");
+    assert!(
+        !supported_soc("SM7750"),
+        "7 Gen 4: no phone to test it on yet"
+    );
     assert!(!supported_soc("Tensor G3"));
     assert!(!supported_soc(""));
 }
@@ -697,4 +719,18 @@ fn writes_the_tokens_of_each_line() {
         .collect();
     std::fs::write(variable("NPU_TOKENIZE_OUT"), lines.join("\n"))
         .unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
+fn the_last_attempt_to_open_the_npu_is_remembered_until_its_files_are_removed() {
+    use super::install::NpuInstall;
+    let folder = npu_folder("last-open");
+    let install = NpuInstall::new(&folder);
+    assert_eq!(install.last_open(), None, "never tried");
+    install.record_open(false);
+    assert_eq!(install.last_open(), Some(false));
+    install.record_open(true);
+    assert_eq!(install.last_open(), Some(true));
+    std::fs::remove_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(install.last_open(), None, "removing the files forgets it");
 }
