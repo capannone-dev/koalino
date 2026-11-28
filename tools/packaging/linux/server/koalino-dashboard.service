@@ -1,0 +1,20 @@
+# Koalino's web dashboard on 127.0.0.1:3000 (#191); needs Node.js 20 or newer as `node`.
+[Unit]
+Description=Koalino web dashboard
+Documentation=https://github.com/capannone-dev/koalino#linux-server
+After=koalino-daemon.service
+
+[Service]
+Type=simple
+User=koalino
+Group=koalino
+ExecStart=/opt/koalino-server/dashboard
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

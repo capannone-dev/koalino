@@ -104,7 +104,7 @@ with their SHA-256 sums in `SHA256SUMS.txt`.
 | <img src="docs/icons/windows.svg" alt="" width="16" height="16"> Windows on ARM (ARM64 laptops, Windows 11); not yet tried on real hardware ([help wanted](#windows-on-arm-help-wanted)) | [`koalino-windows-arm64-0.2.0-setup.exe`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-arm64-0.2.0-setup.exe) (installer) or [`koalino-windows-arm64-0.2.0-portable.exe`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-arm64-0.2.0-portable.exe) (portable) | The same, for Windows on ARM (transcription on the CPU) |
 | <img src="docs/icons/apple.svg" alt="" width="16" height="16"> macOS desktop (Intel and Apple silicon, macOS 12 or newer) | [`koalino-macos-universal-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-macos-universal-0.2.0.zip) | The same, for Mac, built on GitHub Actions; untested on real Macs and paused ([help wanted](#apple-devices-help-wanted)); on Intel Macs without speaker diarization |
 | <img src="docs/icons/android.svg" alt="" width="16" height="16"> Android (64-bit ARM) | [`koalino-android-arm64-0.2.0.apk`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.2.0.apk) | The app with Whisper `base` and the diarization models |
-| <img src="docs/icons/linux.svg" alt="" width="16" height="16"> Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
+| <img src="docs/icons/linux.svg" alt="" width="16" height="16"> Linux server (x86_64): Debian 13+, Ubuntu 24.04+, Fedora, openSUSE | [`koalino-server_0.2.0.preview.2_amd64.deb`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server_0.2.0.preview.2_amd64.deb), [`koalino-server-0.2.0.preview.2-1.x86_64.rpm`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-0.2.0.preview.2-1.x86_64.rpm) or [`koalino-server-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models; the `.deb` and `.rpm` install them as a systemd service |
 | <img src="docs/icons/googlechrome.svg" alt="" width="16" height="16"> Chrome, Edge, Chromium | [`koalino-browser-extension-chromium-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-chromium-0.2.0.zip) | The browser extension, to load unpacked |
 | <img src="docs/icons/firefoxbrowser.svg" alt="" width="16" height="16"> Firefox (140 or newer) | [Koalino on Firefox Add-ons](https://addons.mozilla.org/addon/66e641dc7c544efb8b82/) or [`koalino-browser-extension-firefox-0.2.0.xpi`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-firefox-0.2.0.xpi) | The browser extension. Firefox Add-ons keeps it up to date, but gets each new version only after Mozilla reviews it. The `.xpi`, also signed by Mozilla, is always the newest version |
 
@@ -217,6 +217,24 @@ beside the 0.1 preview (`com.example.note_taker_ui`). To bring your meetings ove
 first start and leave a `MOVED-TO-KOALINO.txt` note in the old one.
 
 ### Linux server
+
+The `.deb` and `.rpm` install the server as a systemd service, running as its own `koalino`
+user, with the meetings in `/var/lib/koalino`. Installing starts nothing:
+
+```sh
+sudo apt install ./koalino-server_0.2.0.preview.2_amd64.deb     # Debian, Ubuntu
+sudo dnf install ./koalino-server-0.2.0.preview.2-1.x86_64.rpm  # Fedora (openSUSE: sudo zypper install)
+sudoedit /etc/koalino/server.env                 # optional: passphrase, device name, language
+sudo systemctl enable --now koalino-daemon       # API on 127.0.0.1:8080
+sudo systemctl enable --now koalino-dashboard    # web UI on http://localhost:3000 (needs Node.js 20+)
+sudo -u koalino koalino-cli meetings list
+```
+
+Without a passphrase in `server.env`, the database key is a random key in
+`/var/lib/koalino/keys/encryption.key`: back it up with the meetings. Logs are in
+`/var/log/koalino` and `journalctl -u koalino-daemon`. Removing the package keeps the meetings.
+
+Or unpack the tarball and start the programs yourself:
 
 ```sh
 sudo apt install libstdc++6 nodejs        # Node.js 20 or newer, for the dashboard only

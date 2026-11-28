@@ -1,0 +1,35 @@
+# Koalino server: HTTP API, transcription and sync with paired devices (#191).
+[Unit]
+Description=Koalino server (meeting notes daemon)
+Documentation=https://github.com/capannone-dev/koalino#linux-server
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=koalino
+Group=koalino
+SupplementaryGroups=audio
+EnvironmentFile=/opt/koalino-server/service.env
+EnvironmentFile=-/etc/koalino/server.env
+WorkingDirectory=/var/lib/koalino
+StateDirectory=koalino
+StateDirectoryMode=0750
+LogsDirectory=koalino
+LogsDirectoryMode=0750
+ExecStart=/opt/koalino-server/daemon
+Restart=on-failure
+RestartSec=5
+# Time for a recording to stop and save before the service is killed.
+TimeoutStopSec=60
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+RestrictSUIDSGID=yes
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

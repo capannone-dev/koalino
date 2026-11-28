@@ -1,0 +1,20 @@
+#!/bin/sh
+# Creates the koalino user and its folders, and lets it read the settings (#191). Starts nothing.
+set -e
+if [ "$1" = configure ]; then
+  systemd-sysusers koalino.conf
+  install -d -o koalino -g koalino -m 0750 /var/lib/koalino /var/log/koalino
+  chown root:koalino /etc/koalino/server.env
+  chmod 0640 /etc/koalino/server.env
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    # An upgrade restarts what was running, on the new programs.
+    for unit in koalino-daemon koalino-dashboard; do
+      if systemctl is-active --quiet "$unit"; then systemctl restart "$unit"; fi
+    done
+  fi
+  if [ -z "$2" ]; then
+    echo "Koalino server installed. Settings: /etc/koalino/server.env"
+    echo "Start it with: sudo systemctl enable --now koalino-daemon"
+  fi
+fi

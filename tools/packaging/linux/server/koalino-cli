@@ -1,0 +1,18 @@
+#!/bin/sh
+# Runs Koalino's CLI on the koalino-daemon service's data (#191): the same database, key and
+# settings. Run it as the service user, so it can read the key: sudo -u koalino koalino-cli …
+# Variables already set in the environment win, then the owner's /etc/koalino/server.env, then
+# the package's service.env: as in koalino-daemon.service, where the later file wins.
+set -eu
+for file in /etc/koalino/server.env /opt/koalino-server/service.env; do
+  [ -r "$file" ] || continue
+  while IFS= read -r line || [ -n "$line" ]; do
+    case $line in ''|'#'*) continue ;; esac
+    name=${line%%=*}
+    case $name in *[!A-Za-z0-9_]*|'') continue ;; esac
+    eval "already=\${$name+set}"
+    [ -n "$already" ] || export "$line"
+  done <"$file"
+done
+cd /var/lib/koalino 2>/dev/null || true
+exec /opt/koalino-server/cli "$@"

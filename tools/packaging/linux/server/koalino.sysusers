@@ -1,0 +1,3 @@
+# The Koalino server's system user (#191); its home holds the meetings.
+u koalino - "Koalino server" /var/lib/koalino /usr/sbin/nologin
+m koalino audio

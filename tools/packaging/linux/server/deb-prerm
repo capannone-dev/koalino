@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stops the services before the package is removed (#191); an upgrade restarts them afterwards.
+set -e
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+  systemctl disable --now koalino-dashboard koalino-daemon >/dev/null 2>&1 || true
+fi

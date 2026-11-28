@@ -1,0 +1,10 @@
+#!/bin/sh
+# After removal, reloads systemd (#191). The meetings in /var/lib/koalino and the koalino user are
+# kept, even on purge: they hold the owner's data and its key.
+set -e
+if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi
+if [ "$1" = purge ]; then
+  rm -f /etc/koalino/server.env
+  rmdir /etc/koalino 2>/dev/null || true
+  echo "Meetings kept in /var/lib/koalino; delete that folder to remove them."
+fi
