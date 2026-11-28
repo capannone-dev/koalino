@@ -1,0 +1,59 @@
+# Adds the ARM64 Flatpak to a release published before ARM64 Linux had one (#190). It packs the
+# release's own koalino-linux-arm64 tarball, so the Flatpak holds the same build as the release's
+# .deb and .rpm, then checks that it starts and attaches it. New releases get the Flatpak from
+# arm64-build.yml instead.
+
+name: ARM64 Flatpak for a release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v0.2.0-preview.2"
+        required: true
+      version:
+        description: "Version in the tarball's name, e.g. 0.2.0"
+        required: true
+
+permissions:
+  contents: write # attaching the Flatpak to the release
+
+jobs:
+  flatpak:
+    name: Linux ARM64 Flatpak
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.tag }}
+      VERSION: ${{ github.event.inputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Download the release's tarball and check it
+        run: |
+          mkdir dist
+          gh release download "$TAG" --dir dist --pattern "koalino-linux-arm64-$VERSION.tar.gz" --pattern SHA256SUMS.txt
+          (cd dist && sha256sum --check --ignore-missing SHA256SUMS.txt)
+      - name: Package the Flatpak
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder xvfb
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+          tools/packaging/linux/build-flatpak.sh "dist/koalino-linux-arm64-$VERSION.tar.gz" dist
+      - name: Check that the Flatpak starts
+        run: |
+          flatpak install --user -y --noninteractive "dist/koalino-arm64-$VERSION.flatpak"
+          status=0
+          timeout 60 xvfb-run -a flatpak run --env=NOTE_TAKER_KEYCHAIN_ENABLED=false \
+            --env=NOTE_TAKER_ENCRYPTION_PASSPHRASE=ci-smoke-test-only io.github.capannone_dev.koalino || status=$?
+          echo "app exit status: $status (124 = still running at the timeout)"
+          [ "$status" -eq 124 ]
+      - name: Attach it to the release, with its checksum
+        run: |
+          cd dist
+          grep -v " koalino-arm64-$VERSION.flatpak\$" SHA256SUMS.txt > sums.new || true
+          sha256sum "koalino-arm64-$VERSION.flatpak" >> sums.new
+          mv sums.new SHA256SUMS.txt
+          gh release upload "$TAG" "koalino-arm64-$VERSION.flatpak" SHA256SUMS.txt --clobber
