@@ -889,5 +889,8 @@
   "processorCannotTranscribe": "معالج هذا الجهاز لا يستطيع تشغيل التفريغ النصي. في إعدادات التفريغ، يمكن لجهاز آخر من أجهزتك التفريغ بدلًا منه.",
   "secureStorageLocked": "التخزين الآمن لـ Koalino مقفل. افتحه ثم حاول مرة أخرى.",
   "startKeepsFailing": "حاول مرة أخرى. إذا استمر الفشل، فأعد تشغيل Koalino.",
-  "openTranscriptionSettings": "فتح إعدادات التفريغ النصي"
+  "openTranscriptionSettings": "فتح إعدادات التفريغ النصي",
+  "people": "الأشخاص",
+  "recordingNow": "جارٍ التسجيل",
+  "pausedNow": "متوقف مؤقتًا"
 }

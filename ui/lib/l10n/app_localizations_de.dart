@@ -3452,4 +3452,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get openTranscriptionSettings => 'Transkriptionseinstellungen öffnen';
+
+  @override
+  String get people => 'Personen';
+
+  @override
+  String get recordingNow => 'Aufnahme läuft';
+
+  @override
+  String get pausedNow => 'Pausiert';
 }

@@ -15,7 +15,7 @@ test("the primary navigation has Projects after Meetings, then Chat, and no tele
     ["Meetings", "/meetings"],
     ["Projects", "/projects"],
     ["Chat", "/chat"],
-    ["Voice gallery", "/voice-gallery"],
+    ["People", "/voice-gallery"],
     ["Settings", "/settings"]
   ]);
 });

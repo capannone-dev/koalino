@@ -889,5 +889,8 @@
   "processorCannotTranscribe": "Der Prozessor dieses Geräts kann nicht transkribieren. In den Transkriptionseinstellungen kann ein anderes deiner Geräte für dieses transkribieren.",
   "secureStorageLocked": "Der sichere Speicher von Koalino ist gesperrt. Entsperre ihn und versuche es erneut.",
   "startKeepsFailing": "Versuche es erneut. Wenn es weiter fehlschlägt, starte Koalino neu.",
-  "openTranscriptionSettings": "Transkriptionseinstellungen öffnen"
+  "openTranscriptionSettings": "Transkriptionseinstellungen öffnen",
+  "people": "Personen",
+  "recordingNow": "Aufnahme läuft",
+  "pausedNow": "Pausiert"
 }

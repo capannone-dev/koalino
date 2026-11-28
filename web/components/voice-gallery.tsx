@@ -203,7 +203,7 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
 
   return (
     <section className="space-y-4">
-      <h1 className="text-3xl font-bold">{t("voiceGallery")}</h1>
+      <h1 className="text-3xl font-bold">{t("people")}</h1>
       <datalist id="saved-people">
         {people.map((person) => <option key={person.identity_id} value={person.display_name} />)}
       </datalist>

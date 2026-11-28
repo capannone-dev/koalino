@@ -572,7 +572,7 @@
   "recordingPlayer": "录音播放器",
   "downloadTheRecording": "下载录音",
   "unnamedDevice": "未命名设备",
-  "voicesShort": "声音",
   "koalinoIsNotResponding": "此服务器上的 Koalino 没有响应。请稍候再试。",
-  "detailsForTheAdministrator": "管理员详细信息"
+  "detailsForTheAdministrator": "管理员详细信息",
+  "people": "人员"
 }

@@ -3424,4 +3424,13 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get openTranscriptionSettings =>
       'Ouvrir les réglages de transcription';
+
+  @override
+  String get people => 'Personnes';
+
+  @override
+  String get recordingNow => 'Enregistrement';
+
+  @override
+  String get pausedNow => 'En pause';
 }

@@ -3241,4 +3241,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get openTranscriptionSettings => '文字起こしの設定を開く';
+
+  @override
+  String get people => '人物';
+
+  @override
+  String get recordingNow => '録音中';
+
+  @override
+  String get pausedNow => '一時停止中';
 }

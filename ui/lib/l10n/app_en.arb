@@ -2543,5 +2543,11 @@
   "startKeepsFailing": "Try again. If it keeps failing, restart Koalino.",
   "@startKeepsFailing": {"description": "Shown under a recording error with no known cause."},
   "openTranscriptionSettings": "Open transcription settings",
-  "@openTranscriptionSettings": {"description": "Button under a recording error that the transcription settings can fix."}
+  "@openTranscriptionSettings": {"description": "Button under a recording error that the transcription settings can fix."},
+  "people": "People",
+  "@people": {"description": "Navigation destination for the voice gallery: unknown voices to name and saved people."},
+  "recordingNow": "Recording",
+  "@recordingNow": {"description": "Status in the bar shown while a recording runs and the recorder is closed."},
+  "pausedNow": "Paused",
+  "@pausedNow": {"description": "Status in the recording bar while the recording is paused."}
 }

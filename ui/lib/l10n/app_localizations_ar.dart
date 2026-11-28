@@ -3424,4 +3424,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get openTranscriptionSettings => 'فتح إعدادات التفريغ النصي';
+
+  @override
+  String get people => 'الأشخاص';
+
+  @override
+  String get recordingNow => 'جارٍ التسجيل';
+
+  @override
+  String get pausedNow => 'متوقف مؤقتًا';
 }

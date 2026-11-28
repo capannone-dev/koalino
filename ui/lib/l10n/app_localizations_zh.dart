@@ -3171,4 +3171,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openTranscriptionSettings => '打开转写设置';
+
+  @override
+  String get people => '人员';
+
+  @override
+  String get recordingNow => '正在录音';
+
+  @override
+  String get pausedNow => '已暂停';
 }

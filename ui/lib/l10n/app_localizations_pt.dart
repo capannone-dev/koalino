@@ -3411,4 +3411,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get openTranscriptionSettings => 'Abrir definições de transcrição';
+
+  @override
+  String get people => 'Pessoas';
+
+  @override
+  String get recordingNow => 'A gravar';
+
+  @override
+  String get pausedNow => 'Em pausa';
 }

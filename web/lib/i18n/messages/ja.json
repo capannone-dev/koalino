@@ -572,7 +572,7 @@
   "recordingPlayer": "録音プレーヤー",
   "downloadTheRecording": "録音をダウンロード",
   "unnamedDevice": "名前のないデバイス",
-  "voicesShort": "声",
   "koalinoIsNotResponding": "このサーバーの Koalino が応答していません。少し待ってから、もう一度お試しください。",
-  "detailsForTheAdministrator": "管理者向けの詳細"
+  "detailsForTheAdministrator": "管理者向けの詳細",
+  "people": "人物"
 }

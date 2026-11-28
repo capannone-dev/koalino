@@ -3405,4 +3405,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get openTranscriptionSettings => 'Abrir ajustes de transcripción';
+
+  @override
+  String get people => 'Personas';
+
+  @override
+  String get recordingNow => 'Grabando';
+
+  @override
+  String get pausedNow => 'En pausa';
 }

@@ -279,6 +279,8 @@ final class NoteTakerApp extends StatelessWidget {
       ),
       meetingsScreenBuilder: (BuildContext context) =>
           const _MeetingsDestination(),
+      // A recording in progress shows as a bar on every screen (#208).
+      recordingController: recordingController,
       voicesScreenBuilder: (BuildContext context) =>
           const _VoiceGalleryDestination(),
       projectsScreenBuilder: (BuildContext context) => ProjectsScreen(

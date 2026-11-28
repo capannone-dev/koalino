@@ -576,7 +576,7 @@
   "recordingPlayer": "Recording player",
   "downloadTheRecording": "Download the recording",
   "unnamedDevice": "Unnamed device",
-  "voicesShort": "Voices",
   "koalinoIsNotResponding": "Koalino on this server isn't responding. Wait a moment, then try again.",
-  "detailsForTheAdministrator": "Details for the administrator"
+  "detailsForTheAdministrator": "Details for the administrator",
+  "people": "People"
 }

@@ -140,7 +140,12 @@ when focused, double-click for the default); widths are kept in `ui-layout.json`
 support folder. The meeting list uses it, and so do the project columns.
 `readable_width.dart` (#142) lets a scroll view fill its pane while its text stays at a readable
 width, so the mouse wheel scrolls anywhere across the meeting page and the summary page.
-`home_shell.dart` keeps Settings at the bottom of the desktop navigation rail (#142).
+`home_shell.dart` keeps Settings at the bottom of the desktop navigation rail (#142). Since #208 the
+app opens on Meetings; the destinations are Meetings, Projects, People (the voice gallery) and
+Settings. Record is not a destination: a floating button on phones (over Meetings and People) and
+the top of the desktop rail open the recorder as a page, and `HomeShell.openRecorder` lets any
+screen inside do the same. While a recording runs, `RecordingBar` names it under every screen,
+with Pause or Resume and Stop; tapping it reopens the recorder.
 
 `recordings_widgets.dart` (#140) holds `RecordingsSection` (Settings: Keep meeting recordings,
 turned on only after a privacy and space warning, how many are kept, Wipe all recordings with a

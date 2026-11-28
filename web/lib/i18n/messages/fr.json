@@ -576,7 +576,7 @@
   "recordingPlayer": "Lecteur de l'enregistrement",
   "downloadTheRecording": "Télécharger l'enregistrement",
   "unnamedDevice": "Appareil sans nom",
-  "voicesShort": "Voix",
   "koalinoIsNotResponding": "Koalino ne répond pas sur ce serveur. Patientez un instant, puis réessayez.",
-  "detailsForTheAdministrator": "Détails pour l'administrateur"
+  "detailsForTheAdministrator": "Détails pour l'administrateur",
+  "people": "Personnes"
 }

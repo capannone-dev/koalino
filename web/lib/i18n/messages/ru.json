@@ -604,7 +604,7 @@
   "recordingPlayer": "Проигрыватель записи",
   "downloadTheRecording": "Скачать запись",
   "unnamedDevice": "Устройство без имени",
-  "voicesShort": "Голоса",
   "koalinoIsNotResponding": "Koalino на этом сервере не отвечает. Подождите немного и повторите попытку.",
-  "detailsForTheAdministrator": "Подробности для администратора"
+  "detailsForTheAdministrator": "Подробности для администратора",
+  "people": "Люди"
 }

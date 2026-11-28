@@ -189,7 +189,7 @@ final class _RecordingScreenState extends State<RecordingScreen> {
   Widget build(BuildContext context) {
     final RecordingController recordingController = widget.recordingController;
     return Scaffold(
-      appBar: AppBar(title: const Text('Koalino')),
+      appBar: AppBar(title: Text(l10n.record)),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

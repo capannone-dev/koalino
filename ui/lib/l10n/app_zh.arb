@@ -889,5 +889,8 @@
   "processorCannotTranscribe": "此设备的处理器无法运行转写。在转写设置中，可以让你的另一台设备代为转写。",
   "secureStorageLocked": "Koalino 的安全存储已锁定。请解锁后重试。",
   "startKeepsFailing": "请重试。如果仍然失败，请重新启动 Koalino。",
-  "openTranscriptionSettings": "打开转写设置"
+  "openTranscriptionSettings": "打开转写设置",
+  "people": "人员",
+  "recordingNow": "正在录音",
+  "pausedNow": "已暂停"
 }

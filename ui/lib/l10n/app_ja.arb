@@ -889,5 +889,8 @@
   "processorCannotTranscribe": "このデバイスのプロセッサーでは文字起こしを実行できません。文字起こしの設定で、別のデバイスに代わりに文字起こしさせることができます。",
   "secureStorageLocked": "Koalino の安全な保管領域がロックされています。ロックを解除してから、もう一度お試しください。",
   "startKeepsFailing": "もう一度お試しください。失敗が続く場合は Koalino を再起動してください。",
-  "openTranscriptionSettings": "文字起こしの設定を開く"
+  "openTranscriptionSettings": "文字起こしの設定を開く",
+  "people": "人物",
+  "recordingNow": "録音中",
+  "pausedNow": "一時停止中"
 }

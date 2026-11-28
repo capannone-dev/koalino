@@ -3427,4 +3427,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get openTranscriptionSettings => 'Открыть настройки расшифровки';
+
+  @override
+  String get people => 'Люди';
+
+  @override
+  String get recordingNow => 'Идёт запись';
+
+  @override
+  String get pausedNow => 'Пауза';
 }

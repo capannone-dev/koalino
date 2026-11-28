@@ -5391,6 +5391,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open transcription settings'**
   String get openTranscriptionSettings;
+
+  /// Navigation destination for the voice gallery: unknown voices to name and saved people.
+  ///
+  /// In en, this message translates to:
+  /// **'People'**
+  String get people;
+
+  /// Status in the bar shown while a recording runs and the recorder is closed.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get recordingNow;
+
+  /// Status in the recording bar while the recording is paused.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get pausedNow;
 }
 
 class _AppLocalizationsDelegate

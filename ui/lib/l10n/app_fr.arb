@@ -889,5 +889,8 @@
   "processorCannotTranscribe": "Le processeur de cet appareil ne peut pas transcrire. Dans les réglages de transcription, un autre de vos appareils peut transcrire pour lui.",
   "secureStorageLocked": "Le stockage sécurisé de Koalino est verrouillé. Déverrouillez-le, puis réessayez.",
   "startKeepsFailing": "Réessayez. Si cela échoue encore, redémarrez Koalino.",
-  "openTranscriptionSettings": "Ouvrir les réglages de transcription"
+  "openTranscriptionSettings": "Ouvrir les réglages de transcription",
+  "people": "Personnes",
+  "recordingNow": "Enregistrement",
+  "pausedNow": "En pause"
 }

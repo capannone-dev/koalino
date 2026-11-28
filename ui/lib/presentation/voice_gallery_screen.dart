@@ -55,7 +55,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.voiceGallery)),
+      appBar: AppBar(title: Text(l10n.people)),
       body: AnimatedBuilder(
         animation: widget.voiceGalleryController,
         builder: (BuildContext context, Widget? child) {

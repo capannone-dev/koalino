@@ -1,13 +1,18 @@
-// Switches between the app's top-level screens with Material 3 adaptive navigation.
+// Switches between the app's top-level screens with Material 3 adaptive navigation. Meetings is
+// home; Record is a button on every main screen (a floating button on phones, the top of the rail
+// on desktops) that opens the recorder as a page, and a recording in progress shows as a bar
+// that stops it or reopens the recorder from anywhere (#208).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/presentation/koalino_logo.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
-/// Hosts the Record, Meetings and Voices destinations, plus Projects (Issue #85, between Meetings
-/// and Voices) and Settings (Issue #46) when given their builders, as the app always does.
+/// Hosts the Meetings and People (voice gallery) destinations, plus Projects (Issue #85, between
+/// them) and Settings (Issue #46) when given their builders, as the app always does. The recorder
+/// is not a destination: [openRecorder] opens it as a page (#208).
 /// Telemetry (Issue #53) and Devices (Issue #84) are pages of Settings.
 ///
 /// Phones get a bottom `NavigationBar`; windows at least `twoPaneBreakpoint` wide get a
@@ -19,7 +24,8 @@ final class HomeShell extends StatefulWidget {
   /// Inputs: Builders for the recording, meeting list and voice gallery screens, and optionally
   /// the projects and settings screens, supplied by the composition root (tests pass
   /// placeholders).
-  /// Outputs: The navigation shell, starting on Record.
+  /// `recordingController`, when given, adds the bar shown while a recording runs.
+  /// Outputs: The navigation shell, starting on Meetings.
   /// Side effects: None.
   const HomeShell({
     required this.recordingScreenBuilder,
@@ -27,6 +33,7 @@ final class HomeShell extends StatefulWidget {
     required this.voicesScreenBuilder,
     this.projectsScreenBuilder,
     this.settingsScreenBuilder,
+    this.recordingController,
     super.key,
   });
 
@@ -35,6 +42,16 @@ final class HomeShell extends StatefulWidget {
   final WidgetBuilder voicesScreenBuilder;
   final WidgetBuilder? projectsScreenBuilder;
   final WidgetBuilder? settingsScreenBuilder;
+  final RecordingController? recordingController;
+
+  /// Opens the recorder as a page from any screen inside the shell, such as an empty meeting
+  /// list's button (#204, #208).
+  ///
+  /// Inputs: a `context` below the shell. Outputs: completes when the recorder page closes, or at
+  /// once outside a shell. Side effects: pushes a route.
+  static Future<void> openRecorder(BuildContext context) =>
+      context.findAncestorStateOfType<_HomeShellState>()?._openRecorder() ??
+      Future<void>.value();
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -43,6 +60,18 @@ final class HomeShell extends StatefulWidget {
 /// Tracks the selected destination.
 final class _HomeShellState extends State<HomeShell> {
   int _selectedIndex = 0;
+
+  /// Whether the recorder page is open, so the recording bar hides behind it.
+  bool _recorderOpen = false;
+
+  /// Opens the recorder page and waits until it closes.
+  Future<void> _openRecorder() async {
+    if (_recorderOpen) return;
+    setState(() => _recorderOpen = true);
+    await Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: widget.recordingScreenBuilder));
+    if (mounted) setState(() => _recorderOpen = false);
+  }
 
   /// The destinations shown, in display order, each with the builder of its screen.
   List<
@@ -59,12 +88,6 @@ final class _HomeShellState extends State<HomeShell> {
             WidgetBuilder builder
           })>[
             (
-              icon: Icons.mic_none,
-              selectedIcon: Icons.mic,
-              label: l10n.record,
-              builder: widget.recordingScreenBuilder,
-            ),
-            (
               icon: Icons.event_note_outlined,
               selectedIcon: Icons.event_note,
               label: l10n.meetings,
@@ -78,9 +101,9 @@ final class _HomeShellState extends State<HomeShell> {
                 builder: builder,
               ),
             (
-              icon: Icons.record_voice_over_outlined,
-              selectedIcon: Icons.record_voice_over,
-              label: l10n.voices,
+              icon: Icons.people_outline,
+              selectedIcon: Icons.people,
+              label: l10n.people,
               builder: widget.voicesScreenBuilder,
             ),
             if (widget.settingsScreenBuilder case final WidgetBuilder builder)
@@ -94,6 +117,45 @@ final class _HomeShellState extends State<HomeShell> {
 
   void _selectDestination(int index) => setState(() => _selectedIndex = index);
 
+  /// Whether a recording runs or is paused (or is starting or being saved).
+  bool get _recording => switch (widget.recordingController?.state) {
+        RecordingUiState.recording ||
+        RecordingUiState.paused ||
+        RecordingUiState.stopping =>
+          true,
+        _ => false,
+      };
+
+  /// The bar shown under the screen while recording and the recorder is closed (#208).
+  List<Widget> _recordingBar() => <Widget>[
+        if (widget.recordingController case final RecordingController controller
+            when _recording && !_recorderOpen)
+          RecordingBar(controller: controller, onOpen: _openRecorder),
+      ];
+
+  @override
+  void initState() {
+    super.initState();
+    widget.recordingController?.addListener(_onRecordingChanged);
+  }
+
+  @override
+  void didUpdateWidget(HomeShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.recordingController != widget.recordingController) {
+      oldWidget.recordingController?.removeListener(_onRecordingChanged);
+      widget.recordingController?.addListener(_onRecordingChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.recordingController?.removeListener(_onRecordingChanged);
+    super.dispose();
+  }
+
+  void _onRecordingChanged() => setState(() {});
+
   @override
   Widget build(BuildContext context) {
     final destinations = _destinations;
@@ -106,8 +168,26 @@ final class _HomeShellState extends State<HomeShell> {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         if (constraints.maxWidth < twoPaneBreakpoint) {
+          // Record floats over Meetings and People; Projects has its own New project button
+          // there, and the settings need none. While recording, the bar takes its place.
+          final String selectedLabel = destinations[selectedIndex].label;
+          final bool recordButton = !_recording &&
+              (selectedLabel == l10n.meetings || selectedLabel == l10n.people);
           return Scaffold(
-            body: selectedScreen,
+            body: Column(
+              children: <Widget>[
+                Expanded(child: selectedScreen),
+                ..._recordingBar(),
+              ],
+            ),
+            floatingActionButton: recordButton
+                ? FloatingActionButton.extended(
+                    heroTag: 'record',
+                    onPressed: _openRecorder,
+                    icon: const Icon(Icons.mic),
+                    label: Text(l10n.record),
+                  )
+                : null,
             bottomNavigationBar: NavigationBar(
               selectedIndex: selectedIndex,
               onDestinationSelected: _selectDestination,
@@ -135,10 +215,27 @@ final class _HomeShellState extends State<HomeShell> {
                       selectedIndex < railCount ? selectedIndex : null,
                   onDestinationSelected: _selectDestination,
                   labelType: NavigationRailLabelType.all,
-                  // The logo tops the rail, so the app shows its own icon (#172).
-                  leading: const Padding(
-                    padding: EdgeInsets.only(top: 8, bottom: 12),
-                    child: KoalinoLogo(size: 40),
+                  // The logo tops the rail, so the app shows its own icon (#172); Record sits
+                  // under it, the first thing on every screen (#208).
+                  leading: Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 12),
+                    child: Column(
+                      children: <Widget>[
+                        const KoalinoLogo(size: 40),
+                        const SizedBox(height: 16),
+                        FloatingActionButton(
+                          key: const ValueKey<String>('rail-record'),
+                          heroTag: 'record',
+                          tooltip: l10n.record,
+                          elevation: 0,
+                          onPressed: _openRecorder,
+                          child: const Icon(Icons.mic),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(l10n.record,
+                            style: Theme.of(context).textTheme.labelMedium),
+                      ],
+                    ),
                   ),
                   trailingAtBottom: true,
                   trailing: settingsApart
@@ -162,7 +259,14 @@ final class _HomeShellState extends State<HomeShell> {
                 ),
               ),
               const VerticalDivider(width: 1),
-              Expanded(child: selectedScreen),
+              Expanded(
+                child: Column(
+                  children: <Widget>[
+                    Expanded(child: selectedScreen),
+                    ..._recordingBar(),
+                  ],
+                ),
+              ),
             ],
           ),
         );
@@ -219,6 +323,85 @@ final class _RailButton extends StatelessWidget {
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: selected ? colors.onSurface : foreground)),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The bar shown while a recording runs and the recorder page is closed (#208): what is being
+/// recorded, Pause or Resume, Stop, and a tap anywhere else reopens the recorder.
+final class RecordingBar extends StatelessWidget {
+  /// Inputs: the app's `controller`; `onOpen` opens the recorder page.
+  /// Outputs: the bar. Side effects: pauses, resumes or stops the recording when asked.
+  const RecordingBar(
+      {required this.controller, required this.onOpen, super.key})
+      : super();
+
+  final RecordingController controller;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final bool paused = controller.state == RecordingUiState.paused;
+    final bool busy = controller.state == RecordingUiState.stopping;
+    final String status = paused ? l10n.pausedNow : l10n.recordingNow;
+    return Material(
+      key: const ValueKey<String>('recording-bar'),
+      color: colors.secondaryContainer,
+      child: SafeArea(
+        top: false,
+        child: InkWell(
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+            child: Row(
+              children: <Widget>[
+                Icon(paused ? Icons.pause_circle : Icons.fiber_manual_record,
+                    color: paused ? colors.onSecondaryContainer : colors.error,
+                    size: 18),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        controller.activeTitle ?? status,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(color: colors.onSecondaryContainer),
+                      ),
+                      if (controller.activeTitle != null)
+                        Text(status,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: colors.onSecondaryContainer)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: paused ? l10n.resume : l10n.pause,
+                  onPressed: busy
+                      ? null
+                      : () => paused
+                          ? controller.resumeRecording()
+                          : controller.pauseRecording(),
+                  icon: Icon(paused ? Icons.play_arrow : Icons.pause),
+                ),
+                IconButton(
+                  tooltip: l10n.stop,
+                  onPressed: busy ? null : controller.stopRecording,
+                  icon: const Icon(Icons.stop),
+                ),
+              ],
+            ),
           ),
         ),
       ),
