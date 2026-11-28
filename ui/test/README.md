@@ -144,3 +144,7 @@ copying a snippet, a disabled switch when the server is not installed, and a wor
 - Record and Not now in the system notification, withdrawing it when answered in the app, and
   the `notify-send` arguments;
 - a failed look that keeps the watch going.
+
+`dark_mode_test.dart` (#214) pumps the meeting list (empty and full), a meeting with its tip, tabs and unsure words,
+and Settings with Advanced in the dark theme, and checks every text against Flutter's contrast guideline.
+`app_theme_tokens_test.dart` (#206) checks that the theme's seed is the brand colour of `branding/tokens.json`.
