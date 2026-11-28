@@ -1,0 +1,112 @@
+# Builds the Linux server for x86_64 (#194) and ARM64 (#195) natively on GitHub's Ubuntu 24.04
+# runners, packs its tarball, .deb and .rpm, checks that the .deb installs and serves as a systemd
+# service, and attaches the packages to the tag's release, as arm64-build.yml does for the app.
+
+name: Server build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version in the packages' names (default: pubspec.yaml's)"
+        required: false
+
+permissions:
+  contents: write # attaching the packages to the tag's release
+
+jobs:
+  server:
+    name: Linux server ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      NOTE_TAKER_MODELS: ${{ github.workspace }}/models
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install build tools and libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libasound2-dev libssl-dev \
+            libvulkan-dev glslc rpm file
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Cache Rust builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: server-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: server-${{ matrix.arch }}-cargo-
+      - name: Download the models
+        run: tools/arm64/fetch-models.sh "$NOTE_TAKER_MODELS"
+      - name: Choose the version
+        id: version
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(sed -n 's/^version: *\([^+]*\).*/\1/p' ui/pubspec.yaml)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "package_version=${version/-/\~}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: tools/packaging/linux/build-server.sh "${{ steps.version.outputs.version }}"
+      - name: Check that it transcribes
+        run: tools/arm64/check-transcription.sh target/release/cli "$NOTE_TAKER_MODELS/ggml-base.bin"
+      - name: Package .deb and .rpm
+        run: |
+          tarball="dist/koalino-server-linux-${{ matrix.arch }}-${{ steps.version.outputs.version }}.tar.gz"
+          tools/packaging/linux/build-server-deb.sh "$tarball" "${{ steps.version.outputs.package_version }}" dist
+          tools/packaging/linux/build-server-rpm.sh "$tarball" "${{ steps.version.outputs.package_version }}" dist
+      - name: Check that the .deb installs and serves
+        # Installed as an administrator would, then started as the systemd service: the API must
+        # answer, the CLI must transcribe into the service's database, and removing the package
+        # must stop the service and keep the meetings.
+        run: |
+          sudo apt-get install -y ./dist/koalino-server_*.deb
+          [ "$(systemctl is-enabled koalino-daemon || true)" = disabled ]
+          sudo systemctl enable --now koalino-daemon
+          for attempt in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8080/api/meetings >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:8080/api/meetings >/dev/null
+          sudo install -m 644 core/assets/speed_check_clip.wav /tmp/clip.wav
+          sudo -u koalino koalino-cli record start --title "CI check" --input /tmp/clip.wav | tee record.log
+          grep -q "0 failed" record.log
+          curl -sf http://127.0.0.1:8080/api/meetings | grep -q '"CI check"'
+          sudo apt-get remove -y koalino-server
+          ! systemctl is-active --quiet koalino-daemon
+          sudo test -f /var/lib/koalino/note_taker.sqlite3
+      - name: Show the service's log
+        if: failure()
+        run: sudo journalctl -u koalino-daemon --no-pager | tail -50
+      - name: Upload the packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: koalino-server-linux-${{ matrix.arch }}-${{ steps.version.outputs.version }}
+          path: |
+            dist/koalino-server-linux-*.tar.gz
+            dist/koalino-server_*.deb
+            dist/koalino-server-*.rpm
+          if-no-files-found: error
+      - name: Attach the packages to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          gh release upload "$GITHUB_REF_NAME" dist/koalino-server-linux-*.tar.gz \
+            dist/koalino-server_*.deb dist/koalino-server-*.rpm --clobber

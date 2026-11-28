@@ -6,6 +6,10 @@
 (`koalino-server-linux-x86_64-VERSION.tar.gz`) into a `koalino-server` package. The programs go
 to `/opt/koalino-server` as the tarball has them; the files here run them as a system service.
 
+`assemble.sh` lays out the server folder that becomes the tarball (#194). It is shared by
+`../build-server.sh` (native, in CI) and `tools/cross/package-linux-server.sh` (cross build on the
+maintainer's machine), and is not installed.
+
 | File | Installed as | What it does |
 | --- | --- | --- |
 | `koalino-daemon.service` | `/usr/lib/systemd/system/` | Runs the daemon as the `koalino` user, with the paths in `service.env` and the owner's settings in `/etc/koalino/server.env` |
