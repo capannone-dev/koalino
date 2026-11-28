@@ -3180,4 +3180,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pausedNow => '已暂停';
+
+  @override
+  String get recordAMeeting => '录制会议';
+
+  @override
+  String get voicesAppearAfterRecording => '录音后，Koalino 无法识别的声音会显示在这里，供你命名。';
 }

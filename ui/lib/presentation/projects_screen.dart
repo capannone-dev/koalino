@@ -217,68 +217,85 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
           ),
         ],
       ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          ResizablePane(
-            id: 'projects-tree',
-            defaultWidth: 260,
-            maxWidth: paneLimit,
-            child: AnimatedBuilder(
-              animation: widget.controller,
-              builder: (BuildContext context, Widget? child) => _ProjectTree(
-                controller: widget.controller,
-                selectedProjectId: selected,
-                expanded: _expanded,
-                onSelect: _select,
-                onToggle: (String projectId) => setState(() {
-                  if (!_expanded.remove(projectId)) {
-                    _expanded.add(projectId);
-                  }
-                }),
-              ),
+      // Before any project exists, one empty state with the button instead of three empty
+      // columns (#204).
+      body: AnimatedBuilder(
+        animation: widget.controller,
+        builder: (BuildContext context, Widget? columns) =>
+            !widget.controller.isLoading &&
+                    widget.controller.errorMessage == null &&
+                    widget.controller.projects.isEmpty
+                ? _NoProjects(onCreate: _create)
+                : columns!,
+        child: _columnsBody(context, paneLimit, selected),
+      ),
+    );
+  }
+
+  /// The three columns of the desktop layout.
+  Widget _columnsBody(
+      BuildContext context, double paneLimit, String? selected) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        ResizablePane(
+          id: 'projects-tree',
+          defaultWidth: 260,
+          maxWidth: paneLimit,
+          child: AnimatedBuilder(
+            animation: widget.controller,
+            builder: (BuildContext context, Widget? child) => _ProjectTree(
+              controller: widget.controller,
+              selectedProjectId: selected,
+              expanded: _expanded,
+              onSelect: _select,
+              onToggle: (String projectId) => setState(() {
+                if (!_expanded.remove(projectId)) {
+                  _expanded.add(projectId);
+                }
+              }),
             ),
           ),
-          ResizablePane(
-            id: 'project-contents',
-            defaultWidth: 360,
-            minWidth: 300,
-            maxWidth: paneLimit,
-            child: selected == null
-                ? _Hint(text: l10n.chooseAProject)
-                : ProjectDetailScreen(
-                    key: ValueKey<String>('project-page-$selected'),
-                    controller: widget.controller,
-                    projectId: selected,
-                    pdfViewBuilder: widget.pdfViewBuilder,
-                    summariesController: widget.summariesController,
-                    searchBridge: widget.searchBridge,
-                    chatBridge: widget.chatBridge,
-                    meetingMomentBuilder: widget.searchMeetingBuilder,
-                    meetingScreenBuilder: widget.meetingScreenBuilder,
-                    selectedItemId:
-                        _shownMeetingId ?? _shownResource?.attachmentId,
-                    onOpenMeeting: widget.meetingScreenBuilder == null
-                        ? null
-                        : (String meetingId) => setState(() {
-                              _shownMeetingId = meetingId;
-                              _shownResource = null;
-                            }),
-                    onOpenResource: (ProjectResource resource) => setState(() {
-                      _shownResource = resource;
-                      _shownMeetingId = null;
-                    }),
-                    onOpenProject: _select,
-                    onDeleted: () => setState(() {
-                      _selectedProjectId = null;
-                      _shownMeetingId = null;
-                      _shownResource = null;
-                    }),
-                  ),
-          ),
-          Expanded(child: _shown(context, selected)),
-        ],
-      ),
+        ),
+        ResizablePane(
+          id: 'project-contents',
+          defaultWidth: 360,
+          minWidth: 300,
+          maxWidth: paneLimit,
+          child: selected == null
+              ? _Hint(text: l10n.chooseAProject)
+              : ProjectDetailScreen(
+                  key: ValueKey<String>('project-page-$selected'),
+                  controller: widget.controller,
+                  projectId: selected,
+                  pdfViewBuilder: widget.pdfViewBuilder,
+                  summariesController: widget.summariesController,
+                  searchBridge: widget.searchBridge,
+                  chatBridge: widget.chatBridge,
+                  meetingMomentBuilder: widget.searchMeetingBuilder,
+                  meetingScreenBuilder: widget.meetingScreenBuilder,
+                  selectedItemId:
+                      _shownMeetingId ?? _shownResource?.attachmentId,
+                  onOpenMeeting: widget.meetingScreenBuilder == null
+                      ? null
+                      : (String meetingId) => setState(() {
+                            _shownMeetingId = meetingId;
+                            _shownResource = null;
+                          }),
+                  onOpenResource: (ProjectResource resource) => setState(() {
+                    _shownResource = resource;
+                    _shownMeetingId = null;
+                  }),
+                  onOpenProject: _select,
+                  onDeleted: () => setState(() {
+                    _selectedProjectId = null;
+                    _shownMeetingId = null;
+                    _shownResource = null;
+                  }),
+                ),
+        ),
+        Expanded(child: _shown(context, selected)),
+      ],
     );
   }
 
@@ -365,6 +382,40 @@ const double _minShownWidth = 400;
 
 /// How far each tree level is indented.
 const double _treeIndent = 16;
+
+/// The desktop page before any project exists (#204): what a project is, and the button that
+/// makes the first one.
+final class _NoProjects extends StatelessWidget {
+  const _NoProjects({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.folder_outlined,
+                size: 48, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: 12),
+            Text(l10n.noProjectsYetAProjectGathers,
+                textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.create_new_folder_outlined),
+              label: Text(l10n.newProject2),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// A centred hint in an empty column.
 final class _Hint extends StatelessWidget {

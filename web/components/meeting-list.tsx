@@ -8,6 +8,7 @@ import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { MeetingProjectDialog } from "@/components/meeting-project-dialog";
 import { MeetingTime } from "@/components/meeting-time";
+import { Icon } from "@/components/icons";
 import { RenameMeetingDialog } from "@/components/rename-meeting-dialog";
 import type { MeetingSummary } from "@/lib/api";
 import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
@@ -76,7 +77,18 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
         <p role="status" aria-live="polite" className="text-sm text-success">
           {statusMessage}
         </p>
-        <p className="text-muted">{t("noMeetingsYet")}</p>
+        {/* The web cannot record: say where meetings come from, and the step that brings them (#204). */}
+        <div className="rounded-xl border border-line bg-surface p-6 text-center">
+          <p className="font-semibold">{t("noMeetingsYet")}</p>
+          <p className="mt-1 text-muted">{t("meetingsAppearOnceSynced")}</p>
+          <Link
+            href="/devices"
+            className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-2 focus-visible:outline-focus"
+          >
+            <Icon name="devices" size={20} />
+            {t("pairADevice")}
+          </Link>
+        </div>
       </>
     );
   }

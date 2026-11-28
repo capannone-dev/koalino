@@ -892,5 +892,7 @@
   "openTranscriptionSettings": "打开转写设置",
   "people": "人员",
   "recordingNow": "正在录音",
-  "pausedNow": "已暂停"
+  "pausedNow": "已暂停",
+  "recordAMeeting": "录制会议",
+  "voicesAppearAfterRecording": "录音后，Koalino 无法识别的声音会显示在这里，供你命名。"
 }

@@ -22,6 +22,7 @@ import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/speaker_rename_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
+import 'package:note_taker_ui/presentation/home_shell.dart';
 import 'package:note_taker_ui/presentation/new_meeting_dialog.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 import 'package:note_taker_ui/presentation/resizable_pane.dart';
@@ -422,6 +423,13 @@ final class _MeetingList extends StatelessWidget {
                 Text(l10n.noMeetingsYet, style: theme.textTheme.titleMedium),
                 const SizedBox(height: 4),
                 Text(l10n.recordingsYouStartAppearHere),
+                const SizedBox(height: 16),
+                // The next step, right where the list will be (#204).
+                FilledButton.icon(
+                  onPressed: () => HomeShell.openRecorder(context),
+                  icon: const Icon(Icons.mic),
+                  label: Text(l10n.recordAMeeting),
+                ),
               ],
             ),
           );

@@ -578,5 +578,7 @@
   "unnamedDevice": "Unnamed device",
   "koalinoIsNotResponding": "Koalino on this server isn't responding. Wait a moment, then try again.",
   "detailsForTheAdministrator": "Details for the administrator",
-  "people": "People"
+  "people": "People",
+  "meetingsAppearOnceSynced": "Meetings recorded with Koalino on your phone or computer appear here once they sync.",
+  "pairADevice": "Pair a device"
 }

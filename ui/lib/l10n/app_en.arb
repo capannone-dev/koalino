@@ -2549,5 +2549,9 @@
   "recordingNow": "Recording",
   "@recordingNow": {"description": "Status in the bar shown while a recording runs and the recorder is closed."},
   "pausedNow": "Paused",
-  "@pausedNow": {"description": "Status in the recording bar while the recording is paused."}
+  "@pausedNow": {"description": "Status in the recording bar while the recording is paused."},
+  "recordAMeeting": "Record a meeting",
+  "@recordAMeeting": {"description": "Button in the empty meeting list."},
+  "voicesAppearAfterRecording": "After a recording, voices Koalino doesn't recognise appear here so you can name them.",
+  "@voicesAppearAfterRecording": {"description": "Explains the empty unknown-voices list."}
 }

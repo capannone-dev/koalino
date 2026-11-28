@@ -3433,4 +3433,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get pausedNow => 'متوقف مؤقتًا';
+
+  @override
+  String get recordAMeeting => 'سجّل اجتماعًا';
+
+  @override
+  String get voicesAppearAfterRecording =>
+      'بعد التسجيل، تظهر هنا الأصوات التي لا يتعرف عليها Koalino لكي تسمّيها.';
 }

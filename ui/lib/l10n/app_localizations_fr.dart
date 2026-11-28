@@ -3433,4 +3433,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get pausedNow => 'En pause';
+
+  @override
+  String get recordAMeeting => 'Enregistrer une réunion';
+
+  @override
+  String get voicesAppearAfterRecording =>
+      'Après un enregistrement, les voix que Koalino ne reconnaît pas apparaissent ici pour que vous puissiez les nommer.';
 }

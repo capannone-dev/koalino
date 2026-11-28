@@ -892,5 +892,7 @@
   "openTranscriptionSettings": "Открыть настройки расшифровки",
   "people": "Люди",
   "recordingNow": "Идёт запись",
-  "pausedNow": "Пауза"
+  "pausedNow": "Пауза",
+  "recordAMeeting": "Записать встречу",
+  "voicesAppearAfterRecording": "После записи здесь появляются голоса, которые Koalino не узнал, чтобы вы могли их назвать."
 }

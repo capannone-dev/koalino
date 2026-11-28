@@ -3250,4 +3250,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pausedNow => '一時停止中';
+
+  @override
+  String get recordAMeeting => '会議を録音';
+
+  @override
+  String get voicesAppearAfterRecording =>
+      '録音後、Koalino が認識できない声がここに表示され、名前を付けられます。';
 }

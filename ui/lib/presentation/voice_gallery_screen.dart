@@ -98,8 +98,20 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
               if (showsSavedPeople) _sectionTitle(context, l10n.unknownVoices),
               if (controller.clusters.isEmpty)
                 Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(l10n.noUnknownSpeakersToReview),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(l10n.noUnknownSpeakersToReview),
+                      // How voices get here, for a first look at an empty gallery (#204).
+                      Text(
+                        l10n.voicesAppearAfterRecording,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
                 ),
               for (final (int index, UnknownVoiceGroup group)
                   in controller.groups.indexed)

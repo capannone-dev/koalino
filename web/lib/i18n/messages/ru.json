@@ -606,5 +606,7 @@
   "unnamedDevice": "Устройство без имени",
   "koalinoIsNotResponding": "Koalino на этом сервере не отвечает. Подождите немного и повторите попытку.",
   "detailsForTheAdministrator": "Подробности для администратора",
-  "people": "Люди"
+  "people": "Люди",
+  "meetingsAppearOnceSynced": "Встречи, записанные в Koalino на телефоне или компьютере, появятся здесь после синхронизации.",
+  "pairADevice": "Связать устройство"
 }

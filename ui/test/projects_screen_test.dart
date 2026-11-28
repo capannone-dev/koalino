@@ -531,4 +531,20 @@ void main() {
     expect(find.text('[logo]', findRichText: true), findsOneWidget);
     expect(find.byType(Image), findsNothing);
   });
+
+  testWidgets(
+      'a desktop with no projects shows one empty state with New project (#204)',
+      (WidgetTester tester) async {
+    final FakeProjects projects = FakeProjects()..names.clear();
+    await _pumpDesktopTab(tester, projects.controller());
+
+    expect(
+        find.text(
+            'No projects yet. A project gathers meetings with the files, notes and e-mails that belong to them.'),
+        findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'New project'), findsOneWidget);
+    expect(find.text('Choose a project to see its meetings and files.'),
+        findsNothing,
+        reason: 'no empty columns before a project exists');
+  });
 }

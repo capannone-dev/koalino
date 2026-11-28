@@ -574,5 +574,7 @@
   "unnamedDevice": "未命名设备",
   "koalinoIsNotResponding": "此服务器上的 Koalino 没有响应。请稍候再试。",
   "detailsForTheAdministrator": "管理员详细信息",
-  "people": "人员"
+  "people": "人员",
+  "meetingsAppearOnceSynced": "在手机或电脑上用 Koalino 录制的会议同步后会显示在这里。",
+  "pairADevice": "配对设备"
 }

@@ -215,6 +215,8 @@ test("an empty list says there are no meetings", () => {
   render(<MeetingList meetings={[]} />);
 
   expect(screen.getByText("No meetings yet.")).toBeInTheDocument();
+  expect(screen.getByText("Meetings recorded with Koalino on your phone or computer appear here once they sync.")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Pair a device" })).toHaveAttribute("href", "/devices");
 });
 
 test("Delete in the row menu asks first, then removes only that row", async () => {

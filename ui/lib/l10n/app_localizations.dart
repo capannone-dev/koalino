@@ -5409,6 +5409,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Paused'**
   String get pausedNow;
+
+  /// Button in the empty meeting list.
+  ///
+  /// In en, this message translates to:
+  /// **'Record a meeting'**
+  String get recordAMeeting;
+
+  /// Explains the empty unknown-voices list.
+  ///
+  /// In en, this message translates to:
+  /// **'After a recording, voices Koalino doesn\'t recognise appear here so you can name them.'**
+  String get voicesAppearAfterRecording;
 }
 
 class _AppLocalizationsDelegate

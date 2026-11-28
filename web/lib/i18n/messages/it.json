@@ -578,5 +578,7 @@
   "unnamedDevice": "Dispositivo senza nome",
   "koalinoIsNotResponding": "Koalino su questo server non risponde. Attendi un momento, poi riprova.",
   "detailsForTheAdministrator": "Dettagli per l'amministratore",
-  "people": "Persone"
+  "people": "Persone",
+  "meetingsAppearOnceSynced": "Le riunioni registrate con Koalino sul telefono o sul computer compaiono qui appena si sincronizzano.",
+  "pairADevice": "Associa un dispositivo"
 }

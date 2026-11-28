@@ -892,5 +892,7 @@
   "openTranscriptionSettings": "Transkriptionseinstellungen öffnen",
   "people": "Personen",
   "recordingNow": "Aufnahme läuft",
-  "pausedNow": "Pausiert"
+  "pausedNow": "Pausiert",
+  "recordAMeeting": "Besprechung aufnehmen",
+  "voicesAppearAfterRecording": "Nach einer Aufnahme erscheinen hier Stimmen, die Koalino nicht erkennt, damit du sie benennen kannst."
 }

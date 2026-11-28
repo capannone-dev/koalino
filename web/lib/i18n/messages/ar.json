@@ -605,5 +605,7 @@
   "unnamedDevice": "جهاز بلا اسم",
   "koalinoIsNotResponding": "Koalino على هذا الخادم لا يستجيب. انتظر لحظة ثم حاول مرة أخرى.",
   "detailsForTheAdministrator": "تفاصيل للمسؤول",
-  "people": "الأشخاص"
+  "people": "الأشخاص",
+  "meetingsAppearOnceSynced": "تظهر هنا الاجتماعات المسجّلة بـ Koalino على هاتفك أو حاسوبك بمجرد مزامنتها.",
+  "pairADevice": "اقرن جهازًا"
 }

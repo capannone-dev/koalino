@@ -423,6 +423,9 @@ void main() {
     await pumpMeetingList(tester, FakeMeetingBridge());
 
     expect(find.text('No meetings yet'), findsOneWidget);
+    expect(
+        find.widgetWithText(FilledButton, 'Record a meeting'), findsOneWidget,
+        reason: 'the empty list offers the next step (#204)');
   });
 
   testWidgets('shows an error with a retry action when loading fails',

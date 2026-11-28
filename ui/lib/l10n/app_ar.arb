@@ -892,5 +892,7 @@
   "openTranscriptionSettings": "فتح إعدادات التفريغ النصي",
   "people": "الأشخاص",
   "recordingNow": "جارٍ التسجيل",
-  "pausedNow": "متوقف مؤقتًا"
+  "pausedNow": "متوقف مؤقتًا",
+  "recordAMeeting": "سجّل اجتماعًا",
+  "voicesAppearAfterRecording": "بعد التسجيل، تظهر هنا الأصوات التي لا يتعرف عليها Koalino لكي تسمّيها."
 }

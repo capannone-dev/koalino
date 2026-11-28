@@ -892,5 +892,7 @@
   "openTranscriptionSettings": "Abrir ajustes de transcripción",
   "people": "Personas",
   "recordingNow": "Grabando",
-  "pausedNow": "En pausa"
+  "pausedNow": "En pausa",
+  "recordAMeeting": "Grabar una reunión",
+  "voicesAppearAfterRecording": "Después de una grabación, las voces que Koalino no reconoce aparecen aquí para que puedas ponerles nombre."
 }

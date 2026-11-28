@@ -892,5 +892,7 @@
   "openTranscriptionSettings": "文字起こしの設定を開く",
   "people": "人物",
   "recordingNow": "録音中",
-  "pausedNow": "一時停止中"
+  "pausedNow": "一時停止中",
+  "recordAMeeting": "会議を録音",
+  "voicesAppearAfterRecording": "録音後、Koalino が認識できない声がここに表示され、名前を付けられます。"
 }

@@ -761,6 +761,11 @@ void main() {
         meetingId: null);
 
     expect(find.text('No unknown speakers to review'), findsOneWidget);
+    expect(
+        find.text(
+            "After a recording, voices Koalino doesn't recognise appear here so you can name them."),
+        findsOneWidget,
+        reason: 'says how voices get here (#204)');
     expect(find.text('No saved people yet. Name a voice to add someone.'),
         findsOneWidget);
   });

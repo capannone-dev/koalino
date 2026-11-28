@@ -574,5 +574,7 @@
   "unnamedDevice": "名前のないデバイス",
   "koalinoIsNotResponding": "このサーバーの Koalino が応答していません。少し待ってから、もう一度お試しください。",
   "detailsForTheAdministrator": "管理者向けの詳細",
-  "people": "人物"
+  "people": "人物",
+  "meetingsAppearOnceSynced": "スマートフォンやパソコンの Koalino で録音した会議は、同期されるとここに表示されます。",
+  "pairADevice": "デバイスをペアリング"
 }

@@ -3436,4 +3436,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get pausedNow => 'Пауза';
+
+  @override
+  String get recordAMeeting => 'Записать встречу';
+
+  @override
+  String get voicesAppearAfterRecording =>
+      'После записи здесь появляются голоса, которые Koalino не узнал, чтобы вы могли их назвать.';
 }

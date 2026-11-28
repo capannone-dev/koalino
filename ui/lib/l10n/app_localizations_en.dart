@@ -3378,4 +3378,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pausedNow => 'Paused';
+
+  @override
+  String get recordAMeeting => 'Record a meeting';
+
+  @override
+  String get voicesAppearAfterRecording =>
+      'After a recording, voices Koalino doesn\'t recognise appear here so you can name them.';
 }
