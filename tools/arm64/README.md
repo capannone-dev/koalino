@@ -24,6 +24,10 @@ The packaging scripts in `tools/packaging/` read the architecture from the archi
 
 - `build-deb.sh` and `build-rpm.sh` turn the Linux tarball into an `arm64` `.deb` and an
   `aarch64` `.rpm`.
+- `build-flatpak.sh` turns it into `koalino-arm64-VERSION.flatpak` (#190), on the ARM runner
+  itself, since flatpak-builder builds for the machine it runs on. The workflow installs the
+  bundle and checks that the app starts. `arm64-flatpak-for-release.yml` adds it to a release
+  published before this, from that release's own tarball.
 - `build-installer.sh` turns the Windows zip into `koalino-windows-arm64-VERSION-setup.exe`.
 
 The ARM64 installer refuses x64 Windows. The x64 installer warns on Windows on ARM before

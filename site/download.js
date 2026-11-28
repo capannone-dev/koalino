@@ -40,13 +40,12 @@
   /**
    * The Linux package to offer first. Browsers rarely say which distribution they run on; some
    * (Firefox on Ubuntu and Fedora, for example) do. Otherwise the Flatpak, which runs anywhere,
-   * or on ARM64, which has no Flatpak, the tarball.
-   * Input: arm, whether the computer has an ARM processor.
+   * on x86_64 and ARM64 alike (#190).
    */
-  function linuxPackage(arm) {
+  function linuxPackage() {
     if (/ubuntu|debian|mint|pop!?_?os|elementary/i.test(agent)) return "deb";
     if (/fedora|opensuse|suse|red ?hat|centos|rocky|alma/i.test(agent)) return "rpm";
-    return arm ? "tarball" : "flatpak";
+    return "flatpak";
   }
 
   /** The browser, for the extension card: firefox, chromium, or null. */
@@ -88,19 +87,16 @@
   /**
    * Points the main button at the card's package for this computer and highlights the card.
    * Inputs: card, the platform's card; arm, whether the computer has an ARM processor.
-   * Side effects: on ARM, rewrites the card's links to their ARM64 packages (data-arm64) and hides
-   * the Flatpak, which has no ARM64 build.
+   * Side effects: on ARM, rewrites the card's links to their ARM64 packages (data-arm64).
    */
   function offer(card, arm) {
     if (arm) {
       for (const armLink of card.querySelectorAll("[data-arm64]")) armLink.href = armLink.dataset.arm64;
-      const flatpak = card.querySelector('[data-package="flatpak"]');
-      if (flatpak) flatpak.remove();
     }
     let link = card.querySelector("a.button");
     let label = labels[platform] + (arm ? " (ARM64)" : "");
     if (platform === "linux") {
-      const chosen = linuxPackage(arm);
+      const chosen = linuxPackage();
       link = card.querySelector(`[data-package="${chosen}"]`) || link;
       label = labels[chosen] + (arm ? " (ARM64)" : "");
       // Show the chosen package as the card's main button too.
