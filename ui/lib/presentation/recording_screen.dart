@@ -54,6 +54,7 @@ final class RecordingScreen extends StatefulWidget {
     this.attachmentsController,
     this.activeMeetingId,
     this.modelFetcher,
+    this.transcriptionSettingsBuilder,
     super.key,
   });
 
@@ -67,12 +68,36 @@ final class RecordingScreen extends StatefulWidget {
   /// Downloads Automatic's model by itself (#189); when given, its progress shows above the title.
   final AutomaticModelFetcher? modelFetcher;
 
+  /// Builds the transcription settings page, opened from an error a model choice or another
+  /// device can fix (#203); without it those errors offer Try again instead.
+  final WidgetBuilder? transcriptionSettingsBuilder;
+
   @override
   State<RecordingScreen> createState() => _RecordingScreenState();
 }
 
 /// Owns the title text field's editing state.
 final class _RecordingScreenState extends State<RecordingScreen> {
+  /// The labelled button that can fix the current error, or `null` when none applies (#203).
+  ///
+  /// Inputs: the controller holding the error. Outputs: the button's label and callback.
+  /// Side effects: none until pressed; then it retries or opens the transcription settings.
+  ({String label, VoidCallback onPressed})? _errorAction(
+      RecordingController controller) {
+    final WidgetBuilder? settings = widget.transcriptionSettingsBuilder;
+    return switch (controller.errorAction) {
+      RecordingErrorAction.openTranscriptionSettings when settings != null => (
+          label: l10n.openTranscriptionSettings,
+          onPressed: () => Navigator.of(context)
+              .push(MaterialPageRoute<void>(builder: settings)),
+        ),
+      RecordingErrorAction.openTranscriptionSettings ||
+      RecordingErrorAction.retry =>
+        (label: l10n.tryAgain, onPressed: () => unawaited(controller.retry())),
+      null => null,
+    };
+  }
+
   /// Holds the typed meeting title until a recording starts.
   final TextEditingController _titleController = TextEditingController();
 
@@ -283,11 +308,10 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                           case final String errorMessage)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
-                          child: Text(
-                            errorMessage,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.error),
+                          child: RecordingErrorCard(
+                            message: errorMessage,
+                            detail: recordingController.errorDetail,
+                            action: _errorAction(recordingController),
                           ),
                         ),
                       const SizedBox(height: 24),
@@ -771,4 +795,77 @@ final class ModelDownloadBanner extends StatelessWidget {
           );
         },
       );
+}
+
+/// Shows an error under the recording controls (#203): what went wrong, why in plain words, and
+/// the one button that can fix it.
+final class RecordingErrorCard extends StatelessWidget {
+  /// Inputs: the headline `message`; the optional `detail` sentence; the optional `action`.
+  /// Outputs: an error-tinted card. Side effects: none until the action is pressed.
+  const RecordingErrorCard(
+      {required this.message, this.detail, this.action, super.key});
+
+  final String message;
+  final String? detail;
+  final ({String label, VoidCallback onPressed})? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    return Semantics(
+      liveRegion: true,
+      child: Card(
+        elevation: 0,
+        color: colors.errorContainer,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child:
+                    Icon(Icons.error_outline, color: colors.onErrorContainer),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(message,
+                        style: text.titleSmall
+                            ?.copyWith(color: colors.onErrorContainer)),
+                    if (detail case final String detail)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(detail,
+                            style: text.bodyMedium
+                                ?.copyWith(color: colors.onErrorContainer)),
+                      ),
+                    if (action
+                        case (
+                          label: final String label,
+                          onPressed: final VoidCallback onPressed
+                        ))
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                              foregroundColor: colors.onErrorContainer),
+                          onPressed: onPressed,
+                          child: Text(label),
+                        ),
+                      )
+                    else
+                      const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

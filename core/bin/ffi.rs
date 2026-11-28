@@ -94,6 +94,10 @@ pub const FFI_KEYCHAIN_UNAVAILABLE: c_int = 6;
 /// input device, microphone access denied (Android permission, Windows privacy setting), or an
 /// unsupported format. The recording is not started (Issue #45).
 pub const FFI_MICROPHONE_UNAVAILABLE: c_int = 7;
+/// Indicates that a recording could not start because this CPU lacks the instructions local
+/// transcription needs (for example AVX2 on an old or emulated x86 CPU), so the engine refused to
+/// load. The app says so and points to transcription on another device (#203).
+pub const FFI_PROCESSOR_UNSUPPORTED: c_int = 8;
 /// From `note_taker_microphone_silence`: the microphone is heard, or none is open.
 pub const FFI_MICROPHONE_HEARD: c_int = 0;
 /// From `note_taker_microphone_silence`: the open microphone gives only digital silence or no
@@ -134,8 +138,9 @@ fn audio_state_code(audio_state: crate::domain::models::AudioState) -> c_int {
 /// Maps a recording command result to its C status.
 ///
 /// Inputs: The controller's result.
-/// Outputs: `FFI_SUCCESS`, `FFI_PIPELINE_UNAVAILABLE` when the worker is unavailable, or
-/// `FFI_OPERATION_REJECTED` for lifecycle, audio, and session rejections.
+/// Outputs: `FFI_SUCCESS`, `FFI_PROCESSOR_UNSUPPORTED` when the pipeline could not be built because
+/// this CPU cannot run local transcription, `FFI_PIPELINE_UNAVAILABLE` when the worker is otherwise
+/// unavailable, or `FFI_OPERATION_REJECTED` for lifecycle, audio, and session rejections.
 /// Side effects: Logs the rejection reason (never audio or transcript text).
 fn recording_status<Value>(result: Result<Value, RecordingControlError>) -> c_int {
     use crate::application::recording_manager::RecordingManagerError;
@@ -145,6 +150,13 @@ fn recording_status<Value>(result: Result<Value, RecordingControlError>) -> c_in
         Err(error) => {
             tracing::warn!(error = %error, "Recording command rejected");
             match error {
+                RecordingControlError::Pipeline(RecordingManagerError::PipelineUnavailable {
+                    ..
+                }) if !crate::adapters::ai::compute_resources::missing_cpu_instructions()
+                    .is_empty() =>
+                {
+                    FFI_PROCESSOR_UNSUPPORTED
+                }
                 RecordingControlError::Pipeline(
                     RecordingManagerError::PipelineUnavailable { .. }
                     | RecordingManagerError::WorkerStopped,

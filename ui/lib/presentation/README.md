@@ -182,6 +182,9 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   HTML into text), and text files. Office documents say they can't be shown yet.
 - `markdown_view.dart` renders Markdown with the pure-Dart `markdown` parser. Links are inert and
   images show their description, so nothing reaches the network.
+- `recording_screen.dart`'s `RecordingErrorCard` (#203) shows a recording error as what went wrong,
+  why in plain words, and one button that can fix it: Try again, or Open transcription settings
+  when a model is missing or this processor cannot transcribe (core status 8).
 - `meeting_time.dart` (#210) words a meeting's time for people, in the device's time zone and the
   app's language: "Today 9:32 AM", "Yesterday …", the weekday this week, "Oct 28 …" this year,
   else the full date. Untitled meetings' stored titles keep their UTC form.

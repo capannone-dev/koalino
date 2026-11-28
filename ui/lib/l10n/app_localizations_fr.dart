@@ -3400,4 +3400,28 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get unnamedDevice => 'Appareil sans nom';
+
+  @override
+  String get checkTheMicrophone =>
+      'Vérifiez qu\'un micro est branché et que Koalino peut l\'utiliser.';
+
+  @override
+  String get speechModelCouldNotLoad =>
+      'La transcription n\'a pas pu démarrer : le modèle vocal manque ou n\'a pas pu être chargé. Choisissez ou téléchargez un modèle.';
+
+  @override
+  String get processorCannotTranscribe =>
+      'Le processeur de cet appareil ne peut pas transcrire. Dans les réglages de transcription, un autre de vos appareils peut transcrire pour lui.';
+
+  @override
+  String get secureStorageLocked =>
+      'Le stockage sécurisé de Koalino est verrouillé. Déverrouillez-le, puis réessayez.';
+
+  @override
+  String get startKeepsFailing =>
+      'Réessayez. Si cela échoue encore, redémarrez Koalino.';
+
+  @override
+  String get openTranscriptionSettings =>
+      'Ouvrir les réglages de transcription';
 }

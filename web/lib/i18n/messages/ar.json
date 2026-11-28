@@ -603,5 +603,7 @@
   "recordingPlayer": "مشغّل التسجيل",
   "downloadTheRecording": "تنزيل التسجيل",
   "unnamedDevice": "جهاز بلا اسم",
-  "voicesShort": "الأصوات"
+  "voicesShort": "الأصوات",
+  "koalinoIsNotResponding": "Koalino على هذا الخادم لا يستجيب. انتظر لحظة ثم حاول مرة أخرى.",
+  "detailsForTheAdministrator": "تفاصيل للمسؤول"
 }

@@ -5355,6 +5355,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unnamed device'**
   String get unnamedDevice;
+
+  /// Shown under 'Unable to open the microphone' with a Try again button.
+  ///
+  /// In en, this message translates to:
+  /// **'Check that a microphone is connected and that Koalino may use it.'**
+  String get checkTheMicrophone;
+
+  /// Recording start failed because the transcription engine could not be built.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription couldn\'t start: the speech model is missing or couldn\'t load. Choose or download a model.'**
+  String get speechModelCouldNotLoad;
+
+  /// Recording start failed because the CPU lacks the instructions local transcription needs.
+  ///
+  /// In en, this message translates to:
+  /// **'This device\'s processor can\'t run transcription. In transcription settings, another of your devices can transcribe for this one.'**
+  String get processorCannotTranscribe;
+
+  /// Recording start failed because the keychain holding the database key is locked.
+  ///
+  /// In en, this message translates to:
+  /// **'Koalino\'s secure storage is locked. Unlock it, then try again.'**
+  String get secureStorageLocked;
+
+  /// Shown under a recording error with no known cause.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again. If it keeps failing, restart Koalino.'**
+  String get startKeepsFailing;
+
+  /// Button under a recording error that the transcription settings can fix.
+  ///
+  /// In en, this message translates to:
+  /// **'Open transcription settings'**
+  String get openTranscriptionSettings;
 }
 
 class _AppLocalizationsDelegate

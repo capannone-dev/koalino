@@ -524,6 +524,91 @@ void main() {
     expect(find.text('Unable to open the microphone'), findsOneWidget);
   });
 
+  testWidgets('a start error says why and Try again starts again (#203)',
+      (WidgetTester tester) async {
+    final FakeRecordingBridge recordingBridge =
+        FakeRecordingBridge(startResult: false);
+    await pumpRecordingScreen(tester, recordingBridge);
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    expect(find.text('Try again. If it keeps failing, restart Koalino.'),
+        findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Try again'));
+    await tester.pump();
+    expect(recordingBridge.startRecordingCallCount, 2);
+  });
+
+  testWidgets(
+      'a microphone that cannot open says what to check, with Try again (#203)',
+      (WidgetTester tester) async {
+    await pumpRecordingScreen(
+        tester,
+        FakeRecordingBridge(
+            startResult: false,
+            startOutcome: RecordingStartOutcome.microphoneUnavailable));
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    expect(
+        find.text(
+            'Check that a microphone is connected and that Koalino may use it.'),
+        findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Try again'), findsOneWidget);
+  });
+
+  testWidgets(
+      'a missing model or a processor that cannot transcribe opens transcription settings (#203)',
+      (WidgetTester tester) async {
+    for (final (RecordingStartOutcome outcome, String detail)
+        in <(RecordingStartOutcome, String)>[
+      (
+        RecordingStartOutcome.transcriptionUnavailable,
+        "Transcription couldn't start: the speech model is missing or couldn't load. Choose or download a model."
+      ),
+      (
+        RecordingStartOutcome.processorUnsupported,
+        "This device's processor can't run transcription. In transcription settings, another of your devices can transcribe for this one."
+      ),
+    ]) {
+      await tester.pumpWidget(MaterialApp(
+        // A fresh app per outcome, so the page pushed by the previous one is gone.
+        key: ValueKey<RecordingStartOutcome>(outcome),
+        home: RecordingScreen(
+          recordingController: RecordingController(
+            recordingBridge:
+                FakeRecordingBridge(startResult: false, startOutcome: outcome),
+            microphonePermission: const GrantedMicrophonePermission(),
+            recordingNotifier: const NoRecordingNotifier(),
+          ),
+          transcriptionSettingsBuilder: (BuildContext context) =>
+              const Scaffold(body: Text('Transcription settings page')),
+        ),
+      ));
+      await tester.tap(find.text('Start recording'));
+      await tester.pump();
+      expect(find.text(detail), findsOneWidget);
+      await tester
+          .tap(find.widgetWithText(TextButton, 'Open transcription settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Transcription settings page'), findsOneWidget);
+    }
+  });
+
+  testWidgets('a locked keychain says to unlock it (#203)',
+      (WidgetTester tester) async {
+    await pumpRecordingScreen(
+        tester,
+        FakeRecordingBridge(
+            startResult: false,
+            startOutcome: RecordingStartOutcome.keychainLocked));
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    expect(
+        find.text(
+            "Koalino's secure storage is locked. Unlock it, then try again."),
+        findsOneWidget);
+  });
+
   testWidgets('a denied microphone permission never starts a recording',
       (WidgetTester tester) async {
     final FakeRecordingBridge recordingBridge =

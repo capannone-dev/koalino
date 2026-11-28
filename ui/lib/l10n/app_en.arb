@@ -2531,5 +2531,17 @@
   "yesterdayAt": "Yesterday {time}",
   "@yesterdayAt": {"description": "A meeting's time when it happened yesterday.", "placeholders": {"time": {"type": "String"}}},
   "unnamedDevice": "Unnamed device",
-  "@unnamedDevice": {"description": "A nearby device that has not told its name yet."}
+  "@unnamedDevice": {"description": "A nearby device that has not told its name yet."},
+  "checkTheMicrophone": "Check that a microphone is connected and that Koalino may use it.",
+  "@checkTheMicrophone": {"description": "Shown under 'Unable to open the microphone' with a Try again button."},
+  "speechModelCouldNotLoad": "Transcription couldn't start: the speech model is missing or couldn't load. Choose or download a model.",
+  "@speechModelCouldNotLoad": {"description": "Recording start failed because the transcription engine could not be built."},
+  "processorCannotTranscribe": "This device's processor can't run transcription. In transcription settings, another of your devices can transcribe for this one.",
+  "@processorCannotTranscribe": {"description": "Recording start failed because the CPU lacks the instructions local transcription needs."},
+  "secureStorageLocked": "Koalino's secure storage is locked. Unlock it, then try again.",
+  "@secureStorageLocked": {"description": "Recording start failed because the keychain holding the database key is locked."},
+  "startKeepsFailing": "Try again. If it keeps failing, restart Koalino.",
+  "@startKeepsFailing": {"description": "Shown under a recording error with no known cause."},
+  "openTranscriptionSettings": "Open transcription settings",
+  "@openTranscriptionSettings": {"description": "Button under a recording error that the transcription settings can fix."}
 }

@@ -3220,4 +3220,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get unnamedDevice => '名前のないデバイス';
+
+  @override
+  String get checkTheMicrophone => 'マイクが接続されていて、Koalino が使用できることを確認してください。';
+
+  @override
+  String get speechModelCouldNotLoad =>
+      '文字起こしを開始できませんでした。音声モデルがないか、読み込めませんでした。モデルを選択またはダウンロードしてください。';
+
+  @override
+  String get processorCannotTranscribe =>
+      'このデバイスのプロセッサーでは文字起こしを実行できません。文字起こしの設定で、別のデバイスに代わりに文字起こしさせることができます。';
+
+  @override
+  String get secureStorageLocked =>
+      'Koalino の安全な保管領域がロックされています。ロックを解除してから、もう一度お試しください。';
+
+  @override
+  String get startKeepsFailing => 'もう一度お試しください。失敗が続く場合は Koalino を再起動してください。';
+
+  @override
+  String get openTranscriptionSettings => '文字起こしの設定を開く';
 }

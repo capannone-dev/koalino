@@ -883,5 +883,11 @@
   "@unableToSaveTheRecording": {},
   "todayAt": "Heute {time}",
   "yesterdayAt": "Gestern {time}",
-  "unnamedDevice": "Unbenanntes Gerät"
+  "unnamedDevice": "Unbenanntes Gerät",
+  "checkTheMicrophone": "Prüfe, ob ein Mikrofon angeschlossen ist und Koalino es verwenden darf.",
+  "speechModelCouldNotLoad": "Die Transkription konnte nicht starten: Das Sprachmodell fehlt oder ließ sich nicht laden. Wähle oder lade ein Modell.",
+  "processorCannotTranscribe": "Der Prozessor dieses Geräts kann nicht transkribieren. In den Transkriptionseinstellungen kann ein anderes deiner Geräte für dieses transkribieren.",
+  "secureStorageLocked": "Der sichere Speicher von Koalino ist gesperrt. Entsperre ihn und versuche es erneut.",
+  "startKeepsFailing": "Versuche es erneut. Wenn es weiter fehlschlägt, starte Koalino neu.",
+  "openTranscriptionSettings": "Transkriptionseinstellungen öffnen"
 }

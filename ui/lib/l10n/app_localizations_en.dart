@@ -3346,4 +3346,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get unnamedDevice => 'Unnamed device';
+
+  @override
+  String get checkTheMicrophone =>
+      'Check that a microphone is connected and that Koalino may use it.';
+
+  @override
+  String get speechModelCouldNotLoad =>
+      'Transcription couldn\'t start: the speech model is missing or couldn\'t load. Choose or download a model.';
+
+  @override
+  String get processorCannotTranscribe =>
+      'This device\'s processor can\'t run transcription. In transcription settings, another of your devices can transcribe for this one.';
+
+  @override
+  String get secureStorageLocked =>
+      'Koalino\'s secure storage is locked. Unlock it, then try again.';
+
+  @override
+  String get startKeepsFailing =>
+      'Try again. If it keeps failing, restart Koalino.';
+
+  @override
+  String get openTranscriptionSettings => 'Open transcription settings';
 }

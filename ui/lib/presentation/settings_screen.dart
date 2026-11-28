@@ -171,7 +171,8 @@ final class SettingsScreen extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (BuildContext context) => _TranscriptionPage(
+                    builder: (BuildContext context) =>
+                        TranscriptionSettingsPage(
                       bridge: transcriptionSettingsBridge!,
                       languageCode: language?.defaultLanguage ?? 'auto',
                     ),
@@ -521,18 +522,23 @@ final class _NetworkAddressesSectionState
 }
 
 /// Owns the page's controller for as long as the page is open; downloads continue in the core.
-final class _TranscriptionPage extends StatefulWidget {
-  const _TranscriptionPage({required this.bridge, required this.languageCode});
+/// Settings opens it, and so does a recording error a model choice can fix (#203).
+final class TranscriptionSettingsPage extends StatefulWidget {
+  /// Inputs: the core's transcription settings `bridge`; the default meeting `languageCode`.
+  const TranscriptionSettingsPage(
+      {required this.bridge, required this.languageCode, super.key});
 
   final TranscriptionSettingsBridge bridge;
   final String languageCode;
 
   @override
-  State<_TranscriptionPage> createState() => _TranscriptionPageState();
+  State<TranscriptionSettingsPage> createState() =>
+      _TranscriptionSettingsPageState();
 }
 
 /// Creates and disposes the controller.
-final class _TranscriptionPageState extends State<_TranscriptionPage> {
+final class _TranscriptionSettingsPageState
+    extends State<TranscriptionSettingsPage> {
   late final TranscriptionSettingsController _controller =
       TranscriptionSettingsController(
           bridge: widget.bridge, npuDownloader: platformNpuDownloader());

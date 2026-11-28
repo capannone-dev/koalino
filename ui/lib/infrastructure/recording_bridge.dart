@@ -16,6 +16,16 @@ enum RecordingStartOutcome {
   /// the operating system. Nothing is recording.
   microphoneUnavailable,
 
+  /// The transcription engine could not be built (Rust status 4): no model, or it failed to load
+  /// (#203).
+  transcriptionUnavailable,
+
+  /// This CPU cannot run local transcription (Rust status 8), e.g. it lacks AVX2 (#203).
+  processorUnsupported,
+
+  /// The keychain holding the database key is locked or refused access (Rust status 6, #203).
+  keychainLocked,
+
   /// Rust rejected the request for another reason.
   failed,
 }
@@ -243,6 +253,15 @@ const int _ffiSuccess = 0;
 /// Matches `FFI_MICROPHONE_UNAVAILABLE` in the Rust FFI contract.
 const int microphoneUnavailableStatus = 7;
 
+/// Rust's `FFI_PIPELINE_UNAVAILABLE`: the transcription engine could not be built.
+const int pipelineUnavailableStatus = 4;
+
+/// Rust's `FFI_KEYCHAIN_UNAVAILABLE`: the keychain holding the database key is locked.
+const int keychainUnavailableStatus = 6;
+
+/// Rust's `FFI_PROCESSOR_UNSUPPORTED`: this CPU cannot run local transcription (#203).
+const int processorUnsupportedStatus = 8;
+
 /// Maps a start status from Rust to its outcome.
 ///
 /// Inputs: The status code. Outputs: `started` for 0, `microphoneUnavailable` for 7, otherwise
@@ -251,6 +270,10 @@ RecordingStartOutcome startOutcomeOf(int status) => switch (status) {
       _ffiSuccess => RecordingStartOutcome.started,
       microphoneUnavailableStatus =>
         RecordingStartOutcome.microphoneUnavailable,
+      pipelineUnavailableStatus =>
+        RecordingStartOutcome.transcriptionUnavailable,
+      keychainUnavailableStatus => RecordingStartOutcome.keychainLocked,
+      processorUnsupportedStatus => RecordingStartOutcome.processorUnsupported,
       _ => RecordingStartOutcome.failed,
     };
 

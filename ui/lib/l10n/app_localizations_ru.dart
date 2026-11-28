@@ -3404,4 +3404,27 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get unnamedDevice => 'Устройство без имени';
+
+  @override
+  String get checkTheMicrophone =>
+      'Проверьте, что микрофон подключён и Koalino может его использовать.';
+
+  @override
+  String get speechModelCouldNotLoad =>
+      'Не удалось начать расшифровку: речевая модель отсутствует или не загрузилась. Выберите или скачайте модель.';
+
+  @override
+  String get processorCannotTranscribe =>
+      'Процессор этого устройства не может выполнять расшифровку. В настройках расшифровки её может выполнять другое ваше устройство.';
+
+  @override
+  String get secureStorageLocked =>
+      'Защищённое хранилище Koalino заблокировано. Разблокируйте его и повторите попытку.';
+
+  @override
+  String get startKeepsFailing =>
+      'Повторите попытку. Если не получится, перезапустите Koalino.';
+
+  @override
+  String get openTranscriptionSettings => 'Открыть настройки расшифровки';
 }

@@ -183,6 +183,9 @@ final class RecordingController extends ChangeNotifier {
   late final StreamSubscription<RecordingNotificationState> _externalChanges;
   RecordingUiState _state = RecordingUiState.idle;
   String? _errorMessage;
+  String? _errorDetail;
+  RecordingErrorAction? _errorAction;
+  String? _lastRequestedTitle;
   String? _activeTitle;
   String? _completionMessage;
 
@@ -206,11 +209,62 @@ final class RecordingController extends ChangeNotifier {
   /// Side effects: None.
   String? get errorMessage => _errorMessage;
 
+  /// Returns why the latest start or resume failed and what to do, in plain words (#203).
+  ///
+  /// Outputs: A sentence shown under [errorMessage], or `null` when there is none.
+  String? get errorDetail => _errorMessage == null ? null : _errorDetail;
+
+  /// Returns the one action that can fix the latest error (#203), or `null` when none applies.
+  RecordingErrorAction? get errorAction =>
+      _errorMessage == null ? null : _errorAction;
+
+  /// Runs the failed request again: a resume while paused, else a start with the same title.
+  ///
+  /// Inputs: None. Outputs: Completes once Rust reports the outcome.
+  /// Side effects: As [resumeRecording] or [startRecording].
+  Future<void> retry() => _state == RecordingUiState.paused
+      ? resumeRecording()
+      : startRecording(title: _lastRequestedTitle);
+
   /// Returns the title of the recording in progress, or `null` when untitled or not recording.
   String? get activeTitle => _activeTitle;
 
   /// Returns "Recording saved" after a successful stop, until the next recording starts.
   String? get completionMessage => _completionMessage;
+
+  /// Sets (or clears, with `null`) the error with its explanation and action.
+  void _setError(String? message,
+      {String? detail, RecordingErrorAction? action}) {
+    _errorMessage = message;
+    _errorDetail = detail;
+    _errorAction = action;
+  }
+
+  /// Sets the error for a start or resume that did not record: the cause in plain words and the
+  /// action that can fix it (#203).
+  ///
+  /// Inputs: The outcome and the headline for its request. Side effects: Sets the error fields.
+  void _failWith(RecordingStartOutcome outcome, String headline) =>
+      switch (outcome) {
+        RecordingStartOutcome.microphoneUnavailable => _setError(
+            l10n.unableToOpenTheMicrophone,
+            detail: l10n.checkTheMicrophone,
+            action: RecordingErrorAction.retry),
+        RecordingStartOutcome.transcriptionUnavailable => _setError(headline,
+            detail: l10n.speechModelCouldNotLoad,
+            action: RecordingErrorAction.openTranscriptionSettings),
+        RecordingStartOutcome.processorUnsupported => _setError(headline,
+            detail: l10n.processorCannotTranscribe,
+            action: RecordingErrorAction.openTranscriptionSettings),
+        RecordingStartOutcome.keychainLocked => _setError(headline,
+            detail: l10n.secureStorageLocked,
+            action: RecordingErrorAction.retry),
+        RecordingStartOutcome.failed ||
+        RecordingStartOutcome.started =>
+          _setError(headline,
+              detail: l10n.startKeepsFailing,
+              action: RecordingErrorAction.retry),
+      };
 
   /// Requests that the Rust core start a recording session, optionally titled.
   ///
@@ -228,14 +282,15 @@ final class RecordingController extends ChangeNotifier {
     final String? trimmedTitle = title?.trim();
     final String? requestedTitle =
         trimmedTitle == null || trimmedTitle.isEmpty ? null : trimmedTitle;
+    _lastRequestedTitle = requestedTitle;
     _state = RecordingUiState.starting;
-    _errorMessage = null;
+    _setError(null);
     _completionMessage = null;
     notifyListeners();
 
     if (!await _microphonePermission.ensureGranted()) {
       _state = RecordingUiState.idle;
-      _errorMessage = _permissionDeniedMessage;
+      _setError(_permissionDeniedMessage, action: RecordingErrorAction.retry);
       notifyListeners();
       return;
     }
@@ -250,11 +305,11 @@ final class RecordingController extends ChangeNotifier {
       _state = RecordingUiState.recording;
       _activeTitle = requestedTitle;
       if (!keepsRecordingInBackground) {
-        _errorMessage = backgroundRecordingRefusedMessage;
+        _setError(backgroundRecordingRefusedMessage);
       }
     } else {
       _state = RecordingUiState.idle;
-      _errorMessage = _startErrorMessage(outcome, l10n.unableToStartRecording);
+      _failWith(outcome, l10n.unableToStartRecording);
       unawaited(_recordingNotifier.show(RecordingNotificationState.idle));
     }
     notifyListeners();
@@ -271,7 +326,7 @@ final class RecordingController extends ChangeNotifier {
       return;
     }
     _isTransitioning = true;
-    _errorMessage = null;
+    _setError(null);
     final bool didPause = await _recordingBridge.pauseRecording();
     _isTransitioning = false;
     if (didPause) {
@@ -279,7 +334,7 @@ final class RecordingController extends ChangeNotifier {
       unawaited(_recordingNotifier.show(RecordingNotificationState.paused,
           title: _activeTitle));
     } else {
-      _errorMessage = l10n.unableToPauseRecording;
+      _setError(l10n.unableToPauseRecording);
     }
     notifyListeners();
   }
@@ -296,10 +351,10 @@ final class RecordingController extends ChangeNotifier {
       return;
     }
     _isTransitioning = true;
-    _errorMessage = null;
+    _setError(null);
     if (!await _microphonePermission.ensureGranted()) {
       _isTransitioning = false;
-      _errorMessage = _permissionDeniedMessage;
+      _setError(_permissionDeniedMessage, action: RecordingErrorAction.retry);
       notifyListeners();
       return;
     }
@@ -312,10 +367,10 @@ final class RecordingController extends ChangeNotifier {
     if (outcome == RecordingStartOutcome.started) {
       _state = RecordingUiState.recording;
       if (!keepsRecordingInBackground) {
-        _errorMessage = backgroundRecordingRefusedMessage;
+        _setError(backgroundRecordingRefusedMessage);
       }
     } else {
-      _errorMessage = _startErrorMessage(outcome, l10n.unableToResumeRecording);
+      _failWith(outcome, l10n.unableToResumeRecording);
       unawaited(_recordingNotifier.show(RecordingNotificationState.paused,
           title: _activeTitle));
     }
@@ -336,7 +391,7 @@ final class RecordingController extends ChangeNotifier {
       return;
     }
     _state = RecordingUiState.stopping;
-    _errorMessage = null;
+    _setError(null);
     notifyListeners();
     unawaited(_recordingNotifier.show(RecordingNotificationState.stopping,
         title: _activeTitle));
@@ -348,7 +403,7 @@ final class RecordingController extends ChangeNotifier {
       unawaited(_recordingNotifier.show(RecordingNotificationState.idle));
     } else {
       _state = stateBeforeStop;
-      _errorMessage = l10n.unableToStopRecording;
+      _setError(l10n.unableToStopRecording);
       unawaited(_recordingNotifier.show(
           stateBeforeStop == RecordingUiState.paused
               ? RecordingNotificationState.paused
@@ -389,7 +444,7 @@ final class RecordingController extends ChangeNotifier {
       default:
         return;
     }
-    _errorMessage = null;
+    _setError(null);
     notifyListeners();
   }
 
@@ -409,11 +464,11 @@ String get _permissionDeniedMessage => l10n.microphoneAccessIsNeededToRecord;
 /// silence the microphone.
 String get backgroundRecordingRefusedMessage => l10n.keepTheAppOpenAndroidDid;
 
-/// The error for a start or resume that did not record.
-///
-/// Inputs: The outcome and the generic message for it. Outputs: The message to show.
-/// Side effects: None.
-String _startErrorMessage(RecordingStartOutcome outcome, String fallback) =>
-    outcome == RecordingStartOutcome.microphoneUnavailable
-        ? l10n.unableToOpenTheMicrophone
-        : fallback;
+/// The one action offered under a recording error (#203).
+enum RecordingErrorAction {
+  /// Run the failed start or resume again.
+  retry,
+
+  /// Open the transcription settings (choose a model, or transcribe on another device).
+  openTranscriptionSettings,
+}

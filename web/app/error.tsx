@@ -1,4 +1,5 @@
-// Catches failures of any dashboard route (usually an unreachable daemon) and offers a retry.
+// Catches failures of any dashboard route (usually an unreachable daemon) and offers a retry, in
+// plain words, with the technical hint folded under Details (#203).
 
 "use client";
 
@@ -16,7 +17,12 @@ export default function RouteError({ reset }: { error: Error & { digest?: string
   return (
     <section role="alert" className="mx-auto max-w-xl space-y-3 rounded-xl border border-danger-line bg-surface p-6">
       <h1 className="text-xl font-bold">{t("cantLoadThisPage")}</h1>
-      <p className="text-ink-soft">{t("theNoteTakingServerDidnt")}</p>
+      <p className="text-ink-soft">{t("koalinoIsNotResponding")}</p>
+      {/* The technical hint is for whoever runs the server, folded away for everyone else (#203). */}
+      <details className="text-sm text-muted">
+        <summary className="cursor-pointer">{t("detailsForTheAdministrator")}</summary>
+        <p className="mt-1">{t("theNoteTakingServerDidnt")}</p>
+      </details>
       <button
         type="button"
         onClick={reset}

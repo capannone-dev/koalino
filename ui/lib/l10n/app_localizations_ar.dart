@@ -3401,4 +3401,27 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get unnamedDevice => 'جهاز بلا اسم';
+
+  @override
+  String get checkTheMicrophone =>
+      'تأكد من توصيل ميكروفون ومن السماح لـ Koalino باستخدامه.';
+
+  @override
+  String get speechModelCouldNotLoad =>
+      'تعذّر بدء التفريغ النصي: نموذج الكلام مفقود أو تعذّر تحميله. اختر نموذجًا أو نزّله.';
+
+  @override
+  String get processorCannotTranscribe =>
+      'معالج هذا الجهاز لا يستطيع تشغيل التفريغ النصي. في إعدادات التفريغ، يمكن لجهاز آخر من أجهزتك التفريغ بدلًا منه.';
+
+  @override
+  String get secureStorageLocked =>
+      'التخزين الآمن لـ Koalino مقفل. افتحه ثم حاول مرة أخرى.';
+
+  @override
+  String get startKeepsFailing =>
+      'حاول مرة أخرى. إذا استمر الفشل، فأعد تشغيل Koalino.';
+
+  @override
+  String get openTranscriptionSettings => 'فتح إعدادات التفريغ النصي';
 }

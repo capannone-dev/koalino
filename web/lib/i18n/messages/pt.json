@@ -576,5 +576,7 @@
   "recordingPlayer": "Player da gravação",
   "downloadTheRecording": "Baixar a gravação",
   "unnamedDevice": "Dispositivo sem nome",
-  "voicesShort": "Vozes"
+  "voicesShort": "Vozes",
+  "koalinoIsNotResponding": "O Koalino neste servidor não está a responder. Aguarde um momento e tente novamente.",
+  "detailsForTheAdministrator": "Detalhes para o administrador"
 }

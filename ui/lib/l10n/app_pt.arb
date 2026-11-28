@@ -883,5 +883,11 @@
   "@unableToSaveTheRecording": {},
   "todayAt": "Hoje {time}",
   "yesterdayAt": "Ontem {time}",
-  "unnamedDevice": "Dispositivo sem nome"
+  "unnamedDevice": "Dispositivo sem nome",
+  "checkTheMicrophone": "Verifique se há um microfone ligado e se o Koalino pode usá-lo.",
+  "speechModelCouldNotLoad": "A transcrição não começou: o modelo de voz falta ou não carregou. Escolha ou transfira um modelo.",
+  "processorCannotTranscribe": "O processador deste dispositivo não consegue transcrever. Nas definições de transcrição, outro dos seus dispositivos pode transcrever por ele.",
+  "secureStorageLocked": "O armazenamento seguro do Koalino está bloqueado. Desbloqueie-o e tente novamente.",
+  "startKeepsFailing": "Tente novamente. Se continuar a falhar, reinicie o Koalino.",
+  "openTranscriptionSettings": "Abrir definições de transcrição"
 }

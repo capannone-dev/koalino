@@ -106,6 +106,9 @@ documented nonzero status codes distinguishable from lifecycle states.
   `FFI_MICROPHONE_UNAVAILABLE` (`7`) without starting when it cannot open; pause, interruption,
   and stop close it and push its queued tail. A `microphone-drain` thread moves captured audio
   into the recording every 100 ms, taking the runtime lock only to drain (Issue #45).
+  A start whose pipeline cannot be built because this CPU lacks the instructions local
+  transcription needs returns `FFI_PROCESSOR_UNSUPPORTED` (`8`) instead of
+  `FFI_PIPELINE_UNAVAILABLE` (`4`), so the app can say why (#203).
   `RecordingController::start_titled` stores the title through the worker's repository once the
   session is open. Stop blocks while the
   last chunks are transcribed, so Flutter must call it from a background isolate.

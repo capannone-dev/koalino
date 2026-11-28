@@ -269,6 +269,13 @@ final class NoteTakerApp extends StatelessWidget {
         activeMeetingId: activeMeetingId,
         // Tests that build the app without the core omit the start-up controller.
         modelFetcher: coreStartupController == null ? null : _modelFetcher,
+        // A start that failed for want of a model opens these settings (#203).
+        transcriptionSettingsBuilder: coreStartupController == null
+            ? null
+            : (BuildContext context) => TranscriptionSettingsPage(
+                  bridge: const RustTranscriptionSettingsBridge(),
+                  languageCode: languageController?.defaultLanguage ?? 'auto',
+                ),
       ),
       meetingsScreenBuilder: (BuildContext context) =>
           const _MeetingsDestination(),

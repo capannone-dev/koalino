@@ -3152,4 +3152,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unnamedDevice => '未命名设备';
+
+  @override
+  String get checkTheMicrophone => '请确认已连接麦克风，并允许 Koalino 使用它。';
+
+  @override
+  String get speechModelCouldNotLoad => '无法开始转写：语音模型缺失或无法加载。请选择或下载一个模型。';
+
+  @override
+  String get processorCannotTranscribe =>
+      '此设备的处理器无法运行转写。在转写设置中，可以让你的另一台设备代为转写。';
+
+  @override
+  String get secureStorageLocked => 'Koalino 的安全存储已锁定。请解锁后重试。';
+
+  @override
+  String get startKeepsFailing => '请重试。如果仍然失败，请重新启动 Koalino。';
+
+  @override
+  String get openTranscriptionSettings => '打开转写设置';
 }
