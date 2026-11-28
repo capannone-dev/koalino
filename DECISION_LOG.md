@@ -4337,3 +4337,27 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Existing people without a voice** stay that way until they are named again, or until the owner
   adds voices to them in the Voice Gallery. The core of a meeting that has already ended can't be
   recomputed: its windows were only ever kept in memory.
+
+## 2026-11-28 — Live naming cutoffs hold on voices saved in other meetings (#61)
+
+- **Question left open:** the live per-turn cutoffs (0.80 to name, 0.50 to suggest, turns of at
+  least 1.5 s to name) had been measured only on readings recorded where the voices were saved.
+- **Measured** on the stored final-pass windows of AMI and NOTSOFAR, which repeat the same people
+  across meetings, rooms and microphones. Each meeting's speakers were saved as their cores
+  (#196). Then the next meeting's live turns were named with them: runs of one speaker's windows,
+  averaged, across 388 meeting pairs. A turn's truth is its main reference speaker.
+
+  | Name at | Saved people's turns named right | Named as another saved person | Unsaved people's turns given a name |
+  | --- | --- | --- | --- |
+  | 0.70 | 4,971 of 15,814 (31%) | 32 | 134 of 3,726 (3.6%) |
+  | 0.75 | 3,256 (21%) | 2 | 81 (2.2%) |
+  | **0.80 (kept)** | 1,726 (11%) | 0 | 44 (1.2%) |
+
+  At every cutoff, about 60% of saved people's turns were suggested (0.50 to the cutoff) with the
+  right name. Fewer than 2% were suggested with a wrong one.
+- **Decision:** 0.80 and 0.50 stay. Live names are a preview: the meeting-end pass names each
+  speaker from all of their speech and now names about 74% of saved people's speech correctly
+  (#196). A lower live cutoff would show more names during the meeting, at the price of naming
+  people nobody saved.
+- **Limit:** the live engine embeds each turn directly, whereas here a turn is the average of the
+  final pass's 1-second windows, so live scores may differ slightly.
