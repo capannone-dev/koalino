@@ -156,4 +156,21 @@ void main() {
     expect(Directionality.of(tester.element(find.byType(SettingsScreen))),
         TextDirection.rtl);
   });
+
+  testWidgets('a system language the app lacks falls back to English (#198)',
+      (WidgetTester tester) async {
+    tester.platformDispatcher.localesTestValue = const <Locale>[Locale('nl')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    late Locale shown;
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(builder: (BuildContext context) {
+        shown = Localizations.localeOf(context);
+        return const SizedBox();
+      }),
+    ));
+    await tester.pumpAndSettle();
+    expect(shown.languageCode, 'en');
+  });
 }

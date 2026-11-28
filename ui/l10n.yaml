@@ -5,3 +5,6 @@ template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
 output-dir: lib/l10n
 nullable-getter: false
+# English comes first in `supportedLocales`: Flutter shows the first entry when the system's
+# language has no translation, and the generated list is otherwise alphabetical (Arabic) (#198).
+preferred-supported-locales: [en]
