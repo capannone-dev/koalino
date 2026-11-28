@@ -3362,4 +3362,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get recordingPlayer => 'Player da gravação';
+
+  @override
+  String get shareTheRecording => 'Compartilhar a gravação';
+
+  @override
+  String get saveTheRecording => 'Salvar a gravação';
+
+  @override
+  String get unableToShareTheRecording =>
+      'Não foi possível compartilhar a gravação';
+
+  @override
+  String get unableToSaveTheRecording => 'Não foi possível salvar a gravação';
 }

@@ -12,7 +12,7 @@ import { MeetingRecordingPlayer } from "@/components/meeting-recording-player";
 import { MeetingNotes } from "@/components/meeting-notes";
 import { MeetingSummaryPanel } from "@/components/meeting-summary-panel";
 import { MeetingTranscript } from "@/components/meeting-transcript";
-import { RecordingPlaybackProvider } from "@/lib/recording-playback";
+import { RecordingPlaybackProvider, recordingFileName } from "@/lib/recording-playback";
 import { getMeeting, getMeetings } from "@/lib/api";
 import { describeTranscriptionLanguages, formatMeetingCreatedAt } from "@/lib/meeting-metadata";
 import { getMeetingNotes } from "@/lib/edits-api";
@@ -59,7 +59,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
         <h2>{t("transcript")}</h2>
         <MeetingTranscript meetingId={meeting.meeting_id} segments={meeting.segments} transcript={meeting.transcript} />
         {/* After the transcript, so it sticks to the bottom of the window while the transcript scrolls. */}
-        <MeetingRecordingPlayer />
+        <MeetingRecordingPlayer fileName={recordingFileName(meeting.title)} />
       </RecordingPlaybackProvider>
       <h2>{t("attachments")}</h2>
       <ul>

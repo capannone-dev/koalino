@@ -573,5 +573,6 @@
   "followTranscript": "Follow along in the transcript",
   "playFromAt": "Play from {at}",
   "positionInTheRecording": "Position in the recording",
-  "recordingPlayer": "Recording player"
+  "recordingPlayer": "Recording player",
+  "downloadTheRecording": "Download the recording"
 }

@@ -3373,4 +3373,18 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get recordingPlayer => 'Lecteur de l\'enregistrement';
+
+  @override
+  String get shareTheRecording => 'Partager l\'enregistrement';
+
+  @override
+  String get saveTheRecording => 'Enregistrer le fichier audio';
+
+  @override
+  String get unableToShareTheRecording =>
+      'Impossible de partager l\'enregistrement';
+
+  @override
+  String get unableToSaveTheRecording =>
+      'Impossible d\'enregistrer le fichier audio';
 }

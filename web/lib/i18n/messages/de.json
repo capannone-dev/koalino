@@ -573,5 +573,6 @@
   "followTranscript": "Im Transkript mitlesen",
   "playFromAt": "Ab {at} abspielen",
   "positionInTheRecording": "Position in der Aufnahme",
-  "recordingPlayer": "Aufnahme-Player"
+  "recordingPlayer": "Aufnahme-Player",
+  "downloadTheRecording": "Aufnahme herunterladen"
 }

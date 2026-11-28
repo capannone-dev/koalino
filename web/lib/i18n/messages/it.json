@@ -573,5 +573,6 @@
   "followTranscript": "Segui nella trascrizione",
   "playFromAt": "Riproduci da {at}",
   "positionInTheRecording": "Posizione nella registrazione",
-  "recordingPlayer": "Lettore della registrazione"
+  "recordingPlayer": "Lettore della registrazione",
+  "downloadTheRecording": "Scarica la registrazione"
 }

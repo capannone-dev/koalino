@@ -18,6 +18,8 @@ export const SKIP_MS = 10_000;
 export type RecordingPlayback = {
   /** Whether the meeting has a kept recording. */
   available: boolean;
+  /** Where the recording is served, for downloading it (#199). */
+  url: string;
   playing: boolean;
   /** Whether the last attempt to play failed. */
   failed: boolean;
@@ -40,6 +42,15 @@ const PlaybackContext = createContext<RecordingPlayback | null>(null);
 /** Returns the shared playback, or `null` outside a `RecordingPlaybackProvider`. */
 export function useRecordingPlayback(): RecordingPlayback | null {
   return useContext(PlaybackContext);
+}
+
+/**
+ * Names a downloaded recording after its meeting: `<title>.wav`, with characters file systems
+ * reject replaced by `_`, or `meeting.wav` without a title (#199). Matches the app's names.
+ */
+export function recordingFileName(title: string | null | undefined): string {
+  const safeTitle = (title ?? "").replace(/[\\/:*?"<>|\x00-\x1F]/g, "_").trim();
+  return `${safeTitle || "meeting"}.wav`;
 }
 
 /** Returns the start of the passage being heard: the last start at or before `positionMs`. */
@@ -103,6 +114,7 @@ export function RecordingPlaybackProvider({ meetingId, children }: { meetingId: 
   const value = useMemo<RecordingPlayback>(
     () => ({
       available,
+      url: meetingRecordingUrl(meetingId),
       playing,
       failed,
       positionMs,
@@ -128,7 +140,7 @@ export function RecordingPlaybackProvider({ meetingId, children }: { meetingId: 
       },
       setFollow
     }),
-    [available, playing, failed, positionMs, durationMs, rate, follow, play, seekTo]
+    [available, meetingId, playing, failed, positionMs, durationMs, rate, follow, play, seekTo]
   );
 
   return (

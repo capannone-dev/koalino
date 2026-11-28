@@ -47,7 +47,8 @@ you connect yourself, which may charge you directly.)
 - Export to Markdown, PDF and JSON; an optional notes folder mirrors everything as plain files you
   can edit with any editor.
 - If you choose to keep a meeting's audio (encrypted, on that device only), play it back with the
-  transcript following along: start from any passage, move anywhere, and change the speed.
+  transcript following along: start from any passage, move anywhere, and change the speed. Share
+  or save the recording as a WAV file when you need it.
 
 **AI, only if you want it**
 - Meeting summaries and chat with your notes, with answers that link to the moment they cite,

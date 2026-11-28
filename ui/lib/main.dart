@@ -390,6 +390,8 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
     exportBridge: const RustExportBridge(),
     exportSaver: const FilePickerExportSaver(),
     exportSharer: Platform.isAndroid ? const AndroidExportSharer() : null,
+    recordingSaver:
+        const FilePickerExportSaver(dialogTitleOf: _recordingSaveDialogTitle),
   );
   final MeetingAttachmentsController _attachmentsController =
       MeetingAttachmentsController(
@@ -458,6 +460,9 @@ final SummariesController _summariesController = SummariesController(
   ),
   asksPairedComputer: Platform.isAndroid,
 );
+
+/// The kept recording's save dialog title, read when it opens (#199).
+String _recordingSaveDialogTitle() => l10n.saveTheRecording;
 
 /// The summary export's save dialog title, read when it opens (#130).
 String _summaryExportDialogTitle() => l10n.export;

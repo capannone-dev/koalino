@@ -3,30 +3,42 @@
 // export folder). Phones let the core write a private copy, pass its bytes to the system save
 // dialog, and delete the copy, so the export never lingers in app storage. On Android an export
 // can instead be shared with another app (#114): the core writes it, with its attachments, into
-// the share folder, which is emptied before each share and at start-up.
+// the share folder, which is emptied before each share and at start-up. A kept recording (#199)
+// is shared the same way on Android, or saved where the owner chooses on desktops.
 
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
+import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Owns export state for the meeting screens.
 final class MeetingExportController extends ChangeNotifier {
   /// Creates a controller over the core bridge and the save dialogs.
+  ///
+  /// `recordingSaver` is the dialog a kept recording is saved with (#199; `exportSaver` when not
+  /// given), and `downloadsDirectory` finds where it goes when no dialog can open (the system's
+  /// Downloads folder by default).
   MeetingExportController({
     required ExportBridge exportBridge,
     required ExportSaver exportSaver,
     ExportSharer? exportSharer,
+    ExportSaver? recordingSaver,
+    Future<String?> Function() downloadsDirectory = downloadsDirectoryPath,
   })  : _exportBridge = exportBridge,
         _exportSaver = exportSaver,
-        _exportSharer = exportSharer;
+        _exportSharer = exportSharer,
+        _recordingSaver = recordingSaver ?? exportSaver,
+        _downloadsDirectory = downloadsDirectory;
 
   final ExportBridge _exportBridge;
   final ExportSaver _exportSaver;
 
   /// The share sheet, or null where exports cannot be shared (desktops).
   final ExportSharer? _exportSharer;
+  final ExportSaver _recordingSaver;
+  final Future<String?> Function() _downloadsDirectory;
   bool _isExporting = false;
 
   /// Whether exports can be shared with another app.
@@ -103,6 +115,62 @@ final class MeetingExportController extends ChangeNotifier {
       }
     } on Object {
       return l10n.unableToShareTheExport;
+    } finally {
+      _isExporting = false;
+      notifyListeners();
+    }
+  }
+
+  /// Shares the meeting's kept recording as a WAV on Android, or saves it where the owner
+  /// chooses elsewhere (#199).
+  ///
+  /// Inputs: The meeting, its displayed title (the file name and the share's text), and the
+  /// recordings bridge. Outputs: The message to show, or `null` when the share sheet opened, the
+  /// owner cancelled the dialog, or another export runs.
+  /// Side effects: Android: empties the share folder, the core writes the decrypted recording
+  /// there (removed at the next share or start-up), and the share sheet opens. Desktops: shows a
+  /// save dialog and the core writes the recording at the chosen path (or, with no dialog, as a
+  /// new file in the Downloads folder). Notifies listeners.
+  Future<String?> exportRecording({
+    required String meetingId,
+    required String title,
+    required RecordingsBridge recordings,
+  }) async {
+    if (_isExporting) {
+      return null;
+    }
+    final ExportSharer? sharer = _exportSharer;
+    final String fileName = suggestedRecordingFileName(title);
+    _isExporting = true;
+    notifyListeners();
+    try {
+      if (sharer != null) {
+        final Directory folder = Directory(await sharer.shareDirectory());
+        await emptyShareFolder(folder);
+        final String path =
+            await recordings.export(meetingId, '${folder.path}/$fileName');
+        await sharer.shareFiles(<String>[path], title);
+        return null;
+      }
+      String? chosenPath;
+      try {
+        chosenPath = await _recordingSaver.chooseSavePath(fileName);
+        if (chosenPath == null) {
+          return null;
+        }
+      } on Object {
+        // No save dialog on this system: the Downloads folder, never replacing a file there.
+        final String? downloads = await _downloadsDirectory();
+        if (downloads == null) {
+          return l10n.unableToSaveTheRecording;
+        }
+        chosenPath = _freeName(Directory(downloads), fileName);
+      }
+      return l10n.exportedTo(await recordings.export(meetingId, chosenPath));
+    } on Object {
+      return sharer != null
+          ? l10n.unableToShareTheRecording
+          : l10n.unableToSaveTheRecording;
     } finally {
       _isExporting = false;
       notifyListeners();
@@ -220,8 +288,16 @@ String _failureMessage(MeetingExportFailure failure) =>
 /// Outputs: `<title>.<extension>` with characters that Windows, Android, or Linux reject in file
 /// names replaced by `_`; `meeting.<extension>` for a blank title.
 /// Side effects: None.
-String suggestedExportFileName(String title, MeetingExportFormat format) {
+String suggestedExportFileName(String title, MeetingExportFormat format) =>
+    _fileNameFor(title, format.fileExtension);
+
+/// Suggests a kept recording's file name from the meeting title: `<title>.wav`, cleaned as
+/// [suggestedExportFileName] does (#199).
+String suggestedRecordingFileName(String title) => _fileNameFor(title, 'wav');
+
+/// `<title>.<extension>` with characters file systems reject replaced by `_`.
+String _fileNameFor(String title, String extension) {
   final String safeTitle =
       title.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_').trim();
-  return '${safeTitle.isEmpty ? 'meeting' : safeTitle}.${format.fileExtension}';
+  return '${safeTitle.isEmpty ? 'meeting' : safeTitle}.$extension';
 }

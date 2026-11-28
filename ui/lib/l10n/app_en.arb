@@ -2517,5 +2517,13 @@
   "openingTheRecording": "Opening the recording…",
   "@openingTheRecording": {"description": "Kept-recording player on the meeting page (#197)."},
   "recordingPlayer": "Recording player",
-  "@recordingPlayer": {"description": "Kept-recording player on the meeting page (#197)."}
+  "@recordingPlayer": {"description": "Kept-recording player on the meeting page (#197)."},
+  "shareTheRecording": "Share the recording",
+  "@shareTheRecording": {"description": "Sharing or saving a kept recording from the player (#199)."},
+  "saveTheRecording": "Save the recording",
+  "@saveTheRecording": {"description": "Sharing or saving a kept recording from the player (#199)."},
+  "unableToShareTheRecording": "Unable to share the recording",
+  "@unableToShareTheRecording": {"description": "Sharing or saving a kept recording from the player (#199)."},
+  "unableToSaveTheRecording": "Unable to save the recording",
+  "@unableToSaveTheRecording": {"description": "Sharing or saving a kept recording from the player (#199)."}
 }

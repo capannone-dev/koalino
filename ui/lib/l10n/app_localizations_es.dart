@@ -3357,4 +3357,16 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get recordingPlayer => 'Reproductor de la grabación';
+
+  @override
+  String get shareTheRecording => 'Compartir la grabación';
+
+  @override
+  String get saveTheRecording => 'Guardar la grabación';
+
+  @override
+  String get unableToShareTheRecording => 'No se pudo compartir la grabación';
+
+  @override
+  String get unableToSaveTheRecording => 'No se pudo guardar la grabación';
 }

@@ -3379,4 +3379,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get recordingPlayer => 'Проигрыватель записи';
+
+  @override
+  String get shareTheRecording => 'Поделиться записью';
+
+  @override
+  String get saveTheRecording => 'Сохранить запись';
+
+  @override
+  String get unableToShareTheRecording => 'Не удалось поделиться записью';
+
+  @override
+  String get unableToSaveTheRecording => 'Не удалось сохранить запись';
 }

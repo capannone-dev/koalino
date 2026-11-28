@@ -601,5 +601,6 @@
   "followTranscript": "Следить по расшифровке",
   "playFromAt": "Воспроизвести с {at}",
   "positionInTheRecording": "Позиция в записи",
-  "recordingPlayer": "Проигрыватель записи"
+  "recordingPlayer": "Проигрыватель записи",
+  "downloadTheRecording": "Скачать запись"
 }

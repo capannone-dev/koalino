@@ -288,6 +288,8 @@ final class AndroidExportSharer implements ExportSharer {
 /// The Downloads folder's path, or `null` (the dialog's own default) when the platform has none.
 ///
 /// Side effects: None; a failed lookup is treated as no folder.
+Future<String?> downloadsDirectoryPath() => _downloadsDirectoryPath();
+
 Future<String?> _downloadsDirectoryPath() async {
   try {
     return (await getDownloadsDirectory())?.path;

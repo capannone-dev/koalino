@@ -872,5 +872,13 @@
   "openingTheRecording": "Apertura della registrazione…",
   "@openingTheRecording": {},
   "recordingPlayer": "Lettore della registrazione",
-  "@recordingPlayer": {}
+  "@recordingPlayer": {},
+  "shareTheRecording": "Condividi la registrazione",
+  "@shareTheRecording": {},
+  "saveTheRecording": "Salva la registrazione",
+  "@saveTheRecording": {},
+  "unableToShareTheRecording": "Impossibile condividere la registrazione",
+  "@unableToShareTheRecording": {},
+  "unableToSaveTheRecording": "Impossibile salvare la registrazione",
+  "@unableToSaveTheRecording": {}
 }

@@ -3127,4 +3127,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recordingPlayer => '录音播放器';
+
+  @override
+  String get shareTheRecording => '分享录音';
+
+  @override
+  String get saveTheRecording => '保存录音';
+
+  @override
+  String get unableToShareTheRecording => '无法分享录音';
+
+  @override
+  String get unableToSaveTheRecording => '无法保存录音';
 }

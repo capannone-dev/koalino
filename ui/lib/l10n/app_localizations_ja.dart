@@ -3195,4 +3195,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recordingPlayer => '録音プレーヤー';
+
+  @override
+  String get shareTheRecording => '録音を共有';
+
+  @override
+  String get saveTheRecording => '録音を保存';
+
+  @override
+  String get unableToShareTheRecording => '録音を共有できません';
+
+  @override
+  String get unableToSaveTheRecording => '録音を保存できません';
 }

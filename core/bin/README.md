@@ -79,7 +79,8 @@ documented nonzero status codes distinguishable from lifecycle states.
   (`keep_recordings` in `<db>.transcription-settings.json`, per device, off by default), the
   `recordings` folder the worker moves sealed speech into instead of deleting it
   (`RetainedAudioStore::keep_in`), playback as a WAV with each chunk at its time (a folded
-  recording shifted onto its meeting), usage and Wipe all. `ffi_recordings.rs` exposes it to the
+  recording shifted onto its meeting), the same WAV written where the owner shares or saves it
+  (`export`, #199), usage and Wipe all. `ffi_recordings.rs` exposes it to the
   app as `note_taker_recordings_command`; deleting a meeting deletes its recording.
 - `screen_share_watcher.rs` runs `ScreenShareMonitor::sample` on its own `screen-share-watcher`
   thread at that interval, so frames never touch the audio path:

@@ -600,5 +600,6 @@
   "followTranscript": "المتابعة في النص المكتوب",
   "playFromAt": "التشغيل من {at}",
   "positionInTheRecording": "الموضع في التسجيل",
-  "recordingPlayer": "مشغّل التسجيل"
+  "recordingPlayer": "مشغّل التسجيل",
+  "downloadTheRecording": "تنزيل التسجيل"
 }

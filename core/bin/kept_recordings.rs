@@ -287,26 +287,58 @@ impl RecordingsServices {
     /// Outputs: `{"path","duration_ms"}`. Side effects: Replaces the playback file with
     /// decrypted audio, readable by this user only, until `release` or the next playback.
     pub fn prepare_playback(&self, sources: &[RecordingSource]) -> Result<Value, PlaybackError> {
-        fs::create_dir_all(&self.playback_directory)?;
         let path = self.playback_directory.join(PLAYBACK_FILE);
-        let partial = self
-            .playback_directory
-            .join(format!("{PLAYBACK_FILE}.partial"));
+        let duration_ms = self.write_wav_file(sources, &path)?;
+        let path = fs::canonicalize(&path).unwrap_or(path);
+        Ok(json!({"path": path.to_string_lossy(), "duration_ms": duration_ms}))
+    }
+
+    /// Writes a meeting's recording as a WAV at `path`, for the owner to share or save (#199).
+    ///
+    /// Inputs: The meeting's sources and the target file, whose folder is created if missing.
+    /// Outputs: `{"path","duration_ms"}`, or `NotFound` when nothing is kept.
+    /// Side effects: Writes decrypted audio, readable by this user only, replacing any file
+    /// there; the caller owns it from then on. The player's file is not touched.
+    pub fn export_recording(
+        &self,
+        sources: &[RecordingSource],
+        path: &Path,
+    ) -> Result<Value, PlaybackError> {
+        let duration_ms = self.write_wav_file(sources, path)?;
+        Ok(json!({"path": path.to_string_lossy(), "duration_ms": duration_ms}))
+    }
+
+    /// Writes the recording to `path` through a `.partial` file renamed when complete, so a
+    /// failure leaves nothing behind.
+    ///
+    /// Outputs: The length in milliseconds. Side effects: Creates the folder and the file (mode
+    /// 0600 on Unix); removes the partial file on failure.
+    fn write_wav_file(
+        &self,
+        sources: &[RecordingSource],
+        path: &Path,
+    ) -> Result<u64, PlaybackError> {
+        if let Some(folder) = path.parent() {
+            fs::create_dir_all(folder)?;
+        }
+        let mut partial_name = path.as_os_str().to_owned();
+        partial_name.push(".partial");
+        let partial = PathBuf::from(partial_name);
         let file = private_file(&partial)?;
         let mut writer = io::BufWriter::new(file);
         let written = self.write_recording(sources, &mut writer);
         let finished = writer.flush().map_err(PlaybackError::from);
         drop(writer);
-        let duration_ms = match written.and_then(|duration| finished.map(|()| duration)) {
-            Ok(duration) => duration,
+        match written.and_then(|duration| finished.map(|()| duration)) {
+            Ok(duration) => {
+                fs::rename(&partial, path)?;
+                Ok(duration)
+            }
             Err(error) => {
                 let _ = fs::remove_file(&partial);
-                return Err(error);
+                Err(error)
             }
-        };
-        fs::rename(&partial, &path)?;
-        let path = fs::canonicalize(&path).unwrap_or(path);
-        Ok(json!({"path": path.to_string_lossy(), "duration_ms": duration_ms}))
+        }
     }
 
     /// Deletes the decrypted playback file. Side effects: Removes it; a missing file is fine.
@@ -334,7 +366,7 @@ fn private_file(path: &Path) -> io::Result<fs::File> {
 }
 
 /// Answers one recordings command from the app: `status`, `set_keep` (`keep`), `wipe`,
-/// `has` and `prepare` (`meeting_id`) and `release`.
+/// `has` and `prepare` (`meeting_id`), `export` (`meeting_id`, `path`; #199) and `release`.
 ///
 /// Inputs: The services, the repository when one is open (for folded recordings) and the JSON
 /// request. Outputs: `{"ok":true,...}` or `{"ok":false,"error_code","error"}` with
@@ -377,9 +409,24 @@ pub fn run_recordings_command(
             }
             None => Err(("invalid_request", "`meeting_id` is required".to_owned())),
         },
+        Some("export") => match (
+            request.get("meeting_id").and_then(Value::as_str),
+            request.get("path").and_then(Value::as_str),
+        ) {
+            (Some(meeting_id), Some(path)) if !path.is_empty() => {
+                let sources = services.sources(&MeetingId::new(meeting_id), repository);
+                services
+                    .export_recording(&sources, Path::new(path))
+                    .map_err(|error| (playback_code(&error), error.to_string()))
+            }
+            _ => Err((
+                "invalid_request",
+                "`meeting_id` and `path` are required".to_owned(),
+            )),
+        },
         _ => Err((
             "invalid_request",
-            "`command` is status, set_keep, wipe, has, prepare or release".to_owned(),
+            "`command` is status, set_keep, wipe, has, prepare, export or release".to_owned(),
         )),
     };
     match answer {

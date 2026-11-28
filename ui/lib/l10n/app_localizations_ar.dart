@@ -3376,4 +3376,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get recordingPlayer => 'مشغّل التسجيل';
+
+  @override
+  String get shareTheRecording => 'مشاركة التسجيل';
+
+  @override
+  String get saveTheRecording => 'حفظ التسجيل';
+
+  @override
+  String get unableToShareTheRecording => 'تعذّرت مشاركة التسجيل';
+
+  @override
+  String get unableToSaveTheRecording => 'تعذّر حفظ التسجيل';
 }

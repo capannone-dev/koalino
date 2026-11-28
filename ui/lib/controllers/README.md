@@ -31,7 +31,9 @@ Markdown leaves attachments out there, because the picker saves a single file. O
 `cache/shared/handoff` is emptied, the core writes the export there with its attachments, a
 Markdown export's `<stem>_attachments/` files are moved up beside it (clashing names become
 `name (2).ext`; the Markdown's relative links then no longer resolve, but every file travels),
-and the share sheet opens with the files and the title.
+and the share sheet opens with the files and the title. `exportRecording` (#199) does the same for
+a kept recording: on Android the core writes `<title>.wav` into the emptied share folder and the
+share sheet opens; on desktops a save dialog picks where the core writes it.
 `suggestedExportFileName` turns the title into a safe file name with the format's extension.
 
 `LogSettingsController` holds Settings' diagnostics (Issue #46): it loads the core's level,

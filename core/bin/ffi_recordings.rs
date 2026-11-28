@@ -3,7 +3,8 @@
 //! `note_taker_recordings_command` takes one JSON object tagged by `command`, as
 //! `kept_recordings::run_recordings_command` describes: `status`, `set_keep` (`keep`), `wipe`,
 //! `has` (`meeting_id`; answers `available`, without decrypting), `prepare` (`meeting_id`;
-//! answers the decrypted WAV's `path` and `duration_ms`) and `release`.
+//! answers the decrypted WAV's `path` and `duration_ms`), `export` (`meeting_id`, `path`; writes
+//! the WAV there for the owner to share or save, #199) and `release`.
 //! The runtime lock is held only to find the meeting's recordings; decrypting runs after it, so
 //! Flutter should call this from a background isolate.
 
@@ -41,8 +42,8 @@ pub unsafe extern "C" fn note_taker_recordings_command(request_json: *const c_ch
         .unwrap_or(std::ptr::null_mut())
 }
 
-/// Answers a request with the runtime's services; `prepare` plays the meeting's own recording,
-/// or one folded into it (#88), shifted onto its timeline.
+/// Answers a request with the runtime's services; `prepare` (playback) and `export` (#199)
+/// write the meeting's own recording, or one folded into it (#88), shifted onto its timeline.
 fn answer(request: &str) -> Value {
     let parsed: Value = serde_json::from_str(request).unwrap_or(Value::Null);
     let meeting_id = parsed
@@ -55,8 +56,20 @@ fn answer(request: &str) -> Value {
     if parsed.get("command").and_then(Value::as_str) == Some("has") && meeting_id.is_some() {
         return json!({"ok": true, "available": !sources.is_empty()});
     }
-    if parsed.get("command").and_then(Value::as_str) == Some("prepare") && meeting_id.is_some() {
-        return match services.prepare_playback(&sources) {
+    let command = parsed.get("command").and_then(Value::as_str);
+    let export_path = parsed
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| !path.is_empty());
+    let written = match (command, export_path) {
+        (Some("prepare"), _) if meeting_id.is_some() => Some(services.prepare_playback(&sources)),
+        (Some("export"), Some(path)) if meeting_id.is_some() => {
+            Some(services.export_recording(&sources, std::path::Path::new(path)))
+        }
+        _ => None,
+    };
+    if let Some(written) = written {
+        return match written {
             Ok(Value::Object(mut fields)) => {
                 fields.insert("ok".to_owned(), Value::Bool(true));
                 Value::Object(fields)

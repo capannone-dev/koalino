@@ -5313,6 +5313,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recording player'**
   String get recordingPlayer;
+
+  /// Sharing or saving a kept recording from the player (#199).
+  ///
+  /// In en, this message translates to:
+  /// **'Share the recording'**
+  String get shareTheRecording;
+
+  /// Sharing or saving a kept recording from the player (#199).
+  ///
+  /// In en, this message translates to:
+  /// **'Save the recording'**
+  String get saveTheRecording;
+
+  /// Sharing or saving a kept recording from the player (#199).
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to share the recording'**
+  String get unableToShareTheRecording;
+
+  /// Sharing or saving a kept recording from the player (#199).
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to save the recording'**
+  String get unableToSaveTheRecording;
 }
 
 class _AppLocalizationsDelegate

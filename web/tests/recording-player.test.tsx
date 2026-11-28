@@ -1,12 +1,13 @@
 // Verifies the meeting page's recording player (#197): it shows only for a kept recording, loads
 // the audio only when played, plays a passage from its start, marks the passage being heard,
-// changes speed, and stops following when the owner scrolls by hand.
+// changes speed, and stops following when the owner scrolls by hand. It also downloads the
+// recording under the meeting's title (#199).
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { MeetingRecordingPlayer, formatPlaybackTime } from "@/components/meeting-recording-player";
 import { MeetingTranscript } from "@/components/meeting-transcript";
-import { RecordingPlaybackProvider, passageStartAt } from "@/lib/recording-playback";
+import { RecordingPlaybackProvider, passageStartAt, recordingFileName } from "@/lib/recording-playback";
 import * as api from "@/lib/recordings-api";
 
 vi.mock("@/lib/recordings-api", async () => ({
@@ -48,7 +49,7 @@ function renderPage() {
   return render(
     <RecordingPlaybackProvider meetingId="m 1">
       <MeetingTranscript transcript={null} segments={segments} />
-      <MeetingRecordingPlayer />
+      <MeetingRecordingPlayer fileName="Project sync.wav" />
     </RecordingPlaybackProvider>
   );
 }
@@ -107,4 +108,14 @@ test("times and passages are read as on the transcript", () => {
   expect(formatPlaybackTime(3_725_000)).toBe("1:02:05");
   expect(passageStartAt([0, 5_000, 12_000], 13_000)).toBe(12_000);
   expect(passageStartAt([5_000], 1_000)).toBeNull();
+});
+
+test("the recording downloads under the meeting's title (#199)", async () => {
+  vi.mocked(api.hasMeetingRecording).mockResolvedValue(true);
+  renderPage();
+  const link = await screen.findByRole("link", { name: "Download the recording" });
+  expect(link.getAttribute("href")).toMatch(/\/api\/meetings\/m%201\/recording$/);
+  expect(link.getAttribute("download")).toBe("Project sync.wav");
+  expect(recordingFileName("Q3: plan/review")).toBe("Q3_ plan_review.wav");
+  expect(recordingFileName(null)).toBe("meeting.wav");
 });

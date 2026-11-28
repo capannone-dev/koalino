@@ -569,5 +569,6 @@
   "followTranscript": "文字起こしで追う",
   "playFromAt": "{at} から再生",
   "positionInTheRecording": "録音内の位置",
-  "recordingPlayer": "録音プレーヤー"
+  "recordingPlayer": "録音プレーヤー",
+  "downloadTheRecording": "録音をダウンロード"
 }

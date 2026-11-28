@@ -872,5 +872,13 @@
   "openingTheRecording": "جارٍ فتح التسجيل…",
   "@openingTheRecording": {},
   "recordingPlayer": "مشغّل التسجيل",
-  "@recordingPlayer": {}
+  "@recordingPlayer": {},
+  "shareTheRecording": "مشاركة التسجيل",
+  "@shareTheRecording": {},
+  "saveTheRecording": "حفظ التسجيل",
+  "@saveTheRecording": {},
+  "unableToShareTheRecording": "تعذّرت مشاركة التسجيل",
+  "@unableToShareTheRecording": {},
+  "unableToSaveTheRecording": "تعذّر حفظ التسجيل",
+  "@unableToSaveTheRecording": {}
 }

@@ -156,7 +156,8 @@ summary waits on the model for minutes; tests pass a fake call. API keys are sen
 read back.
 
 `recordings_bridge.dart` (#140) calls `note_taker_recordings_command`: `status`, `setKeep`,
-`wipe`, `has`, `prepare` (the decrypted WAV's path and length) and `release`.
+`wipe`, `has`, `prepare` (the decrypted WAV's path and length), `export` (the same WAV written at
+a path the app picks, for sharing or saving; #199) and `release`.
 
 `recording_playback.dart` (#197) is `RecordingPlayback`, the small interface the recording player
 plays through (open, resume, pause, seek, speed, position events), and `AudioPlayersPlayback`, its

@@ -98,6 +98,20 @@ final class RecordingsBridge {
     );
   }
 
+  /// Writes the meeting's recording as a WAV at `path`, for sharing or saving (#199).
+  ///
+  /// Inputs: The meeting and the target file. Outputs: The written file's path. Throws
+  /// `LlmException('not_found')` when none is kept.
+  /// Side effects: Writes decrypted audio there, replacing any file; the player's file is untouched.
+  Future<String> export(String meetingId, String path) async {
+    final Map<String, Object?> answer = await _command(<String, Object?>{
+      'command': 'export',
+      'meeting_id': meetingId,
+      'path': path,
+    });
+    return answer['path']! as String;
+  }
+
   /// Deletes the temporary playback file. Side effects: Removes it.
   Future<void> release() async {
     await _command(<String, Object?>{'command': 'release'});

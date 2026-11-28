@@ -569,5 +569,6 @@
   "followTranscript": "在文字记录中跟随",
   "playFromAt": "从 {at} 播放",
   "positionInTheRecording": "录音中的位置",
-  "recordingPlayer": "录音播放器"
+  "recordingPlayer": "录音播放器",
+  "downloadTheRecording": "下载录音"
 }

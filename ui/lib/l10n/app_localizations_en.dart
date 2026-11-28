@@ -3321,4 +3321,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recordingPlayer => 'Recording player';
+
+  @override
+  String get shareTheRecording => 'Share the recording';
+
+  @override
+  String get saveTheRecording => 'Save the recording';
+
+  @override
+  String get unableToShareTheRecording => 'Unable to share the recording';
+
+  @override
+  String get unableToSaveTheRecording => 'Unable to save the recording';
 }

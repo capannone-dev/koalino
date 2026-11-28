@@ -1,7 +1,8 @@
 // The meeting page's player for a kept recording (#140, #197): a bar that stays at the bottom of
 // the window while the transcript scrolls, with play and pause, back and forward 10 seconds, the
-// position, the speed, and a button to follow the transcript again after scrolling away. The
-// playback itself is shared with the transcript through `RecordingPlaybackProvider`.
+// position, the speed, a button to follow the transcript again after scrolling away, and a link
+// that downloads the recording (#199). The playback itself is shared with the transcript through
+// `RecordingPlaybackProvider`.
 
 "use client";
 
@@ -28,9 +29,10 @@ export function formatRate(rate: number): string {
 /**
  * Shows the player bar, or nothing when the meeting has no kept recording.
  *
- * Inputs: none; it reads the shared playback. Outputs: the bar. Side effects: plays the recording.
+ * Inputs: `fileName`, the name the downloaded recording gets; the rest is the shared playback.
+ * Outputs: the bar. Side effects: plays the recording; the link downloads it.
  */
-export function MeetingRecordingPlayer() {
+export function MeetingRecordingPlayer({ fileName }: { fileName: string }) {
   const t = useT();
   const playback = useRecordingPlayback();
   if (!playback?.available) return null;
@@ -93,6 +95,17 @@ export function MeetingRecordingPlayer() {
           ))}
         </select>
       </label>
+      <a
+        href={playback.url}
+        download={fileName}
+        className={iconButton}
+        aria-label={t("downloadTheRecording")}
+        title={t("downloadTheRecording")}
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <path d="M11 4h2v9.17l3.59-3.58L18 11l-6 6-6-6 1.41-1.41L11 13.17zM5 18h14v2H5z" />
+        </svg>
+      </a>
       {playing && !follow ? (
         <button type="button" className={`${iconButton} px-3`} onClick={() => playback.setFollow(true)}>
           {t("followTranscript")}

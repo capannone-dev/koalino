@@ -872,5 +872,13 @@
   "openingTheRecording": "正在打开录音…",
   "@openingTheRecording": {},
   "recordingPlayer": "录音播放器",
-  "@recordingPlayer": {}
+  "@recordingPlayer": {},
+  "shareTheRecording": "分享录音",
+  "@shareTheRecording": {},
+  "saveTheRecording": "保存录音",
+  "@saveTheRecording": {},
+  "unableToShareTheRecording": "无法分享录音",
+  "@unableToShareTheRecording": {},
+  "unableToSaveTheRecording": "无法保存录音",
+  "@unableToSaveTheRecording": {}
 }

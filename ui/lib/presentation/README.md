@@ -149,7 +149,8 @@ confirmation).
 `recording_player_bar.dart` (#197) is the meeting page's player for a kept recording, under the
 transcript on phones and in the desktop pane: the position slider (seeks when let go), back and
 forward 10 seconds, play and pause, the speed (0.75× to 2×), and a button to follow the transcript
-again after scrolling away. `meeting_detail_screen.dart` marks the passage being heard, keeps it in
+again after scrolling away. Its end holds the Share the recording (Android) or Save the recording
+(desktops) button the meeting page adds (#199). `meeting_detail_screen.dart` marks the passage being heard, keeps it in
 view while following, and gives each passage a Play from here button.
 
 `backup_section.dart` (#167) is Settings' Back up all data and Restore from backup (Android): the

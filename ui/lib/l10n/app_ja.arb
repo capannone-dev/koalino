@@ -872,5 +872,13 @@
   "openingTheRecording": "録音を開いています…",
   "@openingTheRecording": {},
   "recordingPlayer": "録音プレーヤー",
-  "@recordingPlayer": {}
+  "@recordingPlayer": {},
+  "shareTheRecording": "録音を共有",
+  "@shareTheRecording": {},
+  "saveTheRecording": "録音を保存",
+  "@saveTheRecording": {},
+  "unableToShareTheRecording": "録音を共有できません",
+  "@unableToShareTheRecording": {},
+  "unableToSaveTheRecording": "録音を保存できません",
+  "@unableToSaveTheRecording": {}
 }

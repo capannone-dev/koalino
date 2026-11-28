@@ -225,3 +225,52 @@ fn wiping_deletes_every_kept_recording_and_reports_the_space() {
     assert_eq!(answer, json!({"ok": true, "deleted": 2, "bytes": bytes}));
     assert_eq!(services.status_json()["count"], 0);
 }
+
+#[test]
+fn exporting_writes_the_recording_where_asked_and_leaves_playback_alone() {
+    let setup = Setup::new();
+    let meeting = MeetingId::new("m-1");
+    setup.keep(&meeting, 1_000, 500, 1_000);
+    let services = setup.services();
+    let target = setup.folder.join("shared").join("Team sync.wav");
+    let request = json!({"command": "export", "meeting_id": "m-1", "path": target}).to_string();
+
+    let answer = run_recordings_command(&services, None, &request);
+
+    assert_eq!(answer["ok"], true, "{answer}");
+    assert_eq!(answer["path"], json!(target));
+    assert_eq!(answer["duration_ms"], 1_500);
+    let samples = samples_of(&fs::read(&target).unwrap_or_else(|error| panic!("{error}")));
+    assert_eq!(samples.len(), 24_000);
+    assert!(samples[16_000..].iter().any(|sample| *sample != 0));
+    assert!(
+        !setup.folder.join("playback").exists(),
+        "the player's own file is not touched"
+    );
+    assert!(
+        !setup
+            .folder
+            .join("shared")
+            .join("Team sync.wav.partial")
+            .exists(),
+        "no partial file is left behind"
+    );
+}
+
+#[test]
+fn exporting_needs_a_path_and_a_kept_recording() {
+    let setup = Setup::new();
+    let services = setup.services();
+    let no_path = run_recordings_command(
+        &services,
+        None,
+        r#"{"command":"export","meeting_id":"m-1"}"#,
+    );
+    assert_eq!(no_path["error_code"], "invalid_request");
+
+    let target = setup.folder.join("none.wav");
+    let request = json!({"command": "export", "meeting_id": "none", "path": target}).to_string();
+    let missing = run_recordings_command(&services, None, &request);
+    assert_eq!(missing["error_code"], "not_found");
+    assert!(!target.exists());
+}

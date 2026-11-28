@@ -1,6 +1,7 @@
 // The meeting page's player for a kept recording (#197): a bar under the transcript with the
 // position slider, back and forward 10 seconds, play and pause, the speed, and a button to follow
-// the transcript again after scrolling away. The logic lives in `RecordingPlayerController`.
+// the transcript again after scrolling away, and a slot for sharing or saving the recording
+// (#199). The logic lives in `RecordingPlayerController`.
 
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/recording_player_controller.dart';
@@ -22,6 +23,9 @@ const Key recordingPositionKey = ValueKey<String>('recording-position');
 /// Key of the button that follows the transcript again.
 const Key recordingFollowKey = ValueKey<String>('recording-follow');
 
+/// Key of the button that shares or saves the recording (#199).
+const Key recordingExportKey = ValueKey<String>('recording-export');
+
 /// Words a speed as `1.25×`, without a trailing zero.
 String formatPlaybackRate(double rate) {
   final String text = rate.toStringAsFixed(2);
@@ -31,15 +35,18 @@ String formatPlaybackRate(double rate) {
 /// The player bar; nothing while the meeting has no kept recording.
 final class RecordingPlayerBar extends StatefulWidget {
   /// Creates the bar over `player`; `fallbackDurationMs` is the meeting's length, shown until the
-  /// recording is first opened and its own length is known.
+  /// recording is first opened and its own length is known; `exportAction`, when given, sits at
+  /// the bar's end (the share or save button, #199).
   const RecordingPlayerBar({
     required this.player,
     this.fallbackDurationMs = 0,
+    this.exportAction,
     super.key,
   });
 
   final RecordingPlayerController player;
   final int fallbackDurationMs;
+  final Widget? exportAction;
 
   @override
   State<RecordingPlayerBar> createState() => _RecordingPlayerBarState();
@@ -163,6 +170,8 @@ final class _RecordingPlayerBarState extends State<RecordingPlayerBar> {
                                 style: theme.textTheme.labelLarge),
                           ),
                         ),
+                        if (widget.exportAction case final Widget action)
+                          action,
                       ],
                     ),
                   ],

@@ -872,5 +872,13 @@
   "openingTheRecording": "Открываем запись…",
   "@openingTheRecording": {},
   "recordingPlayer": "Проигрыватель записи",
-  "@recordingPlayer": {}
+  "@recordingPlayer": {},
+  "shareTheRecording": "Поделиться записью",
+  "@shareTheRecording": {},
+  "saveTheRecording": "Сохранить запись",
+  "@saveTheRecording": {},
+  "unableToShareTheRecording": "Не удалось поделиться записью",
+  "@unableToShareTheRecording": {},
+  "unableToSaveTheRecording": "Не удалось сохранить запись",
+  "@unableToSaveTheRecording": {}
 }

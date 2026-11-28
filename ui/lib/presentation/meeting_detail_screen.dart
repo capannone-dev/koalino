@@ -231,6 +231,7 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
           editController: widget.editController,
           speakerRenamer: widget.speakerRenamer,
           recordingsBridge: widget.recordingsBridge,
+          exportController: widget.exportController,
           focusStartMs: widget.focusStartMs),
     );
   }
@@ -427,6 +428,7 @@ final class MeetingDetailView extends StatelessWidget {
       this.editController,
       this.speakerRenamer,
       this.recordingsBridge,
+      this.exportController,
       this.focusStartMs,
       super.key});
 
@@ -439,6 +441,10 @@ final class MeetingDetailView extends StatelessWidget {
   /// Adds the recording player under the transcript when given and the meeting keeps its
   /// recording (#197).
   final RecordingsBridge? recordingsBridge;
+
+  /// Adds sharing (Android) or saving (desktops) the kept recording to the player when given
+  /// (#199).
+  final MeetingExportController? exportController;
 
   /// Scrolls to and marks the transcript passage starting here (#100).
   final int? focusStartMs;
@@ -466,6 +472,7 @@ final class MeetingDetailView extends StatelessWidget {
                   key: ValueKey<String>(meeting.summary.meetingId),
                   bridge: bridge,
                   meeting: meeting,
+                  exportController: exportController,
                   contentBuilder: (RecordingPlayerController? player) =>
                       _MeetingContent(
                           controller: controller,
@@ -499,11 +506,13 @@ final class _MeetingWithPlayer extends StatefulWidget {
     required this.bridge,
     required this.meeting,
     required this.contentBuilder,
+    this.exportController,
     super.key,
   });
 
   final RecordingsBridge bridge;
   final MeetingDetail meeting;
+  final MeetingExportController? exportController;
   final Widget Function(RecordingPlayerController? player) contentBuilder;
 
   @override
@@ -545,6 +554,20 @@ final class _MeetingWithPlayerState extends State<_MeetingWithPlayer> {
     }
   }
 
+  /// Shares or saves the recording (#199) and shows the result, if any, in a snack bar.
+  Future<void> _exportRecording(
+      BuildContext context, MeetingExportController exports) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final String? message = await exports.exportRecording(
+      meetingId: widget.meeting.summary.meetingId,
+      title: widget.meeting.summary.title,
+      recordings: widget.bridge,
+    );
+    if (message != null) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   @override
   void dispose() {
     _player.removeListener(_onPlayerChanged);
@@ -561,6 +584,28 @@ final class _MeetingWithPlayerState extends State<_MeetingWithPlayer> {
         RecordingPlayerBar(
           player: _player,
           fallbackDurationMs: widget.meeting.summary.durationMs,
+          exportAction: switch (widget.exportController) {
+            final MeetingExportController exports => ListenableBuilder(
+                listenable: exports,
+                builder: (BuildContext context, Widget? child) => IconButton(
+                  key: recordingExportKey,
+                  tooltip: exports.canShare
+                      ? l10n.shareTheRecording
+                      : l10n.saveTheRecording,
+                  icon: exports.isExporting
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : Icon(exports.canShare
+                          ? Icons.share_outlined
+                          : Icons.save_alt),
+                  onPressed: exports.isExporting
+                      ? null
+                      : () => _exportRecording(context, exports),
+                ),
+              ),
+            null => null,
+          },
         ),
       ],
     );

@@ -68,7 +68,8 @@ Nested projects (#142): `projects-index.tsx` indents subprojects under their par
 warning, shows how many are kept, and wipes them all after a confirmation.
 `meeting-recording-player.tsx` (#140, #197) is the bar that plays a meeting's kept recording,
 sticking to the bottom of the window while the transcript scrolls: play and pause, back and forward
-10 seconds, the position, the speed, and a button to follow the transcript again. It and
+10 seconds, the position, the speed, a button to follow the transcript again, and a link that
+downloads the recording as `<title>.wav` (#199). It and
 `meeting-transcript.tsx` share the playback through `lib/recording-playback.tsx`; the transcript
 marks the passage being heard, keeps it in view, and plays any passage from its start.
 
