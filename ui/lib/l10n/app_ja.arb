@@ -901,5 +901,11 @@
   "files": "ファイル",
   "noFilesYet": "写真やファイルはまだありません。会議中に撮った写真や添付したファイルがここに表示されます。",
   "summariesNeedAnAi": "要約は接続した AI が作成します。この端末のモデル、Claude や ChatGPT のプラン、またはオンラインサービスです。",
-  "addAnAiConnection": "AI 接続を追加"
+  "addAnAiConnection": "AI 接続を追加",
+  "advancedSettings": "詳細設定",
+  "advancedSettingsDescription": "文字起こし、保存とバックアップ、AI アシスタント、プライバシー、診断",
+  "storage": "ストレージ",
+  "aiSection": "AI",
+  "privacy": "プライバシー",
+  "developer": "開発者向け"
 }

@@ -140,7 +140,7 @@ void main() {
             logSettingsController: logs, appLanguageController: language),
       ),
     ));
-    expect(find.text('Log level'), findsOneWidget);
+    expect(find.text('Advanced'), findsOneWidget);
 
     await tester.tap(find.byKey(appLanguageSelectorKey));
     await tester.pumpAndSettle();
@@ -149,7 +149,7 @@ void main() {
 
     expect(store.stored, 'it');
     expect(find.text('Impostazioni'), findsOneWidget);
-    expect(find.text('Log level'), findsNothing);
+    expect(find.text('Avanzate'), findsOneWidget);
 
     await language.choose('ar');
     await tester.pumpAndSettle();

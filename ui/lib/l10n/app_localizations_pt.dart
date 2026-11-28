@@ -3450,4 +3450,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get addAnAiConnection => 'Adicionar uma ligação de IA';
+
+  @override
+  String get advancedSettings => 'Avançadas';
+
+  @override
+  String get advancedSettingsDescription =>
+      'Transcrição, armazenamento e cópias, assistentes de IA, privacidade, diagnóstico';
+
+  @override
+  String get storage => 'Armazenamento';
+
+  @override
+  String get aiSection => 'IA';
+
+  @override
+  String get privacy => 'Privacidade';
+
+  @override
+  String get developer => 'Programador';
 }

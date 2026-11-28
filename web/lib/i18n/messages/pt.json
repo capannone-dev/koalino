@@ -584,5 +584,12 @@
   "askAi": "Perguntar à IA",
   "files": "Ficheiros",
   "meetingSections": "Secções da reunião",
-  "noFilesYet": "Ainda não há fotos nem ficheiros. As fotos tiradas durante a reunião e os ficheiros anexados aparecem aqui."
+  "noFilesYet": "Ainda não há fotos nem ficheiros. As fotos tiradas durante a reunião e os ficheiros anexados aparecem aqui.",
+  "advancedSettings": "Avançadas",
+  "advancedSettingsDescription": "Transcrição, privacidade, armazenamento, diagnóstico",
+  "transcription": "Transcrição",
+  "privacy": "Privacidade",
+  "storage": "Armazenamento",
+  "developer": "Programador",
+  "summaryOptions": "Opções dos resumos"
 }

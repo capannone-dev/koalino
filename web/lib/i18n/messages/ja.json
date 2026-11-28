@@ -580,5 +580,12 @@
   "askAi": "AI に質問",
   "files": "ファイル",
   "meetingSections": "会議のセクション",
-  "noFilesYet": "写真やファイルはまだありません。会議中に撮った写真や添付ファイルがここに表示されます。"
+  "noFilesYet": "写真やファイルはまだありません。会議中に撮った写真や添付ファイルがここに表示されます。",
+  "advancedSettings": "詳細設定",
+  "advancedSettingsDescription": "文字起こし、プライバシー、保存、診断",
+  "transcription": "文字起こし",
+  "privacy": "プライバシー",
+  "storage": "ストレージ",
+  "developer": "開発者向け",
+  "summaryOptions": "要約のオプション"
 }

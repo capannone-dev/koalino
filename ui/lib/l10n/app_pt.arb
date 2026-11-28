@@ -901,5 +901,11 @@
   "files": "Ficheiros",
   "noFilesYet": "Ainda não há fotos nem ficheiros. As fotos tiradas durante uma reunião e os ficheiros anexados aparecem aqui.",
   "summariesNeedAnAi": "Os resumos são escritos por uma IA que liga: um modelo neste dispositivo, o seu plano Claude ou ChatGPT, ou um serviço online.",
-  "addAnAiConnection": "Adicionar uma ligação de IA"
+  "addAnAiConnection": "Adicionar uma ligação de IA",
+  "advancedSettings": "Avançadas",
+  "advancedSettingsDescription": "Transcrição, armazenamento e cópias, assistentes de IA, privacidade, diagnóstico",
+  "storage": "Armazenamento",
+  "aiSection": "IA",
+  "privacy": "Privacidade",
+  "developer": "Programador"
 }

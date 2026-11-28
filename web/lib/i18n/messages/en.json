@@ -584,5 +584,12 @@
   "askAi": "Ask AI",
   "files": "Files",
   "meetingSections": "Meeting sections",
-  "noFilesYet": "No photos or files yet. Photos taken during the meeting and attached files appear here."
+  "noFilesYet": "No photos or files yet. Photos taken during the meeting and attached files appear here.",
+  "advancedSettings": "Advanced",
+  "advancedSettingsDescription": "Transcription, privacy, storage, diagnostics",
+  "transcription": "Transcription",
+  "privacy": "Privacy",
+  "storage": "Storage",
+  "developer": "Developer",
+  "summaryOptions": "Summary options"
 }

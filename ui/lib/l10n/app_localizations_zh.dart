@@ -3208,4 +3208,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addAnAiConnection => '添加 AI 连接';
+
+  @override
+  String get advancedSettings => '高级';
+
+  @override
+  String get advancedSettingsDescription => '转写、存储与备份、AI 助手、隐私、诊断';
+
+  @override
+  String get storage => '存储';
+
+  @override
+  String get aiSection => 'AI';
+
+  @override
+  String get privacy => '隐私';
+
+  @override
+  String get developer => '开发者';
 }

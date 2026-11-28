@@ -901,5 +901,11 @@
   "files": "File",
   "noFilesYet": "Ancora nessuna foto o file. Qui compaiono le foto scattate durante una riunione e i file allegati.",
   "summariesNeedAnAi": "I riassunti li scrive un'IA che colleghi: un modello su questo dispositivo, il tuo piano Claude o ChatGPT, o un servizio online.",
-  "addAnAiConnection": "Aggiungi un collegamento IA"
+  "addAnAiConnection": "Aggiungi un collegamento IA",
+  "advancedSettings": "Avanzate",
+  "advancedSettingsDescription": "Trascrizione, archiviazione e backup, assistenti IA, privacy, diagnostica",
+  "storage": "Archiviazione",
+  "aiSection": "IA",
+  "privacy": "Privacy",
+  "developer": "Sviluppatore"
 }

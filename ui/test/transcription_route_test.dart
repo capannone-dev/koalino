@@ -12,6 +12,7 @@ import 'package:note_taker_ui/presentation/settings_screen.dart';
 
 import 'fake_log_bridge.dart';
 import 'fake_p2p_bridge.dart';
+import 'settings_test_helpers.dart';
 
 /// A status with one paired device.
 P2pStatus _status({String route = 'local'}) => P2pStatus(
@@ -100,14 +101,18 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: SettingsScreen(
             logSettingsController: logs, transcriptionRouteController: on)));
+    await openAdvancedSettings(tester);
     expect(find.text('Transcribe on'), findsOneWidget);
     expect(find.text('This device'), findsOneWidget);
 
     final TranscriptionRouteController off =
         await _loaded(FakeP2pBridge(status: const P2pStatus(enabled: false)));
     await tester.pumpWidget(MaterialApp(
+        // A fresh app, not the Advanced page already open over the first one.
+        key: UniqueKey(),
         home: SettingsScreen(
             logSettingsController: logs, transcriptionRouteController: off)));
+    await openAdvancedSettings(tester);
     expect(find.text('Transcribe on'), findsNothing);
   });
 }

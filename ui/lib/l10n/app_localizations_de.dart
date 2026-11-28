@@ -3491,4 +3491,23 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get addAnAiConnection => 'KI-Verbindung hinzufügen';
+
+  @override
+  String get advancedSettings => 'Erweitert';
+
+  @override
+  String get advancedSettingsDescription =>
+      'Transkription, Speicher und Sicherung, KI-Assistenten, Datenschutz, Diagnose';
+
+  @override
+  String get storage => 'Speicher';
+
+  @override
+  String get aiSection => 'KI';
+
+  @override
+  String get privacy => 'Datenschutz';
+
+  @override
+  String get developer => 'Entwickler';
 }

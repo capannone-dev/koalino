@@ -901,5 +901,11 @@
   "files": "Fichiers",
   "noFilesYet": "Pas encore de photos ni de fichiers. Les photos prises pendant une réunion et les fichiers joints apparaissent ici.",
   "summariesNeedAnAi": "Les résumés sont rédigés par une IA que vous connectez : un modèle sur cet appareil, votre abonnement Claude ou ChatGPT, ou un service en ligne.",
-  "addAnAiConnection": "Ajouter une connexion IA"
+  "addAnAiConnection": "Ajouter une connexion IA",
+  "advancedSettings": "Avancé",
+  "advancedSettingsDescription": "Transcription, stockage et sauvegarde, assistants IA, confidentialité, diagnostic",
+  "storage": "Stockage",
+  "aiSection": "IA",
+  "privacy": "Confidentialité",
+  "developer": "Développeur"
 }

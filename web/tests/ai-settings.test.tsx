@@ -58,6 +58,15 @@ test("lists connections with their default, a plain-http warning and no key", ()
   expect(screen.getByLabelText(/Summarize meetings automatically/)).toBeChecked();
 });
 
+test("the prompt and automatic summaries wait behind Summary options (#209)", () => {
+  render(<AiSettings initial={settings} />);
+
+  const options = screen.getByText("Summary options").closest("details");
+  expect(options).not.toHaveAttribute("open");
+  expect(options).toContainElement(screen.getByLabelText("Summary prompt"));
+  expect(options).toContainElement(screen.getByLabelText(/Summarize meetings automatically/));
+});
+
 test("adding a local server from a preset sends no key and lists it", async () => {
   const added: api.LlmConnection = { ...office, id: "c-2", label: "Studio", base_url: "http://192.168.1.10:1234/v1", model: "qwen3-8b", is_default: false };
   vi.mocked(api.saveLlmConnection).mockResolvedValue(added);

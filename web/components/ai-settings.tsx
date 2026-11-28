@@ -210,6 +210,12 @@ export function AiSettings({ initial }: AiSettingsProps) {
         <button type="button" className={buttonClass} onClick={() => setDraft(emptyDraft(t))}>{t("addConnection")}</button>
       )}
 
+      {/* The prompt and when summaries are written: for those who want to change them (#209). */}
+      <details className="rounded-lg border border-line px-3">
+        <summary className="min-h-11 cursor-pointer content-center font-semibold focus-visible:outline-2 focus-visible:outline-focus">
+          {t("summaryOptions")}
+        </summary>
+        <div className="space-y-4 pb-3 pt-2">
       <div className="space-y-1">
         <label htmlFor={templateId} className="block font-semibold">{t("summaryPrompt")}</label>
         <p className="text-sm text-muted">{t("placeholdersTheTranscriptIsAlways", { placeholders: current.placeholders.map((name) => `{{${name}}}`).join(", ") })}</p>
@@ -295,6 +301,8 @@ export function AiSettings({ initial }: AiSettingsProps) {
           <p className="text-sm opacity-80">{t("aPairedPhoneCanAsk")}</p>
         </div>
       )}
+        </div>
+      </details>
 
       <p role="status" aria-live="polite">
         {message}

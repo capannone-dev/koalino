@@ -14,6 +14,7 @@ import 'package:note_taker_ui/presentation/settings_screen.dart';
 
 import 'fake_app_lock_bridge.dart';
 import 'fake_log_bridge.dart';
+import 'settings_test_helpers.dart';
 
 /// Counts taps, standing in for app state that must survive a lock.
 final class _Counter extends StatefulWidget {
@@ -195,6 +196,7 @@ void main() {
           home: SettingsScreen(
               appLockController: controller,
               logSettingsController: logSettings)));
+      await openAdvancedSettings(tester);
       return controller;
     }
 

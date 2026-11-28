@@ -3444,4 +3444,23 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get addAnAiConnection => 'Añadir una conexión de IA';
+
+  @override
+  String get advancedSettings => 'Avanzado';
+
+  @override
+  String get advancedSettingsDescription =>
+      'Transcripción, almacenamiento y copias, asistentes de IA, privacidad, diagnóstico';
+
+  @override
+  String get storage => 'Almacenamiento';
+
+  @override
+  String get aiSection => 'IA';
+
+  @override
+  String get privacy => 'Privacidad';
+
+  @override
+  String get developer => 'Desarrollador';
 }

@@ -580,5 +580,12 @@
   "askAi": "问 AI",
   "files": "文件",
   "meetingSections": "会议各部分",
-  "noFilesYet": "还没有照片或文件。会议中拍的照片和附加的文件会显示在这里。"
+  "noFilesYet": "还没有照片或文件。会议中拍的照片和附加的文件会显示在这里。",
+  "advancedSettings": "高级",
+  "advancedSettingsDescription": "转写、隐私、存储、诊断",
+  "transcription": "转写",
+  "privacy": "隐私",
+  "storage": "存储",
+  "developer": "开发者",
+  "summaryOptions": "摘要选项"
 }

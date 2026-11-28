@@ -584,5 +584,12 @@
   "askAi": "KI fragen",
   "files": "Dateien",
   "meetingSections": "Bereiche der Besprechung",
-  "noFilesYet": "Noch keine Fotos oder Dateien. Während der Besprechung aufgenommene Fotos und angehängte Dateien erscheinen hier."
+  "noFilesYet": "Noch keine Fotos oder Dateien. Während der Besprechung aufgenommene Fotos und angehängte Dateien erscheinen hier.",
+  "advancedSettings": "Erweitert",
+  "advancedSettingsDescription": "Transkription, Datenschutz, Speicher, Diagnose",
+  "transcription": "Transkription",
+  "privacy": "Datenschutz",
+  "storage": "Speicher",
+  "developer": "Entwickler",
+  "summaryOptions": "Optionen für Zusammenfassungen"
 }

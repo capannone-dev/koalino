@@ -281,3 +281,9 @@ Delete), then the tabs Summary · Transcript · Notes · Files. The recording pl
 is `MeetingSummaryScreen(embedded: true)`, which offers Add an AI connection when there is none; Files lists every
 photo and document with Take photos and Attach files. The page opens on Summary when the meeting has one, otherwise
 (or when opened at a moment, from search or a chat citation) on Transcript.
+
+**Settings layout (#209).** `settings_screen.dart` shows the settings most people change first (app language, default
+meeting language, keeping recordings, Devices, AI connections) and an Advanced entry. Advanced opens a page grouped
+under `SettingsSectionHeader`s: Transcription (model, where to transcribe, call detection), Storage (backup, notes
+folder), AI (assistant access), Privacy (app lock, network addresses) and Developer (telemetry, logs). Empty groups
+are left out.

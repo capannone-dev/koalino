@@ -3279,4 +3279,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get addAnAiConnection => 'AI 接続を追加';
+
+  @override
+  String get advancedSettings => '詳細設定';
+
+  @override
+  String get advancedSettingsDescription =>
+      '文字起こし、保存とバックアップ、AI アシスタント、プライバシー、診断';
+
+  @override
+  String get storage => 'ストレージ';
+
+  @override
+  String get aiSection => 'AI';
+
+  @override
+  String get privacy => 'プライバシー';
+
+  @override
+  String get developer => '開発者向け';
 }

@@ -5463,6 +5463,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add an AI connection'**
   String get addAnAiConnection;
+
+  /// Settings entry and page with the less common settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get advancedSettings;
+
+  /// No description provided for @advancedSettingsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription, storage and backup, AI assistants, privacy, diagnostics'**
+  String get advancedSettingsDescription;
+
+  /// No description provided for @storage.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage'**
+  String get storage;
+
+  /// Settings section header.
+  ///
+  /// In en, this message translates to:
+  /// **'AI'**
+  String get aiSection;
+
+  /// No description provided for @privacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get privacy;
+
+  /// Settings section with logs and telemetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Developer'**
+  String get developer;
 }
 
 class _AppLocalizationsDelegate

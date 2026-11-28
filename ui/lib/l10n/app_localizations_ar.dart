@@ -3463,4 +3463,23 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get addAnAiConnection => 'أضف اتصال ذكاء اصطناعي';
+
+  @override
+  String get advancedSettings => 'متقدم';
+
+  @override
+  String get advancedSettingsDescription =>
+      'التفريغ، التخزين والنسخ الاحتياطي، مساعدو الذكاء الاصطناعي، الخصوصية، التشخيص';
+
+  @override
+  String get storage => 'التخزين';
+
+  @override
+  String get aiSection => 'الذكاء الاصطناعي';
+
+  @override
+  String get privacy => 'الخصوصية';
+
+  @override
+  String get developer => 'المطوّر';
 }

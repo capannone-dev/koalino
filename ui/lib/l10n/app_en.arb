@@ -2567,5 +2567,17 @@
   "summariesNeedAnAi": "Summaries are written by an AI you connect: a model on this device, your Claude or ChatGPT plan, or an online service.",
   "@summariesNeedAnAi": {},
   "addAnAiConnection": "Add an AI connection",
-  "@addAnAiConnection": {}
+  "@addAnAiConnection": {},
+  "advancedSettings": "Advanced",
+  "@advancedSettings": {"description": "Settings entry and page with the less common settings."},
+  "advancedSettingsDescription": "Transcription, storage and backup, AI assistants, privacy, diagnostics",
+  "@advancedSettingsDescription": {},
+  "storage": "Storage",
+  "@storage": {},
+  "aiSection": "AI",
+  "@aiSection": {"description": "Settings section header."},
+  "privacy": "Privacy",
+  "@privacy": {},
+  "developer": "Developer",
+  "@developer": {"description": "Settings section with logs and telemetry."}
 }

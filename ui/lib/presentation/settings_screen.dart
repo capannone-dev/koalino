@@ -119,134 +119,159 @@ final class SettingsScreen extends StatelessWidget {
   /// Shows Back up all data and Restore from backup when given (#167, Android).
   final BackupBridge? backupBridge;
 
+  /// Everything the settings pages show, so either page rebuilds when any of it changes.
+  Listenable get _changes => Listenable.merge(<Listenable?>[
+        logSettingsController,
+        appLockController,
+        appLanguageController,
+        transcriptionRouteController,
+        languageController,
+        networkSettingsController,
+      ]);
+
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.settings)),
+      body: ListenableBuilder(
+        listenable: _changes,
+        builder: (BuildContext context, Widget? child) =>
+            ListView(children: _basicTiles(context)),
+      ),
+    );
+  }
+
+  /// The settings most people change (#209): languages, keeping recordings, devices and the AI
+  /// connection, then the way to everything else.
+  List<Widget> _basicTiles(BuildContext context) {
+    final TranscriptionLanguageController? language = languageController;
+    return <Widget>[
+      if (appLanguageController
+          case final AppLanguageController appLanguage) ...<Widget>[
+        _appLanguageTile(appLanguage),
+      ],
+      if (language != null) ..._languageTiles(language),
+      if (recordingsBridge case final RecordingsBridge recordings) ...<Widget>[
+        const Divider(),
+        RecordingsSection(bridge: recordings),
+      ],
+      const Divider(),
+      if (devicesScreenBuilder case final WidgetBuilder devicesScreen)
+        ListTile(
+          leading: const Icon(Icons.devices_outlined),
+          title: Text(l10n.devices),
+          subtitle: Text(l10n.pairYourDevicesAndSeeWhich),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute<void>(builder: devicesScreen)),
+        ),
+      if (summariesController case final SummariesController summaries)
+        ListTile(
+          leading: const Icon(Icons.auto_awesome_outlined),
+          title: Text(l10n.aiConnections),
+          subtitle: Text(l10n.languageModelsForMeetingSummariesAnd),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (BuildContext context) =>
+                AiSettingsScreen(controller: summaries),
+          )),
+        ),
+      const Divider(),
+      ListTile(
+        key: advancedSettingsKey,
+        leading: const Icon(Icons.tune),
+        title: Text(l10n.advancedSettings),
+        subtitle: Text(l10n.advancedSettingsDescription),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (BuildContext context) => Scaffold(
+            appBar: AppBar(title: Text(l10n.advancedSettings)),
+            body: ListenableBuilder(
+              listenable: _changes,
+              builder: (BuildContext context, Widget? child) =>
+                  ListView(children: _advancedTiles(context)),
+            ),
+          ),
+        )),
+      ),
+    ];
+  }
+
+  /// The rest (#209), grouped: Transcription, Storage, AI, Privacy and Developer.
+  List<Widget> _advancedTiles(BuildContext context) {
     final AppLockController? appLock = appLockController;
     final TranscriptionRouteController? route = transcriptionRouteController;
     final TranscriptionLanguageController? language = languageController;
     final NetworkSettingsController? network = networkSettingsController;
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.settings)),
-      body: ListenableBuilder(
-        listenable: Listenable.merge(<Listenable?>[
-          logSettingsController,
-          appLock,
-          appLanguageController,
-          route,
-          language,
-          network,
-        ]),
-        builder: (BuildContext context, Widget? child) => ListView(
-          children: <Widget>[
-            if (devicesScreenBuilder
-                case final WidgetBuilder devicesScreen) ...<Widget>[
-              ListTile(
-                leading: const Icon(Icons.devices_outlined),
-                title: Text(l10n.devices),
-                subtitle: Text(l10n.pairYourDevicesAndSeeWhich),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context)
-                    .push(MaterialPageRoute<void>(builder: devicesScreen)),
+    final List<Widget> transcription = <Widget>[
+      if (transcriptionSettingsBridge
+          case final TranscriptionSettingsBridge bridge)
+        ListTile(
+          leading: const Icon(Icons.record_voice_over_outlined),
+          title: Text(l10n.transcriptionModel),
+          subtitle: Text(l10n.chooseTheWhisperModel),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (BuildContext context) => TranscriptionSettingsPage(
+                bridge: bridge,
+                languageCode: language?.defaultLanguage ?? 'auto',
               ),
-              const Divider(),
-            ],
-            if (appLanguageController
-                case final AppLanguageController appLanguage) ...<Widget>[
-              _appLanguageTile(appLanguage),
-              const Divider(),
-            ],
-            if (appLock != null) ...<Widget>[
-              ..._appLockTiles(context, appLock),
-              const Divider(),
-            ],
-            if (language != null) ...<Widget>[
-              ..._languageTiles(language),
-              const Divider(),
-            ],
-            if (transcriptionSettingsBridge != null) ...<Widget>[
-              ListTile(
-                leading: const Icon(Icons.record_voice_over_outlined),
-                title: Text(l10n.transcriptionModel),
-                subtitle: Text(l10n.chooseTheWhisperModel),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (BuildContext context) =>
-                        TranscriptionSettingsPage(
-                      bridge: transcriptionSettingsBridge!,
-                      languageCode: language?.defaultLanguage ?? 'auto',
-                    ),
-                  ),
-                ),
-              ),
-              const Divider(),
-            ],
-            if (recordingsBridge
-                case final RecordingsBridge recordings) ...<Widget>[
-              RecordingsSection(bridge: recordings),
-              const Divider(),
-            ],
-            if (backupBridge case final BackupBridge backup) ...<Widget>[
-              BackupSection(bridge: backup),
-              const Divider(),
-            ],
-            if (summariesController
-                case final SummariesController summaries) ...<Widget>[
-              ListTile(
-                leading: const Icon(Icons.auto_awesome_outlined),
-                title: Text(l10n.aiConnections),
-                subtitle: Text(l10n.languageModelsForMeetingSummariesAnd),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (BuildContext context) =>
-                      AiSettingsScreen(controller: summaries),
-                )),
-              ),
-              const Divider(),
-            ],
-            if (notesFolderBridge
-                case final NotesFolderBridge notesFolder) ...<Widget>[
-              ListTile(
-                leading: const Icon(Icons.folder_copy_outlined),
-                title: Text(l10n.notesFolder),
-                subtitle: Text(l10n.keepProjectsAndMeetingsAsFiles),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (BuildContext context) =>
-                      NotesFolderScreen(bridge: notesFolder),
-                )),
-              ),
-              const Divider(),
-            ],
-            if (assistantAccessBridge
-                case final AssistantAccessBridge assistantAccess) ...<Widget>[
-              ListTile(
-                leading: const Icon(Icons.smart_toy_outlined),
-                title: Text(l10n.aiAssistantAccess),
-                subtitle: Text(l10n.letYourOwnAssistantSuchAs),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (BuildContext context) =>
-                      AssistantAccessScreen(bridge: assistantAccess),
-                )),
-              ),
-              const Divider(),
-            ],
-            if (callWatchController case final CallWatchController callWatch)
-              CallWatchSettingsTiles(controller: callWatch),
-            if (route != null && route.available) ...<Widget>[
-              ..._transcriptionTiles(route),
-              const Divider(),
-            ],
-            if (network != null && network.available) ...<Widget>[
-              NetworkAddressesSection(controller: network),
-              const Divider(),
-            ],
-            ..._diagnosticsTiles(context),
-          ],
+            ),
+          ),
         ),
-      ),
-    );
+      if (route != null && route.available) ..._transcriptionTiles(route),
+      if (callWatchController case final CallWatchController callWatch)
+        CallWatchSettingsTiles(controller: callWatch),
+    ];
+    final List<Widget> storage = <Widget>[
+      if (backupBridge case final BackupBridge backup)
+        BackupSection(bridge: backup),
+      if (notesFolderBridge case final NotesFolderBridge notesFolder)
+        ListTile(
+          leading: const Icon(Icons.folder_copy_outlined),
+          title: Text(l10n.notesFolder),
+          subtitle: Text(l10n.keepProjectsAndMeetingsAsFiles),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (BuildContext context) =>
+                NotesFolderScreen(bridge: notesFolder),
+          )),
+        ),
+    ];
+    final List<Widget> ai = <Widget>[
+      if (assistantAccessBridge
+          case final AssistantAccessBridge assistantAccess)
+        ListTile(
+          leading: const Icon(Icons.smart_toy_outlined),
+          title: Text(l10n.aiAssistantAccess),
+          subtitle: Text(l10n.letYourOwnAssistantSuchAs),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (BuildContext context) =>
+                AssistantAccessScreen(bridge: assistantAccess),
+          )),
+        ),
+    ];
+    final List<Widget> privacy = <Widget>[
+      if (appLock != null) ..._appLockTiles(context, appLock),
+      if (network != null && network.available)
+        NetworkAddressesSection(controller: network),
+    ];
+    return <Widget>[
+      for (final (String title, List<Widget> tiles) in <(String, List<Widget>)>[
+        (l10n.transcription, transcription),
+        (l10n.storage, storage),
+        (l10n.aiSection, ai),
+        (l10n.privacy, privacy),
+        (l10n.developer, _diagnosticsTiles(context)),
+      ])
+        if (tiles.isNotEmpty) ...<Widget>[
+          SettingsSectionHeader(title),
+          ...tiles,
+          const Divider(),
+        ],
+    ];
   }
 
   /// The app language selector (#124): the system's, or one of [appLanguages] by its own name.
@@ -420,6 +445,31 @@ final class SettingsScreen extends StatelessWidget {
 }
 
 /// A setting's error message, in the theme's error colour.
+/// The Advanced entry at the end of the basic settings (#209).
+const Key advancedSettingsKey = ValueKey<String>('advanced-settings');
+
+/// The title of a group of settings, such as Transcription or Privacy (#209).
+final class SettingsSectionHeader extends StatelessWidget {
+  /// Creates the header with `title`.
+  const SettingsSectionHeader(this.title, {super.key});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Semantics(
+      header: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        child: Text(title,
+            style: theme.textTheme.titleSmall
+                ?.copyWith(color: theme.colorScheme.primary)),
+      ),
+    );
+  }
+}
+
 final class _ErrorText extends StatelessWidget {
   const _ErrorText({required this.message});
 

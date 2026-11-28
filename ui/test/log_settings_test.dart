@@ -11,6 +11,7 @@ import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/presentation/settings_screen.dart';
 
 import 'fake_log_bridge.dart';
+import 'settings_test_helpers.dart';
 
 void main() {
   late Directory root;
@@ -201,6 +202,7 @@ void main() {
 
       await tester.pumpWidget(
           MaterialApp(home: SettingsScreen(logSettingsController: controller)));
+      await openAdvancedSettings(tester);
 
       expect(find.text('App lock'), findsNothing);
       expect(find.text('Log level'), findsOneWidget);
@@ -214,6 +216,7 @@ void main() {
       await controller.load();
       await tester.pumpWidget(
           MaterialApp(home: SettingsScreen(logSettingsController: controller)));
+      await openAdvancedSettings(tester);
 
       await tester.tap(find.text('Info (default)'));
       await tester.pumpAndSettle();
@@ -235,6 +238,7 @@ void main() {
       await controller.load();
       await tester.pumpWidget(
           MaterialApp(home: SettingsScreen(logSettingsController: controller)));
+      await openAdvancedSettings(tester);
 
       await tester.tap(find.text('Export logs'));
       await tester.pumpAndSettle();
@@ -253,6 +257,7 @@ void main() {
         telemetryScreenBuilder: (BuildContext context) =>
             const Scaffold(body: Text('Telemetry page')),
       )));
+      await openAdvancedSettings(tester);
 
       await tester.tap(find.text('Telemetry'));
       await tester.pumpAndSettle();
@@ -284,6 +289,7 @@ void main() {
           desktopController(FakeLogBridge());
       await tester.pumpWidget(
           MaterialApp(home: SettingsScreen(logSettingsController: controller)));
+      await openAdvancedSettings(tester);
 
       expect(find.text('Devices'), findsNothing);
     });
@@ -295,6 +301,7 @@ void main() {
       await controller.load();
       await tester.pumpWidget(
           MaterialApp(home: SettingsScreen(logSettingsController: controller)));
+      await openAdvancedSettings(tester);
 
       expect(find.text('Telemetry'), findsNothing);
     });
@@ -312,6 +319,7 @@ void main() {
 
       await tester.pumpWidget(
           MaterialApp(home: SettingsScreen(logSettingsController: controller)));
+      await openAdvancedSettings(tester);
 
       expect(find.text('Share logs'), findsOneWidget);
       expect(find.text('Export logs'), findsNothing);

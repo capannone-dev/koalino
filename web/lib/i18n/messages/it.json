@@ -584,5 +584,12 @@
   "askAi": "Chiedi all'IA",
   "files": "File",
   "meetingSections": "Sezioni della riunione",
-  "noFilesYet": "Ancora nessuna foto o file. Qui compaiono le foto scattate durante la riunione e i file allegati."
+  "noFilesYet": "Ancora nessuna foto o file. Qui compaiono le foto scattate durante la riunione e i file allegati.",
+  "advancedSettings": "Avanzate",
+  "advancedSettingsDescription": "Trascrizione, privacy, archiviazione, diagnostica",
+  "transcription": "Trascrizione",
+  "privacy": "Privacy",
+  "storage": "Archiviazione",
+  "developer": "Sviluppatore",
+  "summaryOptions": "Opzioni dei riassunti"
 }

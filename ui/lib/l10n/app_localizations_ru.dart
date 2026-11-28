@@ -3466,4 +3466,23 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get addAnAiConnection => 'Добавить подключение ИИ';
+
+  @override
+  String get advancedSettings => 'Дополнительно';
+
+  @override
+  String get advancedSettingsDescription =>
+      'Расшифровка, хранение и резервные копии, ИИ-ассистенты, конфиденциальность, диагностика';
+
+  @override
+  String get storage => 'Хранение';
+
+  @override
+  String get aiSection => 'ИИ';
+
+  @override
+  String get privacy => 'Конфиденциальность';
+
+  @override
+  String get developer => 'Для разработчиков';
 }

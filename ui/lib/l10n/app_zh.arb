@@ -901,5 +901,11 @@
   "files": "文件",
   "noFilesYet": "还没有照片或文件。会议中拍的照片和附加的文件会显示在这里。",
   "summariesNeedAnAi": "摘要由你连接的 AI 撰写：本设备上的模型、你的 Claude 或 ChatGPT 套餐，或在线服务。",
-  "addAnAiConnection": "添加 AI 连接"
+  "addAnAiConnection": "添加 AI 连接",
+  "advancedSettings": "高级",
+  "advancedSettingsDescription": "转写、存储与备份、AI 助手、隐私、诊断",
+  "storage": "存储",
+  "aiSection": "AI",
+  "privacy": "隐私",
+  "developer": "开发者"
 }
