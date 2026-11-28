@@ -30,3 +30,6 @@ the Vitest specs under `tests/`.
 
 `popupStatus.ts` (#212) words the popup's connection line and its tone; `pageText.ts` puts the popup's and the
 options page's fixed text in the browser's language.
+
+- `icons.ts` (#207): the Material icons the popup uses (mic, stop, settings, check, error, refresh), drawn inline;
+  `data-icon="name"` on an element adds one before its text, `setIconLabel` changes an icon and its words together.

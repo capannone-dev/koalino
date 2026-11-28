@@ -9,6 +9,7 @@ import { RenameMeetingDialog } from "@/components/rename-meeting-dialog";
 import type { MeetingSummary } from "@/lib/api";
 import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
 import { useT } from "@/lib/i18n/client";
+import { Icon } from "@/components/icons";
 
 /**
  * Shows `meeting.title` as the page's `h1`, with a pencil button opening the rename dialog.
@@ -47,7 +48,7 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
           }}
           className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-focus"
         >
-          <PencilIcon />
+          <Icon name="edit" size={20} />
         </button>
         <button
           type="button"
@@ -56,7 +57,7 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
           onClick={() => setIsDeleting(true)}
           className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-danger hover:bg-surface-muted"
         >
-          <TrashIcon />
+          <Icon name="delete" size={20} />
         </button>
       </div>
       <p role="status" aria-live="polite" className="text-sm text-success">
@@ -86,26 +87,5 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
         />
       ) : null}
     </>
-  );
-}
-
-/** A 20 px outline bin, hidden from assistive technology because the button is labelled. */
-function TrashIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 6h18" />
-      <path d="M8 6V4h8v2" />
-      <path d="M19 6l-1 14H6L5 6" />
-    </svg>
-  );
-}
-
-/** A 20 px outline pencil, hidden from assistive technology because the button is labelled. */
-function PencilIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
   );
 }

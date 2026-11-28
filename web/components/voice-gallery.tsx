@@ -9,6 +9,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { DeletionError, assignCluster, assignVoiceGroup, deleteSavedPerson, deleteUnknownVoice, reviewClipUrl, type LibraryCluster, type VoiceIdentity } from "@/lib/api";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n";
+import { buttonStyles, fieldStyle } from "@/components/ui";
 
 /** A deletion waiting for the owner's answer. */
 type PendingDeletion = { title: string; message: string; run: () => Promise<void> };
@@ -253,10 +254,10 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
             )}
             {suggestedName ? <p className="text-sm">{t("theCallShowedSpeakingCheck", { suggestedName })}</p> : null}
             <form className="space-y-2" onSubmit={(event) => submitAssignment(event, group)}>
-              <label className="block">{t("name")}<input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={t("nameFor", { speakerLabel: speakerLabel.toLowerCase() })} autoComplete="off" list="saved-people" defaultValue={suggestedName ?? undefined} onChange={(event) => { const value = event.target.value; setTypedNames((current) => ({ ...current, [group.groupId]: value })); }} />
+              <label className="block">{t("name")}<input className={fieldStyle} name="identityName" type="text" aria-label={t("nameFor", { speakerLabel: speakerLabel.toLowerCase() })} autoComplete="off" list="saved-people" defaultValue={suggestedName ?? undefined} onChange={(event) => { const value = event.target.value; setTypedNames((current) => ({ ...current, [group.groupId]: value })); }} />
               </label>
               {match ? <p className="text-sm">{t("alreadySavedVoiceAddsToThem", { name: match.display_name })}</p> : null}
-              <button className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong" type="submit">{match ? t("addTo", { name: match.display_name }) : t("assign")}</button>
+              <button className={buttonStyles.filled} type="submit">{match ? t("addTo", { name: match.display_name }) : t("assign")}</button>
             </form>
             {people.length > 0 ? (
               // A voice that wasn't matched to someone already saved is given to them here (#136).
@@ -266,7 +267,7 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
                     {people.map((person) => <option key={person.identity_id} value={person.display_name}>{person.display_name}</option>)}
                   </select>
                 </label>
-                <button className="min-h-11 rounded-lg border border-line-strong px-4 font-medium hover:bg-surface-muted" type="submit">{t("add")}</button>
+                <button className={buttonStyles.outlined} type="submit">{t("add")}</button>
               </form>
             ) : null}
           </article>
@@ -327,7 +328,7 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
                   type="button"
                   disabled={picked.size === 0}
                   onClick={() => addPickedVoices(person)}
-                  className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:opacity-50"
+                  className={buttonStyles.filled}
                 >{t("addTo", { name: person.display_name })}</button>
               </div>
             ) : null}

@@ -17,6 +17,7 @@ import type { MeetingSummary } from "@/lib/api";
 import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
 import { describeRecordedOn } from "@/lib/meeting-metadata";
 import { useT } from "@/lib/i18n/client";
+import { EmptyState, buttonStyles } from "@/components/ui";
 
 /** The row whose actions menu is open; `position` is set when it was opened by right-click. */
 type OpenMenu = { meetingId: string; position: { x: number; y: number } | null };
@@ -123,17 +124,18 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
           {statusMessage}
         </p>
         {/* The web cannot record: say where meetings come from, and the step that brings them (#204). */}
-        <div className="rounded-xl border border-line bg-surface p-6 text-center">
-          <p className="font-semibold">{t("noMeetingsYet")}</p>
-          <p className="mt-1 text-muted">{t("meetingsAppearOnceSynced")}</p>
-          <Link
-            href="/devices"
-            className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-2 focus-visible:outline-focus"
-          >
-            <Icon name="devices" size={20} />
-            {t("pairADevice")}
-          </Link>
-        </div>
+        <EmptyState
+          icon="meetings"
+          title={t("noMeetingsYet")}
+          action={
+            <Link href="/devices" className={buttonStyles.filled}>
+              <Icon name="devices" size={20} />
+              {t("pairADevice")}
+            </Link>
+          }
+        >
+          {t("meetingsAppearOnceSynced")}
+        </EmptyState>
       </>
     );
   }
@@ -150,7 +152,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
           className="sticky top-0 z-20 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-accent-soft px-3 py-2"
         >
           <button type="button" aria-label={t("cancelSelection")} title={t("cancelSelection")} onClick={() => setSelected(new Set())} className={barButton}>
-            <span aria-hidden="true">✕</span>
+            <Icon name="close" size={20} />
           </button>
           <span className="flex-1 font-medium">{t("selectedCount", { count: selected.size })}</span>
           <button type="button" onClick={() => setSelected(new Set(currentMeetings.map((meeting) => meeting.meeting_id)))} className={barButton}>
@@ -219,7 +221,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                 aria-label={t("summaryOf", { title: meeting.title })}
                 className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-sm text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
               >
-                <SummaryIcon />
+                <Icon name="summary" size={22} />
                 <span>{t("summary")}</span>
               </Link>
               <button
@@ -237,7 +239,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                   isMenuOpen ? "" : "[@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
                 }`}
               >
-                <span aria-hidden="true">⋯</span>
+                <Icon name="more" />
               </button>
               </>
               )}
@@ -370,12 +372,3 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
 const barButton =
   "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-3 font-medium hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus";
 
-/** A page with lines and a short bar: a summary of notes. Decorative; the link carries the name. */
-function SummaryIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 3h9l4 4v14H6z" />
-      <path d="M9 10h7M9 14h7M9 18h4" />
-    </svg>
-  );
-}

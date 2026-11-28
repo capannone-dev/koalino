@@ -7,6 +7,7 @@ import { ChangeEvent, useId, useState } from "react";
 import { fetchLogExport, LogSettingsError, setLogLevel, type LogSettingsFailureKind } from "@/lib/api";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n";
+import { buttonStyles } from "@/components/ui";
 
 /** The levels offered, from least to most detail. */
 const logLevels = (t: Translate) => [
@@ -121,7 +122,7 @@ export function LogSettings({ initialLevel, saveFile = saveBlobAsFile }: LogSett
       <div className="space-y-1">
         <p className="font-semibold">{t("logs")}</p>
         <p className="text-sm text-muted">{t("theLast7DaysOf")}</p>
-        <button type="button" className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled" disabled={isExporting} onClick={exportLogs}>
+        <button type="button" className={buttonStyles.filled} disabled={isExporting} onClick={exportLogs}>
           {isExporting ? t("exporting") : t("exportLogs")}
         </button>
       </div>

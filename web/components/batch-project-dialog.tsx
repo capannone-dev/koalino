@@ -6,6 +6,7 @@
 import { KeyboardEvent, useEffect, useId, useState } from "react";
 import { getProjects, moveMeetingToProject, projectErrorMessage, projectTree, type ProjectSummary } from "@/lib/projects-api";
 import { useT } from "@/lib/i18n/client";
+import { buttonStyles } from "@/components/ui";
 
 /** The choice that removes the meetings from their projects; no project ID is empty. */
 const noProjectValue = "";
@@ -129,14 +130,14 @@ export function BatchProjectDialog({
           </p>
         ) : null}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-line-strong px-4 font-medium hover:bg-surface-muted">
+          <button type="button" onClick={onClose} className={buttonStyles.outlined}>
             {t("cancel")}
           </button>
           <button
             type="button"
             disabled={projects === null || isMoving}
             onClick={move}
-            className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:opacity-50"
+            className={buttonStyles.filled}
           >
             {t("move")}
           </button>

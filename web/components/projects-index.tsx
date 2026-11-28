@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { createProject, projectErrorMessage, projectNameError, projectTree, type ProjectSummary } from "@/lib/projects-api";
 import { useT } from "@/lib/i18n/client";
+import { buttonStyles, fieldStyle } from "@/components/ui";
+import { EmptyState } from "@/components/ui";
 
 /** "2 meetings · 3 files", singular where it applies. */
 export function projectCounts(project: ProjectSummary): string {
@@ -56,20 +58,20 @@ export function ProjectsIndex({ projects }: { projects: ProjectSummary[] }) {
             onChange={(event) => setName(event.target.value)}
             placeholder={t("projectName")}
             aria-invalid={errorMessage !== null}
-            className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30"
+            className={fieldStyle}
           />
         </label>
         <button
           type="submit"
           disabled={isCreating}
-          className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled"
+          className={buttonStyles.filled}
         >{t("create")}</button>
       </form>
       <p role="alert" className="text-sm text-danger">
         {errorMessage}
       </p>
       {projects.length === 0 ? (
-        <p className="text-muted">{t("noProjectsYetAProject")}</p>
+        <EmptyState icon="projects" title={t("noProjectsYetAProject")} />
       ) : (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
           {projectTree(projects).map(({ project, depth }) => (

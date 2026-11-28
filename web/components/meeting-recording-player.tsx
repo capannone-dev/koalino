@@ -10,6 +10,7 @@ import { PLAYBACK_RATES, SKIP_MS, recordingFileName, useRecordingPlayback } from
 import { useT } from "@/lib/i18n/client";
 import { hasCommandModifier, isTypingTarget } from "@/lib/shortcut-keys";
 import { useEffect, useRef } from "react";
+import { Icon } from "@/components/icons";
 
 const iconButton =
   "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-line-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus";
@@ -73,7 +74,7 @@ export function MeetingRecordingPlayer({ title }: { title: string | null | undef
       className="sticky bottom-0 z-10 my-3 flex flex-wrap items-center gap-2 border-t border-line bg-canvas py-2"
     >
       <button type="button" className={iconButton} aria-label={t("skipBack10Seconds")} title={t("skipBack10Seconds")} onClick={() => playback.skip(-SKIP_MS)}>
-        −10
+        <Icon name="replay10" />
       </button>
       <button
         type="button"
@@ -82,18 +83,10 @@ export function MeetingRecordingPlayer({ title }: { title: string | null | undef
         title={playing ? t("pause") : t("play")}
         onClick={playback.toggle}
       >
-        {playing ? (
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
-          </svg>
-        ) : (
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        )}
+        <Icon name={playing ? "pause" : "play"} />
       </button>
       <button type="button" className={iconButton} aria-label={t("skipForward10Seconds")} title={t("skipForward10Seconds")} onClick={() => playback.skip(SKIP_MS)}>
-        +10
+        <Icon name="forward10" />
       </button>
       <input
         type="range"
@@ -132,9 +125,7 @@ export function MeetingRecordingPlayer({ title }: { title: string | null | undef
         aria-label={t("downloadTheRecording")}
         title={t("downloadTheRecording")}
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-          <path d="M11 4h2v9.17l3.59-3.58L18 11l-6 6-6-6 1.41-1.41L11 13.17zM5 18h14v2H5z" />
-        </svg>
+        <Icon name="download" />
       </a>
       {playing && !follow ? (
         <button type="button" className={`${iconButton} px-3`} onClick={() => playback.setFollow(true)}>

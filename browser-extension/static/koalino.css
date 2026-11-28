@@ -29,6 +29,10 @@ button:hover { background: var(--surface-muted); }
 .banner { padding: 10px; border-radius: 10px; margin-bottom: 10px; background: var(--danger-soft); color: var(--danger); }
 .banner.ok { background: var(--success-soft); color: var(--success); }
 .banner button { margin-top: 8px; }
+.icon { flex: none; vertical-align: -4px; margin-inline-end: 6px; }
+[hidden] { display: none !important; }
+#host, .primary, #open-settings, #check { display: inline-flex; align-items: center; }
+.primary { justify-content: center; }
 .primary { width: 100%; min-height: 40px; border: none; background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .primary:hover { background: var(--accent-strong); }
 .primary.stop { background: var(--danger); color: #fff; }

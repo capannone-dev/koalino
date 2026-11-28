@@ -4,6 +4,7 @@
 
 import { KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useT } from "@/lib/i18n/client";
+import { buttonStyles } from "@/components/ui";
 
 export type ConfirmDeleteDialogProps = {
   /** The question, naming what goes. */
@@ -88,7 +89,7 @@ export function ConfirmDeleteDialog({ title, message, onConfirm, onClose }: Conf
             type="button"
             disabled={isDeleting}
             onClick={onClose}
-            className="min-h-11 rounded-lg px-4 font-medium text-accent-text hover:bg-accent-soft disabled:text-faint"
+            className={buttonStyles.text}
           >{t("cancel")}</button>
           <button
             ref={deleteRef}

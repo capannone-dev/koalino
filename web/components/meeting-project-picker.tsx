@@ -14,6 +14,7 @@ import {
   type ProjectSummary
 } from "@/lib/projects-api";
 import { useT } from "@/lib/i18n/client";
+import { buttonStyles, fieldStyle } from "@/components/ui";
 
 /** The selector's value for "New project…". */
 const newProjectValue = "__new__";
@@ -106,7 +107,7 @@ export function MeetingProjectPicker({
         value={isNaming ? newProjectValue : (currentProjectId ?? "")}
         disabled={isMoving}
         onChange={(event) => choose(event.target.value)}
-        className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30"
+        className={fieldStyle}
       >
         <option value="">{t("noProject")}</option>
         {/* Subprojects indented under their parent (#142). */}
@@ -132,13 +133,13 @@ export function MeetingProjectPicker({
                 setNewName(event.target.value);
                 setNameError(null);
               }}
-              className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30 aria-invalid:border-danger"
+              className={fieldStyle}
             />
           </div>
           <button
             type="submit"
             disabled={isMoving}
-            className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled"
+            className={buttonStyles.filled}
           >{t("createAndMove")}</button>
           <p role="alert" className="w-full text-sm text-danger">
             {nameError}

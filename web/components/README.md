@@ -146,3 +146,7 @@ adds Space, J and L. `lib/shortcut-keys.ts` keeps single keys away from fields a
 `meeting-list.tsx` selection (#216): "Select" in a row's menu adds checkboxes and a bar that moves
 (`batch-project-dialog.tsx`) or deletes the chosen meetings; Escape or ✕ leaves it. With a mouse, the row's ⋯ button
 appears on hover or focus.
+
+`ui.tsx` (#207) holds the shared building blocks: `buttonStyles` (filled for the one main action per screen, tonal,
+outlined, text), `fieldStyle`, `EmptyState` (icon, what is missing, next step) and `Banner` (danger / warning / info).
+Icons come only from `icons.tsx` (Material, as in the app); a test fails if a component draws its own `<svg>`.

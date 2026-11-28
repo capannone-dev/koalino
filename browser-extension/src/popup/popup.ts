@@ -10,6 +10,7 @@
 import type { PopupRequest, PopupState, TabRecordingReply } from "../background/background";
 import { msg } from "../lib/i18n";
 import { translatePage } from "../lib/pageText";
+import { addIcons, setIconLabel } from "../lib/icons";
 import { connectionStatus } from "../lib/popupStatus";
 import { hasTeamsAccess, requestTeamsAccess } from "../lib/siteAccess";
 
@@ -25,7 +26,10 @@ function render(state: PopupState): void {
   if (!host || !recordings) return;
   const status = connectionStatus(state.connection);
   host.className = status.tone;
-  host.textContent = msg(status.key);
+  // An icon beside the words, so the state does not rest on colour alone (#207).
+  if (status.tone === "ok") setIconLabel(host, "check", msg(status.key));
+  else if (status.tone === "checking") host.textContent = msg(status.key);
+  else setIconLabel(host, "error", msg(status.key));
   // "Check again" only when something is wrong; a working connection needs no button.
   document.getElementById("check")?.toggleAttribute("hidden", status.tone === "ok" || status.tone === "checking");
   recordings.textContent =
@@ -45,7 +49,7 @@ function renderTabButton(recording: boolean): void {
   currentTabRecording = recording;
   const button = document.getElementById("record-tab");
   if (!button) return;
-  button.textContent = msg(recording ? "stopThisTab" : "recordThisTab");
+  setIconLabel(button, recording ? "stop" : "mic", msg(recording ? "stopThisTab" : "recordThisTab"));
   button.classList.toggle("stop", recording);
   button.toggleAttribute("disabled", currentTabId === null);
 }
@@ -92,6 +96,7 @@ async function renderAccess(refused = false): Promise<void> {
 let justGranted = false;
 
 translatePage();
+addIcons();
 document.getElementById("allow")?.addEventListener("click", () => {
   // The request must start in the click itself, before any other await.
   void requestTeamsAccess(chrome.permissions, chrome.runtime.getManifest()).then((granted) => {

@@ -13,6 +13,7 @@ import {
 } from "@/lib/notes-folder-api";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n";
+import { buttonStyles } from "@/components/ui";
 
 export type NotesFolderSettingsProps = {
   /** The saved status, or `null` when it could not be read. */
@@ -92,7 +93,7 @@ export function NotesFolderSettings({ initial }: NotesFolderSettingsProps) {
             onChange={(event) => void run(() => setNotesFolder(event.target.checked, path.trim() || null))}
           />{t("keepTheNotesFolder")}</label>
         {enabled ? (
-          <button type="button" className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled"
+          <button type="button" className={buttonStyles.filled}
             disabled={busy}
             onClick={() => void run(syncNotesFolder)}>{t("syncNow")}</button>
         ) : null}

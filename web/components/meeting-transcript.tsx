@@ -14,6 +14,7 @@ import type { TranscriptSegment } from "@/lib/api";
 import { passageStartAt, useRecordingPlayback } from "@/lib/recording-playback";
 import { editErrorMessage, editSegment } from "@/lib/edits-api";
 import { useT } from "@/lib/i18n/client";
+import { Icon } from "@/components/icons";
 
 const buttonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-3 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus disabled:text-faint";
@@ -186,9 +187,7 @@ export function MeetingTranscript({
                     title={t("playFromAt", { at })}
                     onClick={() => player.playFrom(segment.start_time_ms)}
                   >
-                    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
+                    <Icon name="play" size={18} />
                   </button>
                 ) : null}
                 {segment.overlapping_speech ? (
@@ -226,10 +225,7 @@ export function MeetingTranscript({
                       disabled={busy}
                       onClick={() => setEditing({ key, text: segment.text })}
                     >
-                      <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12 20h9" />
-                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                      </svg>
+                      <Icon name="edit" size={18} />
                     </button>
                   ) : null}
                 </div>

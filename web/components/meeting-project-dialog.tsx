@@ -8,6 +8,7 @@ import { MeetingProjectPicker } from "@/components/meeting-project-picker";
 import type { MeetingSummary } from "@/lib/api";
 import { getProjects, projectErrorMessage, type ProjectSummary } from "@/lib/projects-api";
 import { useT } from "@/lib/i18n/client";
+import { buttonStyles } from "@/components/ui";
 
 /**
  * Lets the person choose the project of one meeting from the list.
@@ -69,7 +70,7 @@ export function MeetingProjectDialog({ meeting, onClose }: { meeting: MeetingSum
             type="button"
             autoFocus
             onClick={onClose}
-            className="min-h-11 rounded-lg border border-line-strong px-4 font-medium hover:bg-surface-muted"
+            className={buttonStyles.outlined}
           >{t("done")}</button>
         </div>
       </div>

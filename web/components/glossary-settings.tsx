@@ -7,6 +7,7 @@ import { useId, useState } from "react";
 import { GlossaryError, setGlossary, type GlossaryFailureKind } from "@/lib/api";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n";
+import { buttonStyles } from "@/components/ui";
 
 /** Plain messages per failure; server text is never shown because it can contain internal details. */
 const failureMessages = (t: Translate) : Record<GlossaryFailureKind, string> => ({
@@ -74,7 +75,7 @@ export function GlossarySettings({ initialTerms }: GlossarySettingsProps) {
       </div>
       <button
         type="button"
-        className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled"
+        className={buttonStyles.filled}
         disabled={initialTerms === null || isSaving}
         onClick={save}
       >

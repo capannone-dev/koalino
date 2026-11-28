@@ -23,6 +23,7 @@ import {
 } from "@/lib/llm-api";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n";
+import { EmptyState } from "@/components/ui";
 
 const fieldClass =
   "min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30";
@@ -132,7 +133,7 @@ export function AiSettings({ initial }: AiSettingsProps) {
         <p className="text-sm text-muted">{t("summariesAreWrittenByA")}</p>
       </div>
 
-      {current.connections.length === 0 ? <p className="text-muted">{t("noConnectionYet")}</p> : null}
+      {current.connections.length === 0 ? <EmptyState icon="sparkle" title={t("noConnectionYet")} /> : null}
       <ul className="space-y-2">
         {current.connections.map((connection) => (
           <li key={connection.id} className="rounded-lg border border-line p-3">

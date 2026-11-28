@@ -31,6 +31,8 @@ import {
 } from "@/lib/p2p-api";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n";
+import { fieldStyle } from "@/components/ui";
+import { EmptyState } from "@/components/ui";
 
 /** How often the status is read again, in milliseconds. */
 const statusPollIntervalMs = 2_000;
@@ -272,7 +274,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
             }}
           >
             <label className="block">{t("deviceName")}<input
-                className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30"
+                className={fieldStyle}
                 type="text"
                 autoComplete="off"
                 maxLength={256}
@@ -354,7 +356,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
           </button>
         }
       >
-        {status.trusted_devices.length === 0 && <p className="text-muted">{t("noPairedDevicesYet")}</p>}
+        {status.trusted_devices.length === 0 && <EmptyState icon="devices" title={t("noPairedDevicesYet")} />}
         {status.trusted_devices.map((device) => (
           <div key={device.peer_id} className="card space-y-2">
             <div className="flex items-center justify-between gap-4">
@@ -450,7 +452,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
             });
           }}
         >
-          <label className="block">{t("inviteFromAnotherDevice")}<input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" type="text" autoComplete="off" value={inviteText} onChange={(event) => setInviteText(event.target.value)} />
+          <label className="block">{t("inviteFromAnotherDevice")}<input className={fieldStyle} type="text" autoComplete="off" value={inviteText} onChange={(event) => setInviteText(event.target.value)} />
           </label>
           <button type="submit" className={secondaryButton} disabled={isBusy || inviteText.trim() === ""}>{t("findDevice")}</button>
         </form>

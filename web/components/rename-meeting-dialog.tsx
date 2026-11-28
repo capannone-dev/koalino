@@ -7,6 +7,7 @@ import { MeetingRenameError, renameMeeting, type MeetingRenameFailureKind, type 
 import { maxMeetingTitleCharacters, validateMeetingTitle } from "@/lib/meeting-title";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n";
+import { buttonStyles, fieldStyle } from "@/components/ui";
 
 /** Plain messages per failure; server text is never shown because it can contain internal details. */
 const renameFailureMessages = (t: Translate) : Record<MeetingRenameFailureKind, string> => ({
@@ -126,7 +127,7 @@ export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeeti
               setTypedTitle(event.target.value);
               setSaveErrorMessage(null);
             }}
-            className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30 aria-invalid:border-danger"
+            className={fieldStyle}
           />
           <div className="mt-1 flex items-start justify-between gap-4 text-sm">
             <p id={errorId} role="alert" className="text-danger">
@@ -142,12 +143,12 @@ export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeeti
               type="button"
               disabled={isSaving}
               onClick={onClose}
-              className="min-h-11 rounded-lg px-4 font-medium text-accent-text hover:bg-accent-soft disabled:text-faint"
+              className={buttonStyles.text}
             >{t("cancel")}</button>
             <button
               type="submit"
               disabled={isSaving}
-              className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled"
+              className={buttonStyles.filled}
             >
               {isSaving ? t("saving") : t("save")}
             </button>
