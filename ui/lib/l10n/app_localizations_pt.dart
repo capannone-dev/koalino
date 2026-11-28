@@ -3427,4 +3427,27 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get voicesAppearAfterRecording =>
       'Depois de uma gravação, as vozes que o Koalino não reconhece aparecem aqui para que lhes possa dar um nome.';
+
+  @override
+  String get askAi => 'Perguntar à IA';
+
+  @override
+  String get shareAction => 'Partilhar';
+
+  @override
+  String get moreActions => 'Mais ações';
+
+  @override
+  String get files => 'Ficheiros';
+
+  @override
+  String get noFilesYet =>
+      'Ainda não há fotos nem ficheiros. As fotos tiradas durante uma reunião e os ficheiros anexados aparecem aqui.';
+
+  @override
+  String get summariesNeedAnAi =>
+      'Os resumos são escritos por uma IA que liga: um modelo neste dispositivo, o seu plano Claude ou ChatGPT, ou um serviço online.';
+
+  @override
+  String get addAnAiConnection => 'Adicionar uma ligação de IA';
 }

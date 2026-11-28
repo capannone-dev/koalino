@@ -3440,4 +3440,27 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get voicesAppearAfterRecording =>
       'بعد التسجيل، تظهر هنا الأصوات التي لا يتعرف عليها Koalino لكي تسمّيها.';
+
+  @override
+  String get askAi => 'اسأل الذكاء الاصطناعي';
+
+  @override
+  String get shareAction => 'مشاركة';
+
+  @override
+  String get moreActions => 'إجراءات أخرى';
+
+  @override
+  String get files => 'الملفات';
+
+  @override
+  String get noFilesYet =>
+      'لا توجد صور أو ملفات بعد. تظهر هنا الصور التي تلتقطها أثناء الاجتماع والملفات التي ترفقها.';
+
+  @override
+  String get summariesNeedAnAi =>
+      'يكتب الملخصات ذكاء اصطناعي تربطه: نموذج على هذا الجهاز، أو اشتراكك في Claude أو ChatGPT، أو خدمة عبر الإنترنت.';
+
+  @override
+  String get addAnAiConnection => 'أضف اتصال ذكاء اصطناعي';
 }

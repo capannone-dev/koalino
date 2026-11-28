@@ -38,6 +38,14 @@ Future<FakeMeetingBridge> pumpMeetingDetail(
   return meetingBridge;
 }
 
+/// Opens the meeting's More menu and chooses `label` (#201).
+Future<void> chooseFromMore(WidgetTester tester, String label) async {
+  await tester.tap(find.byKey(meetingMoreKey));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
 /// Verifies the title header, fallback title, and transcript.
 void main() {
   testWidgets('shows the title as a large bold header above the content',
@@ -51,7 +59,7 @@ void main() {
     final BuildContext context = tester.element(header);
     expect(headerStyle.fontWeight, FontWeight.bold);
     expect(headerStyle.fontSize,
-        Theme.of(context).textTheme.headlineMedium!.fontSize);
+        Theme.of(context).textTheme.headlineSmall!.fontSize);
     expect(tester.getTopLeft(header).dy,
         lessThan(tester.getTopLeft(find.text('Hello team.')).dy));
     expect(
@@ -123,8 +131,7 @@ void main() {
       (WidgetTester tester) async {
     await pumpMeetingDetail(tester, 'meeting-titled');
 
-    await tester.tap(find.byTooltip('Rename meeting'));
-    await tester.pumpAndSettle();
+    await chooseFromMore(tester, 'Rename meeting');
 
     expect(find.byType(RenameMeetingDialog), findsOneWidget);
     final TextField titleField = tester.widget<TextField>(find.descendant(
@@ -133,15 +140,29 @@ void main() {
     expect(titleField.controller?.text, 'Project Sync');
   });
 
-  testWidgets('the pencil sits on the same line as the title',
+  testWidgets(
+      'the header offers at most three actions, the rest under More (#201)',
       (WidgetTester tester) async {
     await pumpMeetingDetail(tester, 'meeting-titled');
 
-    final Rect titleRect = tester.getRect(find.text('Project Sync'));
-    final Rect pencilRect = tester.getRect(find.byTooltip('Rename meeting'));
-    expect(pencilRect.left, greaterThanOrEqualTo(titleRect.right));
-    expect(
-        pencilRect.center.dy, closeTo(titleRect.center.dy, titleRect.height));
+    expect(find.byKey(meetingMoreKey), findsOneWidget);
+    expect(find.byTooltip('Rename meeting'), findsNothing);
+    await tester.tap(find.byKey(meetingMoreKey));
+    await tester.pumpAndSettle();
+    expect(find.text('Rename meeting'), findsOneWidget);
+    expect(find.text('Delete meeting'), findsOneWidget);
+  });
+
+  testWidgets(
+      'the page has Transcript and Files tabs and opens on the transcript (#201)',
+      (WidgetTester tester) async {
+    await pumpMeetingDetail(tester, 'meeting-titled');
+
+    expect(find.byKey(meetingTranscriptTabKey), findsOneWidget);
+    expect(find.byKey(meetingFilesTabKey), findsOneWidget);
+    expect(find.byKey(meetingSummaryTabKey), findsNothing,
+        reason: 'no summaries without their controller');
+    expect(find.text('Hello team.'), findsOneWidget);
   });
 
   testWidgets('a rename from the detail updates the header immediately',
@@ -149,8 +170,7 @@ void main() {
     final FakeMeetingBridge meetingBridge =
         await pumpMeetingDetail(tester, 'meeting-titled');
 
-    await tester.tap(find.byTooltip('Rename meeting'));
-    await tester.pumpAndSettle();
+    await chooseFromMore(tester, 'Rename meeting');
     await tester.enterText(
         find.descendant(
             of: find.byType(RenameMeetingDialog),
@@ -172,8 +192,7 @@ void main() {
         await pumpMeetingDetail(tester, 'meeting-titled');
     meetingBridge.renameError = meetingRenameExceptionFor(2);
 
-    await tester.tap(find.byTooltip('Rename meeting'));
-    await tester.pumpAndSettle();
+    await chooseFromMore(tester, 'Rename meeting');
     await tester.enterText(find.byType(TextField), 'Roadmap Review');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
@@ -195,6 +214,8 @@ void main() {
             matching: find.text(
                 'Waiting for audio from Pixel (not connected). It is kept encrypted until ${formatCalendarDay(DateTime.utc(2026, 11, 23, 15))}.')),
         findsOneWidget);
+    await tester.tap(find.byKey(meetingMoreKey));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey<String>('split-open-meeting')));
     await tester.pumpAndSettle();
     expect(find.text('Split this meeting?'), findsOneWidget);
@@ -210,6 +231,8 @@ void main() {
     await pumpMeetingDetail(tester, 'meeting-titled');
 
     expect(find.textContaining('Recorded on'), findsNothing);
+    await tester.tap(find.byKey(meetingMoreKey));
+    await tester.pumpAndSettle();
     expect(
         find.byKey(const ValueKey<String>('split-open-meeting')), findsNothing);
   });

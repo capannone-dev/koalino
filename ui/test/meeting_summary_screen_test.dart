@@ -181,7 +181,29 @@ void main() {
     expect(core.calls.last.$2, <String?>['m-1', null]);
   });
 
-  testWidgets('without connections the page points to Settings',
+  testWidgets(
+      'as the meeting page tab it has no app bar and no second title (#201)',
+      (WidgetTester tester) async {
+    core.answer('command:settings', settings(connections: <Object?>[]));
+    core.answer('note_taker_get_meeting_summary',
+        <String, Object?>{'ok': true, 'summary': null, 'meeting_prompt': null});
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: MeetingSummaryScreen(
+            controller: controller,
+            meetingId: 'm-1',
+            title: 'Budget review',
+            embedded: true),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.text('Budget review'), findsNothing);
+    expect(find.byKey(addAiConnectionKey), findsOneWidget);
+  });
+
+  testWidgets('without connections the page offers to add one (#201)',
       (WidgetTester tester) async {
     core.answer('command:settings', settings(connections: <Object?>[]));
     core.answer('note_taker_get_meeting_summary',
@@ -189,9 +211,13 @@ void main() {
     await tester.pumpWidget(page());
     await tester.pumpAndSettle();
 
-    expect(find.text('Add an AI connection in Settings to write summaries.'),
+    expect(find.textContaining('Summaries are written by an AI you connect'),
         findsOneWidget);
     expect(find.text('Summarize'), findsNothing);
+    await tester.tap(find.byKey(addAiConnectionKey));
+    await tester.pumpAndSettle();
+    expect(find.text('AI connections'), findsWidgets,
+        reason: 'the AI connections page opened');
   });
 
   testWidgets('the menu summarizes with the chosen connection',

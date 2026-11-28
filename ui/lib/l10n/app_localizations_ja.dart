@@ -3257,4 +3257,26 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get voicesAppearAfterRecording =>
       '録音後、Koalino が認識できない声がここに表示され、名前を付けられます。';
+
+  @override
+  String get askAi => 'AI に質問';
+
+  @override
+  String get shareAction => '共有';
+
+  @override
+  String get moreActions => 'その他の操作';
+
+  @override
+  String get files => 'ファイル';
+
+  @override
+  String get noFilesYet => '写真やファイルはまだありません。会議中に撮った写真や添付したファイルがここに表示されます。';
+
+  @override
+  String get summariesNeedAnAi =>
+      '要約は接続した AI が作成します。この端末のモデル、Claude や ChatGPT のプラン、またはオンラインサービスです。';
+
+  @override
+  String get addAnAiConnection => 'AI 接続を追加';
 }

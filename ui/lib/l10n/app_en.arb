@@ -2553,5 +2553,19 @@
   "recordAMeeting": "Record a meeting",
   "@recordAMeeting": {"description": "Button in the empty meeting list."},
   "voicesAppearAfterRecording": "After a recording, voices Koalino doesn't recognise appear here so you can name them.",
-  "@voicesAppearAfterRecording": {"description": "Explains the empty unknown-voices list."}
+  "@voicesAppearAfterRecording": {"description": "Explains the empty unknown-voices list."},
+  "askAi": "Ask AI",
+  "@askAi": {"description": "Meeting page button that opens a chat about the meeting."},
+  "shareAction": "Share",
+  "@shareAction": {"description": "Meeting page button: share the meeting as a file."},
+  "moreActions": "More actions",
+  "@moreActions": {},
+  "files": "Files",
+  "@files": {"description": "Meeting page tab with photos and documents."},
+  "noFilesYet": "No photos or files yet. Photos you take during a meeting and files you attach appear here.",
+  "@noFilesYet": {},
+  "summariesNeedAnAi": "Summaries are written by an AI you connect: a model on this device, your Claude or ChatGPT plan, or an online service.",
+  "@summariesNeedAnAi": {},
+  "addAnAiConnection": "Add an AI connection",
+  "@addAnAiConnection": {}
 }

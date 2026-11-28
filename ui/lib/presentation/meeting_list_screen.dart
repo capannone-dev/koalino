@@ -227,117 +227,11 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                       projectsController: widget.projectsController,
                       handoff: widget.summariesController?.handoff),
                 ),
-              if (isTwoPane)
-                if (widget.chatBridge case final ChatBridge bridge)
-                  AnimatedBuilder(
-                    animation: widget.controller,
-                    builder: (BuildContext context, Widget? child) =>
-                        switch (widget.controller.selectedMeeting) {
-                      final MeetingDetail meeting => IconButton(
-                          tooltip: l10n.chatAboutThisMeeting,
-                          icon: const Icon(Icons.chat_outlined),
-                          onPressed: () => openChat(context,
-                              bridge: bridge,
-                              topic:
-                                  ChatTopic.meeting(meeting.summary.meetingId),
-                              title: l10n.chat(meeting.summary.title),
-                              openMeeting: _openCitedMeeting,
-                              projectsController: widget.projectsController,
-                              handoff: widget.summariesController?.handoff),
-                        ),
-                      _ => const SizedBox.shrink(),
-                    },
-                  ),
               IconButton(
                 tooltip: l10n.refresh,
                 icon: const Icon(Icons.refresh),
                 onPressed: widget.controller.loadMeetings,
               ),
-              if (isTwoPane)
-                if (widget.speakersScreenBuilder
-                    case final MeetingScreenBuilder builder)
-                  AnimatedBuilder(
-                    animation: widget.controller,
-                    builder: (BuildContext context, Widget? child) =>
-                        switch (widget.controller.selectedMeetingId) {
-                      final String meetingId
-                          when widget.controller.selectedMeeting != null =>
-                        NameSpeakersButton(
-                          controller: widget.controller,
-                          meetingId: meetingId,
-                          speakersScreenBuilder: builder,
-                        ),
-                      _ => const SizedBox.shrink(),
-                    },
-                  ),
-              if (isTwoPane)
-                if (widget.exportController
-                    case final MeetingExportController exportController)
-                  AnimatedBuilder(
-                    animation: widget.controller,
-                    builder: (BuildContext context, Widget? child) =>
-                        switch (widget.controller.selectedMeetingId) {
-                      final String meetingId
-                          when widget.controller.selectedMeeting != null =>
-                        ExportMeetingButton(
-                          meetingController: widget.controller,
-                          exportController: exportController,
-                          meetingId: meetingId,
-                        ),
-                      _ => const SizedBox.shrink(),
-                    },
-                  ),
-              if (isTwoPane)
-                if (widget.photoScreenBuilder
-                    case final MeetingScreenBuilder builder)
-                  AnimatedBuilder(
-                    animation: widget.controller,
-                    builder: (BuildContext context, Widget? child) =>
-                        switch (widget.controller.selectedMeetingId) {
-                      final String meetingId
-                          when widget.controller.selectedMeeting != null =>
-                        TakePhotosButton(
-                          controller: widget.controller,
-                          meetingId: meetingId,
-                          photoScreenBuilder: builder,
-                        ),
-                      _ => const SizedBox.shrink(),
-                    },
-                  ),
-              if (isTwoPane)
-                if (widget.attachmentsController
-                    case final MeetingAttachmentsController
-                        attachmentsController)
-                  AnimatedBuilder(
-                    animation: widget.controller,
-                    builder: (BuildContext context, Widget? child) =>
-                        switch (widget.controller.selectedMeetingId) {
-                      final String meetingId
-                          when widget.controller.selectedMeeting != null =>
-                        AttachFilesButton(
-                          controller: widget.controller,
-                          attachmentsController: attachmentsController,
-                          meetingId: meetingId,
-                        ),
-                      _ => const SizedBox.shrink(),
-                    },
-                  ),
-              if (isTwoPane)
-                if (widget.projectsController
-                    case final ProjectsController projectsController)
-                  AnimatedBuilder(
-                    animation: widget.controller,
-                    builder: (BuildContext context, Widget? child) =>
-                        switch (widget.controller.selectedMeetingId) {
-                      final String meetingId
-                          when widget.controller.selectedMeeting != null =>
-                        MoveToProjectButton(
-                          controller: projectsController,
-                          meetingId: meetingId,
-                        ),
-                      _ => const SizedBox.shrink(),
-                    },
-                  ),
             ],
           ),
           body: isTwoPane
@@ -351,12 +245,20 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                       child: meetingList,
                     ),
                     Expanded(
+                        // The meeting's actions are in its own header (#201).
                         child: MeetingDetailView(
                             controller: widget.controller,
                             editController: widget.editController,
                             speakerRenamer: widget.speakerRenamer,
                             recordingsBridge: widget.recordingsBridge,
-                            exportController: widget.exportController)),
+                            exportController: widget.exportController,
+                            chatBridge: widget.chatBridge,
+                            openCitedMeeting: _openCitedMeeting,
+                            summariesController: widget.summariesController,
+                            speakersScreenBuilder: widget.speakersScreenBuilder,
+                            photoScreenBuilder: widget.photoScreenBuilder,
+                            attachmentsController: widget.attachmentsController,
+                            projectsController: widget.projectsController)),
                   ],
                 )
               : meetingList,

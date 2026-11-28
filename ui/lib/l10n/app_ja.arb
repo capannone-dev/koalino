@@ -894,5 +894,12 @@
   "recordingNow": "録音中",
   "pausedNow": "一時停止中",
   "recordAMeeting": "会議を録音",
-  "voicesAppearAfterRecording": "録音後、Koalino が認識できない声がここに表示され、名前を付けられます。"
+  "voicesAppearAfterRecording": "録音後、Koalino が認識できない声がここに表示され、名前を付けられます。",
+  "askAi": "AI に質問",
+  "shareAction": "共有",
+  "moreActions": "その他の操作",
+  "files": "ファイル",
+  "noFilesYet": "写真やファイルはまだありません。会議中に撮った写真や添付したファイルがここに表示されます。",
+  "summariesNeedAnAi": "要約は接続した AI が作成します。この端末のモデル、Claude や ChatGPT のプラン、またはオンラインサービスです。",
+  "addAnAiConnection": "AI 接続を追加"
 }

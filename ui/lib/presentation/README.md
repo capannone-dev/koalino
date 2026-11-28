@@ -273,3 +273,11 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   platform's copies are released whether the files were added or the sheet dismissed. While a
   summary hand-off waits (#114), shared text is first offered as 'Save as the summary of
   "<title>"' or 'Add to a project instead'.
+
+**Meeting page layout (#201).** `meeting_detail_screen.dart` lays out a meeting the same way on phones and in the
+desktop's second pane: a header with the title, when and how long, languages and devices, and at most three actions
+(Ask AI, a chat about the meeting; Share or Export; and More, holding Name speakers, Move to project, Rename, Split and
+Delete), then the tabs Summary · Transcript · Notes · Files. The recording player stays docked under every tab. Summary
+is `MeetingSummaryScreen(embedded: true)`, which offers Add an AI connection when there is none; Files lists every
+photo and document with Take photos and Attach files. The page opens on Summary when the meeting has one, otherwise
+(or when opened at a moment, from search or a chat citation) on Transcript.

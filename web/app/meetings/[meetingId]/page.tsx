@@ -1,10 +1,10 @@
-// Renders one meeting's renamable title, when it was created and the languages it was transcribed
-// in, the devices it was recorded on with a Split action (#88), its project (Issue #85), its AI
-// summary (#95), notes and editable transcript (#96), a chat about it (#97), its kept recording
-// with a player the transcript follows (#140, #197), and metadata-only
-// attachment list from Axum.
+// Renders one meeting: a header with its renamable title, when it was created and the languages it
+// was transcribed in, the devices it was recorded on with a Split action (#88), its project (#85)
+// and Ask AI, a chat about it (#97); then the tabs (#201) Summary (#95), Transcript (#96), Notes
+// (#96) and Files, with the kept recording's player (#140, #197) docked under every tab.
 
 import { ChatPanel } from "@/components/chat-panel";
+import { MeetingAskAi, MeetingTabs } from "@/components/meeting-tabs";
 import { MeetingTitleHeader } from "@/components/meeting-title-header";
 import { MeetingProjectPicker } from "@/components/meeting-project-picker";
 import { MeetingRecordedOn } from "@/components/meeting-recorded-on";
@@ -46,27 +46,46 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       </p>
       {languages === null ? null : <p className="text-muted">{languages}</p>}
       <MeetingRecordedOn meeting={meeting} />
-      <MeetingSummaryPanel
-        meetingId={meeting.meeting_id}
-        summary={summaryState.summary}
-        meetingPrompt={summaryState.meeting_prompt}
-        connections={llmSettings?.connections ?? null}
-        defaultTemplate={llmSettings?.template ?? ""}
-      />
-      <MeetingNotes meetingId={meeting.meeting_id} notes={notes} />
-      <ChatPanel topic={{ scope: "meeting", id: meeting.meeting_id }} heading={t("chatAboutThisMeeting")} />
+      <MeetingAskAi>
+        <ChatPanel topic={{ scope: "meeting", id: meeting.meeting_id }} heading={t("chatAboutThisMeeting")} />
+      </MeetingAskAi>
       <RecordingPlaybackProvider meetingId={meeting.meeting_id}>
-        <h2>{t("transcript")}</h2>
-        <MeetingTranscript meetingId={meeting.meeting_id} segments={meeting.segments} transcript={meeting.transcript} />
-        {/* After the transcript, so it sticks to the bottom of the window while the transcript scrolls. */}
+        <MeetingTabs
+          // A meeting with a summary opens on it; one without opens on its transcript.
+          initial={summaryState.summary ? "summary" : "transcript"}
+          panels={{
+            summary: (
+              <MeetingSummaryPanel
+                meetingId={meeting.meeting_id}
+                summary={summaryState.summary}
+                meetingPrompt={summaryState.meeting_prompt}
+                connections={llmSettings?.connections ?? null}
+                defaultTemplate={llmSettings?.template ?? ""}
+              />
+            ),
+            transcript: (
+              <MeetingTranscript meetingId={meeting.meeting_id} segments={meeting.segments} transcript={meeting.transcript} />
+            ),
+            notes: <MeetingNotes meetingId={meeting.meeting_id} notes={notes} />,
+            files:
+              meeting.attachments.length === 0 ? (
+                <p className="text-muted">{t("noFilesYet")}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {meeting.attachments.map((attachment) => (
+                    <li key={attachment.attachment_id}>
+                      {/* The file's name, not its path on the recording device (#211). */}
+                      <span className="font-medium">{attachment.file_path.split(/[\\/]/).pop()}</span>{" "}
+                      <span className="text-sm text-muted">{attachment.mime_type}</span>
+                    </li>
+                  ))}
+                </ul>
+              )
+          }}
+        />
+        {/* After the tabs, so it sticks to the bottom of the window under every tab. */}
         <MeetingRecordingPlayer title={meeting.title} />
       </RecordingPlaybackProvider>
-      <h2>{t("attachments")}</h2>
-      <ul>
-        {meeting.attachments.map((attachment) => (
-          <li key={attachment.attachment_id}>{attachment.file_path} ({attachment.mime_type})</li>
-        ))}
-      </ul>
     </section>
   );
 }

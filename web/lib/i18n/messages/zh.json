@@ -576,5 +576,9 @@
   "detailsForTheAdministrator": "管理员详细信息",
   "people": "人员",
   "meetingsAppearOnceSynced": "在手机或电脑上用 Koalino 录制的会议同步后会显示在这里。",
-  "pairADevice": "配对设备"
+  "pairADevice": "配对设备",
+  "askAi": "问 AI",
+  "files": "文件",
+  "meetingSections": "会议各部分",
+  "noFilesYet": "还没有照片或文件。会议中拍的照片和附加的文件会显示在这里。"
 }

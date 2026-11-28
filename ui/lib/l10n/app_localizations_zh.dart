@@ -3186,4 +3186,26 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voicesAppearAfterRecording => '录音后，Koalino 无法识别的声音会显示在这里，供你命名。';
+
+  @override
+  String get askAi => '问 AI';
+
+  @override
+  String get shareAction => '分享';
+
+  @override
+  String get moreActions => '更多操作';
+
+  @override
+  String get files => '文件';
+
+  @override
+  String get noFilesYet => '还没有照片或文件。会议中拍的照片和附加的文件会显示在这里。';
+
+  @override
+  String get summariesNeedAnAi =>
+      '摘要由你连接的 AI 撰写：本设备上的模型、你的 Claude 或 ChatGPT 套餐，或在线服务。';
+
+  @override
+  String get addAnAiConnection => '添加 AI 连接';
 }

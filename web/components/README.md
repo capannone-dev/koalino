@@ -130,3 +130,8 @@ section marked (`aria-current`); under 640 px it is a bar fixed to the bottom of
 `icons.tsx` (#205, #207) holds the web's icon set, Material icons drawn inline, the same symbols as
 the app. `live-status.tsx` shows whether live updates arrive as a dot in the header; the home page
 now opens the meetings.
+
+`meeting-tabs.tsx` (#201) gives the meeting page its tabs, Summary · Transcript · Notes · Files (an ARIA tab list
+with arrow keys; hidden panels stay mounted, so an unsaved note survives a switch), and `MeetingAskAi`, the button
+that opens the chat about the meeting. The page puts the recording player after the tabs, so it stays docked under
+each of them.

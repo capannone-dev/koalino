@@ -894,5 +894,12 @@
   "recordingNow": "正在录音",
   "pausedNow": "已暂停",
   "recordAMeeting": "录制会议",
-  "voicesAppearAfterRecording": "录音后，Koalino 无法识别的声音会显示在这里，供你命名。"
+  "voicesAppearAfterRecording": "录音后，Koalino 无法识别的声音会显示在这里，供你命名。",
+  "askAi": "问 AI",
+  "shareAction": "分享",
+  "moreActions": "更多操作",
+  "files": "文件",
+  "noFilesYet": "还没有照片或文件。会议中拍的照片和附加的文件会显示在这里。",
+  "summariesNeedAnAi": "摘要由你连接的 AI 撰写：本设备上的模型、你的 Claude 或 ChatGPT 套餐，或在线服务。",
+  "addAnAiConnection": "添加 AI 连接"
 }

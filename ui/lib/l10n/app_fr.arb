@@ -894,5 +894,12 @@
   "recordingNow": "Enregistrement",
   "pausedNow": "En pause",
   "recordAMeeting": "Enregistrer une réunion",
-  "voicesAppearAfterRecording": "Après un enregistrement, les voix que Koalino ne reconnaît pas apparaissent ici pour que vous puissiez les nommer."
+  "voicesAppearAfterRecording": "Après un enregistrement, les voix que Koalino ne reconnaît pas apparaissent ici pour que vous puissiez les nommer.",
+  "askAi": "Demander à l'IA",
+  "shareAction": "Partager",
+  "moreActions": "Plus d'actions",
+  "files": "Fichiers",
+  "noFilesYet": "Pas encore de photos ni de fichiers. Les photos prises pendant une réunion et les fichiers joints apparaissent ici.",
+  "summariesNeedAnAi": "Les résumés sont rédigés par une IA que vous connectez : un modèle sur cet appareil, votre abonnement Claude ou ChatGPT, ou un service en ligne.",
+  "addAnAiConnection": "Ajouter une connexion IA"
 }

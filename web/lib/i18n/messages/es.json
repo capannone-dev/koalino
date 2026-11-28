@@ -580,5 +580,9 @@
   "detailsForTheAdministrator": "Detalles para el administrador",
   "people": "Personas",
   "meetingsAppearOnceSynced": "Las reuniones grabadas con Koalino en tu teléfono u ordenador aparecen aquí en cuanto se sincronizan.",
-  "pairADevice": "Vincular un dispositivo"
+  "pairADevice": "Vincular un dispositivo",
+  "askAi": "Preguntar a la IA",
+  "files": "Archivos",
+  "meetingSections": "Secciones de la reunión",
+  "noFilesYet": "Aún no hay fotos ni archivos. Aquí aparecen las fotos tomadas durante la reunión y los archivos adjuntos."
 }

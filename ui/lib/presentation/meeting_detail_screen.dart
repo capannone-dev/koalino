@@ -43,10 +43,6 @@ typedef MeetingScreenBuilder = Widget Function(
 /// Widest the detail content grows, in logical pixels, so transcript lines stay readable.
 const double _maxReadableWidth = 840;
 
-/// Below this width (logical pixels: phones, narrow windows) the meeting's actions get their own
-/// row under the title instead of sharing the title's row.
-const double _actionsBesideTitleMinWidth = 600;
-
 /// Shows one meeting as a full screen; used on phones, where the list pushes it as a route.
 final class MeetingDetailScreen extends StatefulWidget {
   /// Creates a screen that selects and renders `meetingId` through `controller`.
@@ -146,94 +142,24 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final List<Widget> actions = <Widget>[
-      if (widget.chatBridge case final ChatBridge bridge)
-        IconButton(
-          tooltip: l10n.chatAboutThisMeeting,
-          icon: const Icon(Icons.chat_outlined),
-          onPressed: () => openChat(context,
-              bridge: bridge,
-              topic: ChatTopic.meeting(widget.meetingId),
-              title: l10n.chat(
-                  widget.controller.selectedMeeting?.summary.title ??
-                      'meeting'),
-              openMeeting: _openCitedMeeting,
-              projectsController: widget.projectsController,
-              handoff: widget.summariesController?.handoff),
-        ),
-      if (widget.summariesController case final SummariesController summaries)
-        ListenableBuilder(
-          listenable: widget.controller,
-          builder: (BuildContext context, Widget? child) =>
-              MeetingSummaryButton(
-            controller: summaries,
-            meetingId: widget.meetingId,
-            title: widget.controller.selectedMeeting?.summary.title ??
-                l10n.thisMeeting,
-          ),
-        ),
-      if (widget.speakersScreenBuilder case final MeetingScreenBuilder builder)
-        NameSpeakersButton(
-          controller: widget.controller,
-          meetingId: widget.meetingId,
-          speakersScreenBuilder: builder,
-        ),
-      if (widget.exportController
-          case final MeetingExportController exportController)
-        ExportMeetingButton(
-          meetingController: widget.controller,
-          exportController: exportController,
-          meetingId: widget.meetingId,
-        ),
-      if (widget.photoScreenBuilder case final MeetingScreenBuilder builder)
-        TakePhotosButton(
-          controller: widget.controller,
-          meetingId: widget.meetingId,
-          photoScreenBuilder: builder,
-        ),
-      if (widget.attachmentsController
-          case final MeetingAttachmentsController attachmentsController)
-        AttachFilesButton(
-          controller: widget.controller,
-          attachmentsController: attachmentsController,
-          meetingId: widget.meetingId,
-        ),
-      if (widget.projectsController
-          case final ProjectsController projectsController)
-        MoveToProjectButton(
-          controller: projectsController,
-          meetingId: widget.meetingId,
-        ),
-    ];
-    // Up to eight actions do not fit beside the title on a phone: the app bar would slide them
-    // over the back button. There they get a row of their own, scrolling sideways if needed.
-    final bool narrow =
-        MediaQuery.sizeOf(context).width < _actionsBesideTitleMinWidth;
+    // The meeting's actions sit in the page header, the same on phones and in two panes (#201).
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.meeting2),
-        actions: narrow ? null : actions,
-        bottom: narrow && actions.isNotEmpty
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(kMinInteractiveDimension),
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsetsDirectional.only(end: 4),
-                    child: Row(children: actions),
-                  ),
-                ),
-              )
-            : null,
-      ),
+      appBar: AppBar(title: Text(l10n.meeting2)),
       body: MeetingDetailView(
-          controller: widget.controller,
-          editController: widget.editController,
-          speakerRenamer: widget.speakerRenamer,
-          recordingsBridge: widget.recordingsBridge,
-          exportController: widget.exportController,
-          focusStartMs: widget.focusStartMs),
+        controller: widget.controller,
+        editController: widget.editController,
+        speakerRenamer: widget.speakerRenamer,
+        recordingsBridge: widget.recordingsBridge,
+        exportController: widget.exportController,
+        focusStartMs: widget.focusStartMs,
+        chatBridge: widget.chatBridge,
+        openCitedMeeting: _openCitedMeeting,
+        summariesController: widget.summariesController,
+        speakersScreenBuilder: widget.speakersScreenBuilder,
+        photoScreenBuilder: widget.photoScreenBuilder,
+        attachmentsController: widget.attachmentsController,
+        projectsController: widget.projectsController,
+      ),
     );
   }
 }
@@ -249,6 +175,7 @@ final class TakePhotosButton extends StatelessWidget {
     required this.controller,
     required this.meetingId,
     required this.photoScreenBuilder,
+    this.labelled = false,
     super.key,
   });
 
@@ -256,18 +183,23 @@ final class TakePhotosButton extends StatelessWidget {
   final String meetingId;
   final MeetingScreenBuilder photoScreenBuilder;
 
+  /// Shows the words beside the icon, as in the Files tab (#201).
+  final bool labelled;
+
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: l10n.takePhotos,
-      icon: const Icon(Icons.photo_camera_outlined),
-      onPressed: () async {
-        await Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (BuildContext context) =>
-                photoScreenBuilder(context, meetingId)));
-        await controller.selectMeeting(meetingId);
-      },
-    );
+    Future<void> open() async {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (BuildContext context) =>
+              photoScreenBuilder(context, meetingId)));
+      await controller.selectMeeting(meetingId);
+    }
+
+    const Icon icon = Icon(Icons.photo_camera_outlined);
+    return labelled
+        ? OutlinedButton.icon(
+            onPressed: open, icon: icon, label: Text(l10n.takePhotos))
+        : IconButton(tooltip: l10n.takePhotos, icon: icon, onPressed: open);
   }
 }
 
@@ -283,6 +215,7 @@ final class AttachFilesButton extends StatelessWidget {
     required this.controller,
     required this.attachmentsController,
     required this.meetingId,
+    this.labelled = false,
     super.key,
   });
 
@@ -290,27 +223,34 @@ final class AttachFilesButton extends StatelessWidget {
   final MeetingAttachmentsController attachmentsController;
   final String meetingId;
 
+  /// Shows the words beside the icon, as in the Files tab (#201).
+  final bool labelled;
+
   @override
   Widget build(BuildContext context) {
+    Future<void> attach() async {
+      final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+      final String? message =
+          await attachmentsController.attachFiles(meetingId);
+      if (message == null) {
+        return;
+      }
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+      await controller.selectMeeting(meetingId);
+    }
+
     return ListenableBuilder(
       listenable: attachmentsController,
-      builder: (BuildContext context, Widget? child) => IconButton(
-        tooltip: l10n.attachFiles,
-        icon: const Icon(Icons.attach_file),
-        onPressed: attachmentsController.isAttaching
-            ? null
-            : () async {
-                final ScaffoldMessengerState messenger =
-                    ScaffoldMessenger.of(context);
-                final String? message =
-                    await attachmentsController.attachFiles(meetingId);
-                if (message == null) {
-                  return;
-                }
-                messenger.showSnackBar(SnackBar(content: Text(message)));
-                await controller.selectMeeting(meetingId);
-              },
-      ),
+      builder: (BuildContext context, Widget? child) {
+        final VoidCallback? onPressed =
+            attachmentsController.isAttaching ? null : attach;
+        const Icon icon = Icon(Icons.attach_file);
+        return labelled
+            ? OutlinedButton.icon(
+                onPressed: onPressed, icon: icon, label: Text(l10n.attachFiles))
+            : IconButton(
+                tooltip: l10n.attachFiles, icon: icon, onPressed: onPressed);
+      },
     );
   }
 }
@@ -330,12 +270,17 @@ final class ExportMeetingButton extends StatelessWidget {
     required this.meetingController,
     required this.exportController,
     required this.meetingId,
+    this.labelled = false,
     super.key,
   });
 
   final MeetingListController meetingController;
   final MeetingExportController exportController;
   final String meetingId;
+
+  /// Shows a labelled button (Share where the device can share, Export otherwise) instead of
+  /// the icon, as in the meeting page's header (#201).
+  final bool labelled;
 
   @override
   Widget build(BuildContext context) {
@@ -345,10 +290,27 @@ final class ExportMeetingButton extends StatelessWidget {
           PopupMenuButton<(MeetingExportFormat, bool)>(
         tooltip: l10n.export,
         enabled: !exportController.isExporting,
-        icon: exportController.isExporting
-            ? const SizedBox.square(
-                dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Icon(Icons.file_download_outlined),
+        icon: labelled
+            ? null
+            : exportController.isExporting
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.file_download_outlined),
+        // The menu button handles the tap; the button inside only looks like one.
+        child: labelled
+            ? IgnorePointer(
+                child: OutlinedButton.icon(
+                  onPressed: exportController.isExporting ? null : () {},
+                  icon: Icon(exportController.canShare
+                      ? Icons.share_outlined
+                      : Icons.file_download_outlined),
+                  label: Text(exportController.canShare
+                      ? l10n.shareAction
+                      : l10n.export),
+                ),
+              )
+            : null,
         onSelected: ((MeetingExportFormat, bool) choice) =>
             _export(context, choice.$1, share: choice.$2),
         itemBuilder: (BuildContext context) =>
@@ -431,10 +393,35 @@ final class MeetingDetailView extends StatelessWidget {
       this.recordingsBridge,
       this.exportController,
       this.focusStartMs,
+      this.chatBridge,
+      this.openCitedMeeting,
+      this.summariesController,
+      this.speakersScreenBuilder,
+      this.photoScreenBuilder,
+      this.attachmentsController,
+      this.projectsController,
       super.key});
 
   final MeetingListController controller;
   final MeetingEditController? editController;
+
+  /// Adds Ask AI (a chat about this meeting) when given (#97, #201); answers citing another
+  /// meeting open it through `openCitedMeeting`.
+  final ChatBridge? chatBridge;
+  final ChatMeetingOpener? openCitedMeeting;
+
+  /// Adds the Summary tab when given (#95, #201).
+  final SummariesController? summariesController;
+
+  /// Adds Name speakers to the More menu when given.
+  final MeetingScreenBuilder? speakersScreenBuilder;
+
+  /// Add Take photos and Attach files to the Files tab when given (#54).
+  final MeetingScreenBuilder? photoScreenBuilder;
+  final MeetingAttachmentsController? attachmentsController;
+
+  /// Adds Move to project to the More menu when given (#85).
+  final ProjectsController? projectsController;
 
   /// Lets the owner rename speakers from the transcript when given (#186).
   final SpeakerRenamer? speakerRenamer;
@@ -475,26 +462,36 @@ final class MeetingDetailView extends StatelessWidget {
                   meeting: meeting,
                   exportController: exportController,
                   contentBuilder: (RecordingPlayerController? player) =>
-                      _MeetingContent(
-                          controller: controller,
-                          meeting: meeting,
-                          editController: editController,
-                          speakerRenamer: speakerRenamer,
-                          player: player,
-                          focusStartMs: focusStartMs),
+                      _content(meeting, player),
                 ),
-              null => _MeetingContent(
-                  controller: controller,
-                  meeting: meeting,
-                  editController: editController,
-                  speakerRenamer: speakerRenamer,
-                  focusStartMs: focusStartMs),
+              null => _content(meeting, null),
             },
           null => Center(child: Text(l10n.selectAMeetingToSeeIts)),
         };
       },
     );
   }
+
+  /// The tabbed page of `meeting`, with the player's passage marks when there is a player.
+  Widget _content(MeetingDetail meeting, RecordingPlayerController? player) =>
+      _MeetingContent(
+        // Another meeting starts on its own first tab.
+        key: ValueKey<String>('content-${meeting.summary.meetingId}'),
+        controller: controller,
+        meeting: meeting,
+        editController: editController,
+        speakerRenamer: speakerRenamer,
+        player: player,
+        focusStartMs: focusStartMs,
+        exportController: exportController,
+        chatBridge: chatBridge,
+        openCitedMeeting: openCitedMeeting,
+        summariesController: summariesController,
+        speakersScreenBuilder: speakersScreenBuilder,
+        photoScreenBuilder: photoScreenBuilder,
+        attachmentsController: attachmentsController,
+        projectsController: projectsController,
+      );
 }
 
 /// Owns a meeting's recording player (#197): the transcript above, the player bar below.
@@ -613,7 +610,8 @@ final class _MeetingWithPlayerState extends State<_MeetingWithPlayer> {
   }
 }
 
-/// Lays out the title header (with its rename action), metadata, and transcript of a meeting.
+/// Lays out a meeting (#201): a header with the title, when it happened and at most three
+/// actions (Ask AI, Share, More), then the tabs Summary · Transcript · Notes · Files.
 final class _MeetingContent extends StatelessWidget {
   const _MeetingContent(
       {required this.controller,
@@ -621,7 +619,25 @@ final class _MeetingContent extends StatelessWidget {
       this.editController,
       this.speakerRenamer,
       this.player,
-      this.focusStartMs});
+      this.focusStartMs,
+      this.exportController,
+      this.chatBridge,
+      this.openCitedMeeting,
+      this.summariesController,
+      this.speakersScreenBuilder,
+      this.photoScreenBuilder,
+      this.attachmentsController,
+      this.projectsController,
+      super.key});
+
+  final MeetingExportController? exportController;
+  final ChatBridge? chatBridge;
+  final ChatMeetingOpener? openCitedMeeting;
+  final SummariesController? summariesController;
+  final MeetingScreenBuilder? speakersScreenBuilder;
+  final MeetingScreenBuilder? photoScreenBuilder;
+  final MeetingAttachmentsController? attachmentsController;
+  final ProjectsController? projectsController;
 
   final MeetingListController controller;
   final MeetingDetail meeting;
@@ -654,6 +670,164 @@ final class _MeetingContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final MeetingSummary summary = meeting.summary;
+    final SummariesController? summaries = summariesController;
+    final MeetingEditController? edits = editController;
+    final List<(Tab, Widget)> tabs = <(Tab, Widget)>[
+      if (summaries != null)
+        (
+          Tab(key: meetingSummaryTabKey, text: l10n.summary),
+          MeetingSummaryScreen(
+            controller: summaries,
+            meetingId: summary.meetingId,
+            title: summary.title,
+            embedded: true,
+          ),
+        ),
+      (
+        Tab(key: meetingTranscriptTabKey, text: l10n.transcript),
+        _transcriptTab(context, theme),
+      ),
+      if (edits != null)
+        (
+          Tab(key: meetingNotesTabKey, text: l10n.notes),
+          ReadableWidth(
+            maxWidth: _maxReadableWidth,
+            builder: (BuildContext context, EdgeInsets padding) => ListView(
+              padding: padding,
+              children: <Widget>[
+                MeetingNotesSection(
+                    controller: edits, meetingId: summary.meetingId),
+              ],
+            ),
+          ),
+        ),
+      (
+        Tab(key: meetingFilesTabKey, text: l10n.files),
+        _filesTab(context, theme),
+      ),
+    ];
+    // A meeting with a summary opens on it; one opened at a moment (search, a chat citation)
+    // opens on its transcript, as does a meeting without a summary yet.
+    final bool opensOnSummary = summaries != null &&
+        focusStartMs == null &&
+        summaries.stateFor(summary.meetingId)?.summary != null;
+    return DefaultTabController(
+      length: tabs.length,
+      initialIndex: opensOnSummary || summaries == null ? 0 : 1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          ReadableWidth(
+            maxWidth: _maxReadableWidth,
+            builder: (BuildContext context, EdgeInsets padding) => Padding(
+              padding: padding.copyWith(bottom: 0),
+              child: _header(context, theme),
+            ),
+          ),
+          TabBar(tabs: <Widget>[for (final (Tab tab, _) in tabs) tab]),
+          Expanded(
+            child: TabBarView(
+                children: <Widget>[for (final (_, Widget page) in tabs) page]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The title, when and how long, where it was recorded, and the actions.
+  Widget _header(BuildContext context, ThemeData theme) {
+    final MeetingSummary summary = meeting.summary;
+    final TextStyle? quiet = theme.textTheme.bodyMedium
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final List<String> details = <String>[
+      formatMeetingWhen(summary.createdAt),
+      formatMeetingDuration(summary.durationMs),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Semantics(
+          header: true,
+          child: Text(
+            summary.title,
+            style: theme.textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(details.join(' · '), style: quiet),
+        if (describeTranscriptionLanguages(summary.transcriptionLanguages)
+            case final String languages)
+          Text(languages, style: quiet),
+        if (summary.recordedOnLabel case final String devices)
+          Row(
+            children: <Widget>[
+              Icon(Icons.devices_outlined,
+                  size: 18, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(child: Text(l10n.recordedOn(devices), style: quiet)),
+            ],
+          ),
+        if (summary.combining case final MeetingCombining combining)
+          Padding(
+            key: const ValueKey<String>('meeting-combining'),
+            padding: const EdgeInsets.only(top: 2),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(combiningIcon(combining.state),
+                    size: 18, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    combining.description,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            if (chatBridge case final ChatBridge bridge)
+              FilledButton.tonalIcon(
+                key: meetingAskAiKey,
+                icon: const Icon(Icons.auto_awesome_outlined),
+                label: Text(l10n.askAi),
+                onPressed: () => openChat(context,
+                    bridge: bridge,
+                    topic: ChatTopic.meeting(summary.meetingId),
+                    title: l10n.chat(summary.title),
+                    openMeeting: openCitedMeeting,
+                    projectsController: projectsController,
+                    handoff: summariesController?.handoff),
+              ),
+            if (exportController case final MeetingExportController exports)
+              ExportMeetingButton(
+                meetingController: controller,
+                exportController: exports,
+                meetingId: summary.meetingId,
+                labelled: true,
+              ),
+            _MoreMenu(
+              controller: controller,
+              meeting: summary,
+              speakersScreenBuilder: speakersScreenBuilder,
+              projectsController: projectsController,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// The transcript, with photos and documents where they were taken.
+  Widget _transcriptTab(BuildContext context, ThemeData theme) {
     // The list fills the pane so the wheel scrolls anywhere across it (#142).
     final Widget content = ReadableWidth(
       maxWidth: _maxReadableWidth,
@@ -665,122 +839,15 @@ final class _MeetingContent extends StatelessWidget {
             ? null
             : const ScrollCacheExtent.pixels(double.maxFinite),
         children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    summary.title,
-                    style: theme.textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: l10n.renameMeeting,
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () => showRenameMeetingDialog(
-                  context,
-                  controller: controller,
-                  meeting: summary,
-                ),
-              ),
-              IconButton(
-                key: const ValueKey<String>('delete-open-meeting'),
-                tooltip: l10n.deleteMeeting,
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () async {
-                  final NavigatorState navigator = Navigator.of(context);
-                  final bool deleted = await deleteMeetingAfterAsking(
-                    context,
-                    controller: controller,
-                    meeting: summary,
-                  );
-                  // On a phone the detail is a page of its own; in two panes it empties.
-                  if (deleted && navigator.mounted) {
-                    await navigator.maybePop();
-                  }
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${formatMeetingWhen(summary.createdAt)} · '
-            '${formatMeetingDuration(summary.durationMs)}',
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          if (describeTranscriptionLanguages(summary.transcriptionLanguages)
-              case final String languages)
-            Text(
-              languages,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          if (summary.recordedOnLabel case final String devices)
-            Row(
-              children: <Widget>[
-                Icon(Icons.devices_outlined,
-                    size: 18, color: theme.colorScheme.onSurfaceVariant),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    l10n.recordedOn(devices),
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ),
-                TextButton.icon(
-                  key: const ValueKey<String>('split-open-meeting'),
-                  icon: const Icon(Icons.call_split),
-                  label: Text(l10n.split),
-                  onPressed: () => splitMeetingAfterAsking(
-                    context,
-                    controller: controller,
-                    meeting: summary,
-                  ),
-                ),
-              ],
-            ),
-          if (summary.combining case final MeetingCombining combining)
-            Padding(
-              key: const ValueKey<String>('meeting-combining'),
-              padding: const EdgeInsets.only(top: 2, bottom: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Icon(combiningIcon(combining.state),
-                      size: 18, color: theme.colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      combining.description,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const Divider(height: 32),
-          if (editController
-              case final MeetingEditController edits) ...<Widget>[
-            MeetingNotesSection(
-                controller: edits, meetingId: summary.meetingId),
-            const Divider(height: 32),
-          ],
-          Text(l10n.transcript, style: theme.textTheme.titleMedium),
-          if (editController != null && meeting.segments.isNotEmpty)
+          if (editController != null &&
+              meeting.segments.isNotEmpty) ...<Widget>[
             Text(
               l10n.longPressOrRightClickA,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
           ..._transcriptChildren(theme),
         ],
       ),
@@ -799,6 +866,59 @@ final class _MeetingContent extends StatelessWidget {
         return false;
       },
       child: content,
+    );
+  }
+
+  /// Every photo and document of the meeting, with the buttons that add more.
+  Widget _filesTab(BuildContext context, ThemeData theme) {
+    final List<MeetingAttachment> attachments = meeting.attachments;
+    final List<MeetingAttachment> photos = <MeetingAttachment>[
+      for (final MeetingAttachment attachment in attachments)
+        if (attachment.isImage) attachment,
+    ];
+    final String meetingId = meeting.summary.meetingId;
+    return ReadableWidth(
+      maxWidth: _maxReadableWidth,
+      builder: (BuildContext context, EdgeInsets padding) => ListView(
+        padding: padding,
+        children: <Widget>[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              if (photoScreenBuilder case final MeetingScreenBuilder builder)
+                TakePhotosButton(
+                  controller: controller,
+                  meetingId: meetingId,
+                  photoScreenBuilder: builder,
+                  labelled: true,
+                ),
+              if (attachmentsController
+                  case final MeetingAttachmentsController attachments)
+                AttachFilesButton(
+                  controller: controller,
+                  attachmentsController: attachments,
+                  meetingId: meetingId,
+                  labelled: true,
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (attachments.isEmpty)
+            Text(
+              l10n.noFilesYet,
+              style: theme.textTheme.bodyLarge
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            )
+          else
+            for (final MeetingAttachment attachment in attachments)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: MeetingAttachmentView(
+                    attachment: attachment, photos: photos),
+              ),
+        ],
+      ),
     );
   }
 
@@ -1071,6 +1191,108 @@ final class _FocusedSegmentState extends State<_FocusedSegment> {
 
 /// Tallest a photo is shown in the transcript, in logical pixels.
 const double _maxInlinePhotoHeight = 240;
+
+/// The meeting page's tabs, for tests and for opening one from elsewhere (#201).
+const Key meetingSummaryTabKey = ValueKey<String>('meeting-tab-summary');
+const Key meetingTranscriptTabKey = ValueKey<String>('meeting-tab-transcript');
+const Key meetingNotesTabKey = ValueKey<String>('meeting-tab-notes');
+const Key meetingFilesTabKey = ValueKey<String>('meeting-tab-files');
+
+/// The meeting page's Ask AI button (#201).
+const Key meetingAskAiKey = ValueKey<String>('meeting-ask-ai');
+
+/// The meeting page's More menu (#201).
+const Key meetingMoreKey = ValueKey<String>('meeting-more');
+
+/// What the More menu does.
+enum _MoreChoice { nameSpeakers, moveToProject, rename, split, delete }
+
+/// The meeting's less frequent actions, behind one button (#201): Name speakers, Move to project,
+/// Rename, Split (meetings recorded on several devices) and Delete.
+final class _MoreMenu extends StatelessWidget {
+  const _MoreMenu({
+    required this.controller,
+    required this.meeting,
+    this.speakersScreenBuilder,
+    this.projectsController,
+  });
+
+  final MeetingListController controller;
+  final MeetingSummary meeting;
+  final MeetingScreenBuilder? speakersScreenBuilder;
+  final ProjectsController? projectsController;
+
+  /// Runs `choice`. Side effects: each action's own (opens a page or dialog; Delete closes the
+  /// phone page once the meeting is gone).
+  Future<void> _run(BuildContext context, _MoreChoice choice) async {
+    final String meetingId = meeting.meetingId;
+    switch (choice) {
+      case _MoreChoice.nameSpeakers:
+        if (speakersScreenBuilder case final MeetingScreenBuilder builder) {
+          await Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (BuildContext context) => builder(context, meetingId)));
+          await controller.selectMeeting(meetingId);
+        }
+      case _MoreChoice.moveToProject:
+        if (projectsController case final ProjectsController projects) {
+          await chooseProjectForMeeting(context,
+              controller: projects, meetingId: meetingId);
+        }
+      case _MoreChoice.rename:
+        await showRenameMeetingDialog(context,
+            controller: controller, meeting: meeting);
+      case _MoreChoice.split:
+        await splitMeetingAfterAsking(context,
+            controller: controller, meeting: meeting);
+      case _MoreChoice.delete:
+        final NavigatorState navigator = Navigator.of(context);
+        final bool deleted = await deleteMeetingAfterAsking(context,
+            controller: controller, meeting: meeting);
+        // On a phone the detail is a page of its own; in two panes it empties.
+        if (deleted && navigator.mounted) {
+          await navigator.maybePop();
+        }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    PopupMenuItem<_MoreChoice> item(
+            _MoreChoice value, IconData icon, String label,
+            {Key? key}) =>
+        PopupMenuItem<_MoreChoice>(
+          key: key,
+          value: value,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(icon),
+            title: Text(label),
+          ),
+        );
+    return PopupMenuButton<_MoreChoice>(
+      key: meetingMoreKey,
+      tooltip: l10n.moreActions,
+      icon: const Icon(Icons.more_horiz),
+      onSelected: (_MoreChoice choice) => _run(context, choice),
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<_MoreChoice>>[
+        if (speakersScreenBuilder != null)
+          item(_MoreChoice.nameSpeakers, Icons.record_voice_over_outlined,
+              l10n.nameSpeakers),
+        if (projectsController != null)
+          item(_MoreChoice.moveToProject, Icons.drive_file_move_outline,
+              l10n.moveToProject,
+              key: const ValueKey<String>('move-to-project')),
+        item(_MoreChoice.rename, Icons.edit_outlined, l10n.renameMeeting),
+        if (meeting.recordedOnLabel != null)
+          item(_MoreChoice.split, Icons.call_split, l10n.split,
+              key: const ValueKey<String>('split-open-meeting')),
+        const PopupMenuDivider(),
+        item(_MoreChoice.delete, Icons.delete_outline, l10n.deleteMeeting,
+            key: const ValueKey<String>('delete-open-meeting')),
+      ],
+    );
+  }
+}
 
 /// Shows one attachment in the transcript: a photo as a picture that opens full screen, a
 /// document as its name and type.

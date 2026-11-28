@@ -1,9 +1,10 @@
-// Specifies where the meeting screen's actions go: beside the title on wide screens, and on a row
-// of their own on phones, where up to eight of them would slide over the back button and the
-// title (seen on the Android emulator: Back and Chat overlapped).
+// Specifies where the meeting page's actions go (#201): in the page header, under the title, at
+// most three of them (Ask AI, Share or Export, More), the same on phones and wide windows. Before,
+// up to eight icons crowded the app bar and slid over the back button on phones.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 
 import 'meeting_attachments_test.dart' show pumpDetail;
 
@@ -15,24 +16,22 @@ void _useWidth(WidgetTester tester, double width) {
 }
 
 void main() {
-  testWidgets('on a phone the actions sit on their own row under the title',
-      (WidgetTester tester) async {
-    _useWidth(tester, 360);
-    await pumpDetail(tester);
+  for (final double width in <double>[360, 1000]) {
+    testWidgets(
+        'at $width px the actions sit under the title, not in the app bar',
+        (WidgetTester tester) async {
+      _useWidth(tester, width);
+      await pumpDetail(tester);
 
-    final Rect title = tester.getRect(find.text('Meeting'));
-    final Rect attach = tester.getRect(find.byTooltip('Attach files'));
-    expect(attach.top, greaterThanOrEqualTo(title.bottom));
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('on a wide screen the actions stay beside the title',
-      (WidgetTester tester) async {
-    _useWidth(tester, 1000);
-    await pumpDetail(tester);
-
-    final Rect title = tester.getRect(find.text('Meeting'));
-    final Rect attach = tester.getRect(find.byTooltip('Attach files'));
-    expect(attach.center.dy, closeTo(title.center.dy, 4));
-  });
+      final Rect title = tester.getRect(find.text('Project Sync'));
+      final Rect more = tester.getRect(find.byKey(meetingMoreKey));
+      expect(more.top, greaterThanOrEqualTo(title.bottom));
+      expect(
+          find.descendant(
+              of: find.byType(AppBar), matching: find.byType(IconButton)),
+          findsNothing,
+          reason: 'the app bar keeps only Back and the page name');
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

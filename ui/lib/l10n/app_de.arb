@@ -894,5 +894,12 @@
   "recordingNow": "Aufnahme läuft",
   "pausedNow": "Pausiert",
   "recordAMeeting": "Besprechung aufnehmen",
-  "voicesAppearAfterRecording": "Nach einer Aufnahme erscheinen hier Stimmen, die Koalino nicht erkennt, damit du sie benennen kannst."
+  "voicesAppearAfterRecording": "Nach einer Aufnahme erscheinen hier Stimmen, die Koalino nicht erkennt, damit du sie benennen kannst.",
+  "askAi": "KI fragen",
+  "shareAction": "Teilen",
+  "moreActions": "Weitere Aktionen",
+  "files": "Dateien",
+  "noFilesYet": "Noch keine Fotos oder Dateien. Fotos, die du während einer Besprechung aufnimmst, und angehängte Dateien erscheinen hier.",
+  "summariesNeedAnAi": "Zusammenfassungen schreibt eine KI, die du verbindest: ein Modell auf diesem Gerät, dein Claude- oder ChatGPT-Abo oder ein Onlinedienst.",
+  "addAnAiConnection": "KI-Verbindung hinzufügen"
 }

@@ -576,5 +576,9 @@
   "detailsForTheAdministrator": "管理者向けの詳細",
   "people": "人物",
   "meetingsAppearOnceSynced": "スマートフォンやパソコンの Koalino で録音した会議は、同期されるとここに表示されます。",
-  "pairADevice": "デバイスをペアリング"
+  "pairADevice": "デバイスをペアリング",
+  "askAi": "AI に質問",
+  "files": "ファイル",
+  "meetingSections": "会議のセクション",
+  "noFilesYet": "写真やファイルはまだありません。会議中に撮った写真や添付ファイルがここに表示されます。"
 }

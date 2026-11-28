@@ -580,5 +580,9 @@
   "detailsForTheAdministrator": "Details für die Administration",
   "people": "Personen",
   "meetingsAppearOnceSynced": "Besprechungen, die du mit Koalino auf deinem Telefon oder Computer aufnimmst, erscheinen hier, sobald sie synchronisiert sind.",
-  "pairADevice": "Gerät koppeln"
+  "pairADevice": "Gerät koppeln",
+  "askAi": "KI fragen",
+  "files": "Dateien",
+  "meetingSections": "Bereiche der Besprechung",
+  "noFilesYet": "Noch keine Fotos oder Dateien. Während der Besprechung aufgenommene Fotos und angehängte Dateien erscheinen hier."
 }

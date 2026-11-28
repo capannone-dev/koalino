@@ -3443,4 +3443,27 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get voicesAppearAfterRecording =>
       'После записи здесь появляются голоса, которые Koalino не узнал, чтобы вы могли их назвать.';
+
+  @override
+  String get askAi => 'Спросить ИИ';
+
+  @override
+  String get shareAction => 'Поделиться';
+
+  @override
+  String get moreActions => 'Другие действия';
+
+  @override
+  String get files => 'Файлы';
+
+  @override
+  String get noFilesYet =>
+      'Пока нет фото и файлов. Здесь появятся фото, снятые во время встречи, и прикреплённые файлы.';
+
+  @override
+  String get summariesNeedAnAi =>
+      'Сводки пишет подключённый вами ИИ: модель на этом устройстве, ваш тариф Claude или ChatGPT или онлайн-сервис.';
+
+  @override
+  String get addAnAiConnection => 'Добавить подключение ИИ';
 }

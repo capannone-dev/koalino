@@ -103,6 +103,14 @@ void main() {
   });
 
   group('Name speakers', () {
+    /// Opens the shown meeting's More menu and chooses Name speakers (#201).
+    Future<void> nameSpeakers(WidgetTester tester) async {
+      await tester.tap(find.byKey(meetingMoreKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Name speakers'));
+      await tester.pumpAndSettle();
+    }
+
     /// Stands in for the voice gallery, naming the meeting it was opened for.
     Widget fakeSpeakersScreen(BuildContext context, String meetingId) =>
         Scaffold(appBar: AppBar(), body: Text('Speakers of $meetingId'));
@@ -122,8 +130,7 @@ void main() {
       await tester.tap(find.text('Project Sync'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Name speakers'));
-      await tester.pumpAndSettle();
+      await nameSpeakers(tester);
 
       expect(find.text('Speakers of meeting-titled'), findsOneWidget);
     });
@@ -135,8 +142,7 @@ void main() {
           speakersScreenBuilder: fakeSpeakersScreen);
       await tester.tap(find.text('Project Sync'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Name speakers'));
-      await tester.pumpAndSettle();
+      await nameSpeakers(tester);
 
       await tester.pageBack();
       await tester.pumpAndSettle();
@@ -151,12 +157,11 @@ void main() {
       await pumpMeetingList(tester, oneMeetingBridge(),
           size: const Size(1280, 800),
           speakersScreenBuilder: fakeSpeakersScreen);
-      expect(find.byTooltip('Name speakers'), findsNothing);
+      expect(find.byKey(meetingMoreKey), findsNothing);
 
       await tester.tap(find.text('Project Sync'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Name speakers'));
-      await tester.pumpAndSettle();
+      await nameSpeakers(tester);
 
       expect(find.text('Speakers of meeting-titled'), findsOneWidget);
     });
@@ -166,8 +171,10 @@ void main() {
       await pumpMeetingList(tester, oneMeetingBridge());
       await tester.tap(find.text('Project Sync'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(meetingMoreKey));
+      await tester.pumpAndSettle();
 
-      expect(find.byTooltip('Name speakers'), findsNothing);
+      expect(find.text('Name speakers'), findsNothing);
     });
   });
 
@@ -314,6 +321,8 @@ void main() {
       await tester.tap(find.text('Project Sync'));
       await tester.pumpAndSettle();
 
+      await tester.tap(find.byKey(meetingMoreKey));
+      await tester.pumpAndSettle();
       await tester
           .tap(find.byKey(const ValueKey<String>('delete-open-meeting')));
       await tester.pumpAndSettle();

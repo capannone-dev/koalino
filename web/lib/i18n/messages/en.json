@@ -580,5 +580,9 @@
   "detailsForTheAdministrator": "Details for the administrator",
   "people": "People",
   "meetingsAppearOnceSynced": "Meetings recorded with Koalino on your phone or computer appear here once they sync.",
-  "pairADevice": "Pair a device"
+  "pairADevice": "Pair a device",
+  "askAi": "Ask AI",
+  "files": "Files",
+  "meetingSections": "Meeting sections",
+  "noFilesYet": "No photos or files yet. Photos taken during the meeting and attached files appear here."
 }

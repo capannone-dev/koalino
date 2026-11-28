@@ -77,6 +77,12 @@ Future<AttachmentHarness> pumpDetail(WidgetTester tester) async {
   );
 }
 
+/// Opens the meeting page's Files tab, where the attachment actions are (#201).
+Future<void> openFilesTab(WidgetTester tester) async {
+  await tester.tap(find.byKey(meetingFilesTabKey));
+  await tester.pumpAndSettle();
+}
+
 /// Verifies attachment display and both attachment actions.
 void main() {
   testWidgets(
@@ -94,13 +100,25 @@ void main() {
     expect(find.text('Added after the meeting'), findsOneWidget);
   });
 
+  testWidgets('the Files tab lists every photo and document (#201)',
+      (WidgetTester tester) async {
+    await pumpDetail(tester);
+    await openFilesTab(tester);
+
+    expect(find.text('Photo · 0:30'), findsOneWidget);
+    expect(find.text('agenda.pdf'), findsOneWidget);
+    expect(find.text('Hello team.'), findsNothing,
+        reason: 'the transcript is in its own tab');
+  });
+
   testWidgets('several files are attached at once and the meeting reloads',
       (WidgetTester tester) async {
     final AttachmentHarness harness = await pumpDetail(tester);
     harness.filesPicker.pickedPaths = <String>['/tmp/a.pdf', '/tmp/b.png'];
     final int loadsBefore = harness.meetingBridge.requestedMeetings.length;
 
-    await tester.tap(find.byTooltip('Attach files'));
+    await openFilesTab(tester);
+    await tester.tap(find.text('Attach files'));
     await tester.pumpAndSettle();
 
     expect(
@@ -117,7 +135,8 @@ void main() {
     harness.filesPicker.pickedPaths = <String>['/tmp/a.pdf', '/tmp/tool.exe'];
     harness.attachmentBridge.failingPaths = <String>{'/tmp/tool.exe'};
 
-    await tester.tap(find.byTooltip('Attach files'));
+    await openFilesTab(tester);
+    await tester.tap(find.text('Attach files'));
     await tester.pumpAndSettle();
 
     expect(
@@ -128,7 +147,8 @@ void main() {
       (WidgetTester tester) async {
     final AttachmentHarness harness = await pumpDetail(tester);
 
-    await tester.tap(find.byTooltip('Attach files'));
+    await openFilesTab(tester);
+    await tester.tap(find.text('Attach files'));
     await tester.pumpAndSettle();
 
     expect(harness.attachmentBridge.requests, isEmpty);
@@ -140,7 +160,8 @@ void main() {
     final AttachmentHarness harness = await pumpDetail(tester);
     final int loadsBefore = harness.meetingBridge.requestedMeetings.length;
 
-    await tester.tap(find.byTooltip('Take photos'));
+    await openFilesTab(tester);
+    await tester.tap(find.text('Take photos'));
     await tester.pumpAndSettle();
     expect(find.text('Camera'), findsOneWidget);
     expect(harness.photoScreenMeetings, <String>['meeting-titled']);

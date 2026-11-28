@@ -5421,6 +5421,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'After a recording, voices Koalino doesn\'t recognise appear here so you can name them.'**
   String get voicesAppearAfterRecording;
+
+  /// Meeting page button that opens a chat about the meeting.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask AI'**
+  String get askAi;
+
+  /// Meeting page button: share the meeting as a file.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get shareAction;
+
+  /// No description provided for @moreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get moreActions;
+
+  /// Meeting page tab with photos and documents.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get files;
+
+  /// No description provided for @noFilesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No photos or files yet. Photos you take during a meeting and files you attach appear here.'**
+  String get noFilesYet;
+
+  /// No description provided for @summariesNeedAnAi.
+  ///
+  /// In en, this message translates to:
+  /// **'Summaries are written by an AI you connect: a model on this device, your Claude or ChatGPT plan, or an online service.'**
+  String get summariesNeedAnAi;
+
+  /// No description provided for @addAnAiConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Add an AI connection'**
+  String get addAnAiConnection;
 }
 
 class _AppLocalizationsDelegate
