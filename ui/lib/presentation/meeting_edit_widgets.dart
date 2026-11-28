@@ -4,6 +4,7 @@
 // widgets only collect the text and show what came back.
 
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/infrastructure/seen_tips_store.dart';
 import 'package:flutter/semantics.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
@@ -274,31 +275,12 @@ final class EditableSegment extends StatelessWidget {
   final MeetingTranscriptSegment segment;
   final Widget child;
 
-  /// Asks for the new text, saves it, and says what happened.
-  ///
-  /// Side effects: Writes the meeting's segments through the controller and shows a snack bar.
-  Future<void> _edit(BuildContext context) async {
-    final ScaffoldMessengerState? messenger =
-        ScaffoldMessenger.maybeOf(context);
-    final String? text = await showDialog<String>(
-      context: context,
-      builder: (BuildContext context) => _SegmentEditDialog(
-        label: l10n.textAt(formatMeetingDuration(segment.startTimeMs)),
-        initialText: segment.text,
-      ),
-    );
-    if (text == null || text == segment.text) {
-      return;
-    }
-    final String? error =
-        await controller.editSegment(meetings, meetingId, segment, text);
-    messenger?.showSnackBar(SnackBar(
-      content: Text(error ??
-          (text.trim().isEmpty
-              ? l10n.removedThisTranscriptWonTBe
-              : l10n.savedThisTranscriptWonTBe)),
-    ));
-  }
+  /// Asks for the new text, saves it, and says what happened (see [correctSegmentAfterAsking]).
+  Future<void> _edit(BuildContext context) => correctSegmentAfterAsking(context,
+      controller: controller,
+      meetings: meetings,
+      meetingId: meetingId,
+      segment: segment);
 
   @override
   Widget build(BuildContext context) {
@@ -315,6 +297,128 @@ final class EditableSegment extends StatelessWidget {
     );
   }
 }
+
+/// Asks for a transcript passage's new text, saves it, and says what happened. Used by the
+/// passage's Correct button (#213) and by long-press or right-click on it.
+///
+/// Inputs: A mounted context, the edit and meeting controllers, the meeting and the passage.
+/// Outputs: Completes when the dialog closes and any save finishes.
+/// Side effects: Writes the meeting's segments through the controller and shows a snack bar.
+Future<void> correctSegmentAfterAsking(
+  BuildContext context, {
+  required MeetingEditController controller,
+  required MeetingListController meetings,
+  required String meetingId,
+  required MeetingTranscriptSegment segment,
+}) async {
+  final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(context);
+  final String? text = await showDialog<String>(
+    context: context,
+    builder: (BuildContext context) => _SegmentEditDialog(
+      label: l10n.textAt(formatMeetingDuration(segment.startTimeMs)),
+      initialText: segment.text,
+    ),
+  );
+  if (text == null || text == segment.text) {
+    return;
+  }
+  final String? error =
+      await controller.editSegment(meetings, meetingId, segment, text);
+  messenger?.showSnackBar(SnackBar(
+    content: Text(error ??
+        (text.trim().isEmpty
+            ? l10n.removedThisTranscriptWonTBe
+            : l10n.savedThisTranscriptWonTBe)),
+  ));
+}
+
+/// The tip that explains the transcript the first time one is shown (#213): words in grey
+/// italics are ones the transcription was unsure of, and how to correct a passage.
+final class TranscriptTip extends StatefulWidget {
+  /// Creates the tip; `store` remembers that it was dismissed.
+  const TranscriptTip({required this.store, super.key});
+
+  /// The tip's name in the store.
+  static const String tipName = 'transcript-corrections';
+
+  final SeenTipsStore store;
+
+  @override
+  State<TranscriptTip> createState() => _TranscriptTipState();
+}
+
+final class _TranscriptTipState extends State<TranscriptTip> {
+  /// Null until the store answers, so a dismissed tip never flashes.
+  bool? _show;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.store.seen(TranscriptTip.tipName).then((bool seen) {
+      if (mounted) {
+        setState(() => _show = !seen);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_show != true) {
+      return const SizedBox.shrink();
+    }
+    final ThemeData theme = Theme.of(context);
+    return Card(
+      key: transcriptTipKey,
+      margin: const EdgeInsets.only(bottom: 16),
+      color: theme.colorScheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(Icons.lightbulb_outline,
+                    color: theme.colorScheme.onSecondaryContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(children: <InlineSpan>[
+                      TextSpan(text: l10n.tipUnsureWordsBefore),
+                      TextSpan(
+                        text: l10n.tipUnsureWordsExample,
+                        style: TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color: theme.colorScheme.outline),
+                      ),
+                      TextSpan(text: l10n.tipUnsureWordsAfter),
+                    ]),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSecondaryContainer),
+                  ),
+                ),
+              ],
+            ),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton(
+                onPressed: () {
+                  setState(() => _show = false);
+                  widget.store.markSeen(TranscriptTip.tipName);
+                },
+                child: Text(l10n.gotIt),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The transcript tip, for tests.
+const Key transcriptTipKey = ValueKey<String>('transcript-tip');
 
 /// Asks for a segment's new text; returns it, or null when cancelled.
 final class _SegmentEditDialog extends StatefulWidget {

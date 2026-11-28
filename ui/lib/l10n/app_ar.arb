@@ -907,5 +907,10 @@
   "storage": "التخزين",
   "aiSection": "الذكاء الاصطناعي",
   "privacy": "الخصوصية",
-  "developer": "المطوّر"
+  "developer": "المطوّر",
+  "correct": "تصحيح",
+  "tipUnsureWordsBefore": "الكلمات مثل ",
+  "tipUnsureWordsExample": "هذه",
+  "tipUnsureWordsAfter": "، المكتوبة بخط مائل رمادي، هي كلمات لم يكن Koalino متأكدًا من سماعها جيدًا. لتصحيح مقطع، اضغط ✎ تصحيح بجانبه، أو اضغط عليه مطولًا أو انقر بزر الفأرة الأيمن.",
+  "gotIt": "فهمت"
 }

@@ -907,5 +907,10 @@
   "storage": "Speicher",
   "aiSection": "KI",
   "privacy": "Datenschutz",
-  "developer": "Entwickler"
+  "developer": "Entwickler",
+  "correct": "Korrigieren",
+  "tipUnsureWordsBefore": "Wörter wie ",
+  "tipUnsureWordsExample": "dieses",
+  "tipUnsureWordsAfter": ", grau und kursiv, sind solche, bei denen Koalino nicht sicher war. Um eine Passage zu korrigieren, tippe daneben auf ✎ Korrigieren, oder drücke lange bzw. klicke mit rechts darauf.",
+  "gotIt": "Verstanden"
 }

@@ -9,6 +9,9 @@ import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
+import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
+import 'package:note_taker_ui/infrastructure/seen_tips_store.dart';
+import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
 
 import 'fake_meeting_bridge.dart';
 
@@ -235,5 +238,59 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.byKey(const ValueKey<String>('split-open-meeting')), findsNothing);
+  });
+
+  group('transcript tips (#213)', () {
+    /// Pumps the titled meeting with corrections on, remembering tips in `tips`.
+    Future<void> pumpEditable(WidgetTester tester, SeenTipsStore tips) async {
+      await tester.pumpWidget(MaterialApp(
+        home: MeetingDetailScreen(
+          controller: MeetingListController(
+              meetingBridge: FakeMeetingBridge(details: <String, MeetingDetail>{
+            'meeting-titled': titledMeetingDetail
+          })),
+          meetingId: 'meeting-titled',
+          editController: MeetingEditController(tipsStore: tips),
+        ),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the tip explains unsure words once, until dismissed',
+        (WidgetTester tester) async {
+      final MemorySeenTipsStore tips = MemorySeenTipsStore();
+      await pumpEditable(tester, tips);
+
+      expect(find.byKey(transcriptTipKey), findsOneWidget);
+      expect(
+          find.textContaining("wasn't sure it heard right", findRichText: true),
+          findsOneWidget);
+      await tester.tap(find.text('Got it'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(transcriptTipKey), findsNothing);
+      expect(await tips.seen(TranscriptTip.tipName), isTrue);
+
+      await pumpEditable(tester, tips);
+      expect(find.byKey(transcriptTipKey), findsNothing);
+    });
+
+    testWidgets('each passage has a visible Correct button',
+        (WidgetTester tester) async {
+      await pumpEditable(
+          tester, MemorySeenTipsStore(<String>[TranscriptTip.tipName]));
+
+      expect(find.byTooltip('Correct'), findsWidgets);
+      await tester.tap(find.byTooltip('Correct').first);
+      await tester.pumpAndSettle();
+      expect(find.byKey(segmentEditFieldKey), findsOneWidget);
+    });
+
+    testWidgets('without corrections there is no tip and no Correct',
+        (WidgetTester tester) async {
+      await pumpMeetingDetail(tester, 'meeting-titled');
+
+      expect(find.byKey(transcriptTipKey), findsNothing);
+      expect(find.byTooltip('Correct'), findsNothing);
+    });
   });
 }

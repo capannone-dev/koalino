@@ -3485,4 +3485,20 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get developer => 'Для разработчиков';
+
+  @override
+  String get correct => 'Исправить';
+
+  @override
+  String get tipUnsureWordsBefore => 'Слова вроде ';
+
+  @override
+  String get tipUnsureWordsExample => 'этого';
+
+  @override
+  String get tipUnsureWordsAfter =>
+      ', серым курсивом, Koalino мог расслышать неверно. Чтобы исправить фрагмент, нажмите ✎ Исправить рядом с ним или удерживайте его / щёлкните правой кнопкой.';
+
+  @override
+  String get gotIt => 'Понятно';
 }

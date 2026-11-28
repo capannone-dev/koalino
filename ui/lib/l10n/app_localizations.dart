@@ -5499,6 +5499,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Developer'**
   String get developer;
+
+  /// Button on a transcript passage that opens its text for correction.
+  ///
+  /// In en, this message translates to:
+  /// **'Correct'**
+  String get correct;
+
+  /// Start of the transcript tip; followed by an example word in grey italics.
+  ///
+  /// In en, this message translates to:
+  /// **'Words like '**
+  String get tipUnsureWordsBefore;
+
+  /// Example word shown in grey italics in the transcript tip.
+  ///
+  /// In en, this message translates to:
+  /// **'this one'**
+  String get tipUnsureWordsExample;
+
+  /// No description provided for @tipUnsureWordsAfter.
+  ///
+  /// In en, this message translates to:
+  /// **', in grey italics, are ones Koalino wasn\'t sure it heard right. To fix a passage, press ✎ Correct beside it, or long-press or right-click it.'**
+  String get tipUnsureWordsAfter;
+
+  /// No description provided for @gotIt.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get gotIt;
 }
 
 class _AppLocalizationsDelegate

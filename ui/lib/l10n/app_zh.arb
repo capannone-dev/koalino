@@ -907,5 +907,10 @@
   "storage": "存储",
   "aiSection": "AI",
   "privacy": "隐私",
-  "developer": "开发者"
+  "developer": "开发者",
+  "correct": "更正",
+  "tipUnsureWordsBefore": "像",
+  "tipUnsureWordsExample": "这样",
+  "tipUnsureWordsAfter": "以灰色斜体显示的词，是 Koalino 不确定是否听对的。要修改某段，点旁边的 ✎ 更正，或长按、右键点击它。",
+  "gotIt": "知道了"
 }

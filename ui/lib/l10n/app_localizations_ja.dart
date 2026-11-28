@@ -3298,4 +3298,20 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get developer => '開発者向け';
+
+  @override
+  String get correct => '修正';
+
+  @override
+  String get tipUnsureWordsBefore => '「';
+
+  @override
+  String get tipUnsureWordsExample => 'このような語';
+
+  @override
+  String get tipUnsureWordsAfter =>
+      '」のように灰色の斜体で表示されるのは、Koalino が正しく聞き取れたか自信のない語です。箇所を直すには横の ✎ 修正 を押すか、長押しまたは右クリックします。';
+
+  @override
+  String get gotIt => '了解';
 }

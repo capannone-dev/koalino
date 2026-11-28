@@ -591,5 +591,10 @@
   "privacy": "Datenschutz",
   "storage": "Speicher",
   "developer": "Entwickler",
-  "summaryOptions": "Optionen für Zusammenfassungen"
+  "summaryOptions": "Optionen für Zusammenfassungen",
+  "tipUnsureWordsBefore": "Wörter wie ",
+  "tipUnsureWordsExample": "dieses",
+  "tipUnsureWordsAfter": ", grau und kursiv, sind solche, bei denen Koalino nicht sicher war. Um eine Passage zu korrigieren, klicke auf den Stift daneben.",
+  "gotIt": "Verstanden",
+  "tip": "Tipp"
 }

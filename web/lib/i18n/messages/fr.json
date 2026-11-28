@@ -591,5 +591,10 @@
   "privacy": "Confidentialité",
   "storage": "Stockage",
   "developer": "Développeur",
-  "summaryOptions": "Options des résumés"
+  "summaryOptions": "Options des résumés",
+  "tipUnsureWordsBefore": "Les mots comme ",
+  "tipUnsureWordsExample": "celui-ci",
+  "tipUnsureWordsAfter": ", en italique gris, sont ceux que Koalino n'est pas sûr d'avoir bien entendus. Pour corriger un passage, cliquez sur le crayon à côté.",
+  "gotIt": "Compris",
+  "tip": "Astuce"
 }

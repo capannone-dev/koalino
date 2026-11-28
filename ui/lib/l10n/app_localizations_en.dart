@@ -3427,4 +3427,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get developer => 'Developer';
+
+  @override
+  String get correct => 'Correct';
+
+  @override
+  String get tipUnsureWordsBefore => 'Words like ';
+
+  @override
+  String get tipUnsureWordsExample => 'this one';
+
+  @override
+  String get tipUnsureWordsAfter =>
+      ', in grey italics, are ones Koalino wasn\'t sure it heard right. To fix a passage, press ✎ Correct beside it, or long-press or right-click it.';
+
+  @override
+  String get gotIt => 'Got it';
 }

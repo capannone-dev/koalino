@@ -2579,5 +2579,15 @@
   "privacy": "Privacy",
   "@privacy": {},
   "developer": "Developer",
-  "@developer": {"description": "Settings section with logs and telemetry."}
+  "@developer": {"description": "Settings section with logs and telemetry."},
+  "correct": "Correct",
+  "@correct": {"description": "Button on a transcript passage that opens its text for correction."},
+  "tipUnsureWordsBefore": "Words like ",
+  "@tipUnsureWordsBefore": {"description": "Start of the transcript tip; followed by an example word in grey italics."},
+  "tipUnsureWordsExample": "this one",
+  "@tipUnsureWordsExample": {"description": "Example word shown in grey italics in the transcript tip."},
+  "tipUnsureWordsAfter": ", in grey italics, are ones Koalino wasn't sure it heard right. To fix a passage, press ✎ Correct beside it, or long-press or right-click it.",
+  "@tipUnsureWordsAfter": {},
+  "gotIt": "Got it",
+  "@gotIt": {}
 }

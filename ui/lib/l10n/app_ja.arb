@@ -907,5 +907,10 @@
   "storage": "ストレージ",
   "aiSection": "AI",
   "privacy": "プライバシー",
-  "developer": "開発者向け"
+  "developer": "開発者向け",
+  "correct": "修正",
+  "tipUnsureWordsBefore": "「",
+  "tipUnsureWordsExample": "このような語",
+  "tipUnsureWordsAfter": "」のように灰色の斜体で表示されるのは、Koalino が正しく聞き取れたか自信のない語です。箇所を直すには横の ✎ 修正 を押すか、長押しまたは右クリックします。",
+  "gotIt": "了解"
 }

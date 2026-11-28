@@ -591,5 +591,10 @@
   "privacy": "Privacidade",
   "storage": "Armazenamento",
   "developer": "Programador",
-  "summaryOptions": "Opções dos resumos"
+  "summaryOptions": "Opções dos resumos",
+  "tipUnsureWordsBefore": "Palavras como ",
+  "tipUnsureWordsExample": "esta",
+  "tipUnsureWordsAfter": ", em itálico cinzento, são as que o Koalino não tem a certeza de ter ouvido bem. Para corrigir uma passagem, clique no lápis ao lado.",
+  "gotIt": "Entendi",
+  "tip": "Dica"
 }

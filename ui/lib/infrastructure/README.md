@@ -248,3 +248,6 @@ to `IncomingShares.kt` on `note_taker/incoming_shares`; desktops get `NoIncoming
 from another device's QR code: `PairingLinkBridge` (`arrivals`, `takePending`, which returns only
 `note-taker-invite:` text). `AndroidPairingLinkBridge` talks to `PairingLinks.kt` on
 `note_taker/pairing_links`; desktops get `NoPairingLinkBridge`.
+
+`seen_tips_store.dart` (#213) remembers which one-time tips were dismissed, one name per line in the `ui-seen-tips`
+file of the data directory; `MemorySeenTipsStore` serves tests.

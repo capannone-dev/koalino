@@ -591,5 +591,10 @@
   "privacy": "Privacy",
   "storage": "Storage",
   "developer": "Developer",
-  "summaryOptions": "Summary options"
+  "summaryOptions": "Summary options",
+  "tipUnsureWordsBefore": "Words like ",
+  "tipUnsureWordsExample": "this one",
+  "tipUnsureWordsAfter": ", in grey italics, are ones Koalino wasn't sure it heard right. To fix a passage, press the pencil beside it.",
+  "gotIt": "Got it",
+  "tip": "Tip"
 }

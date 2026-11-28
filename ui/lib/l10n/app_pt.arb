@@ -907,5 +907,10 @@
   "storage": "Armazenamento",
   "aiSection": "IA",
   "privacy": "Privacidade",
-  "developer": "Programador"
+  "developer": "Programador",
+  "correct": "Corrigir",
+  "tipUnsureWordsBefore": "Palavras como ",
+  "tipUnsureWordsExample": "esta",
+  "tipUnsureWordsAfter": ", em itálico cinzento, são as que o Koalino não tem a certeza de ter ouvido bem. Para corrigir uma passagem, toque em ✎ Corrigir ao lado, ou mantenha-a premida ou clique com o botão direito.",
+  "gotIt": "Entendi"
 }

@@ -3482,4 +3482,20 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get developer => 'Développeur';
+
+  @override
+  String get correct => 'Corriger';
+
+  @override
+  String get tipUnsureWordsBefore => 'Les mots comme ';
+
+  @override
+  String get tipUnsureWordsExample => 'celui-ci';
+
+  @override
+  String get tipUnsureWordsAfter =>
+      ', en italique gris, sont ceux que Koalino n\'est pas sûr d\'avoir bien entendus. Pour corriger un passage, appuyez sur ✎ Corriger à côté, ou faites un appui long ou un clic droit dessus.';
+
+  @override
+  String get gotIt => 'Compris';
 }

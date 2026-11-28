@@ -287,3 +287,8 @@ meeting language, keeping recordings, Devices, AI connections) and an Advanced e
 under `SettingsSectionHeader`s: Transcription (model, where to transcribe, call detection), Storage (backup, notes
 folder), AI (assistant access), Privacy (app lock, network addresses) and Developer (telemetry, logs). Empty groups
 are left out.
+
+**Transcript tips (#213).** Each transcript passage has a visible Correct button (`correctSegmentAfterAsking` in
+`meeting_edit_widgets.dart`, shared with long-press and right-click). `TranscriptTip` explains, once, that grey
+italic words are ones the transcription was unsure of and how to correct them; `infrastructure/seen_tips_store.dart`
+remembers its dismissal in the data directory (`ui-seen-tips`), reached through `MeetingEditController.tipsStore`.

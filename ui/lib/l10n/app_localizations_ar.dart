@@ -3482,4 +3482,20 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get developer => 'المطوّر';
+
+  @override
+  String get correct => 'تصحيح';
+
+  @override
+  String get tipUnsureWordsBefore => 'الكلمات مثل ';
+
+  @override
+  String get tipUnsureWordsExample => 'هذه';
+
+  @override
+  String get tipUnsureWordsAfter =>
+      '، المكتوبة بخط مائل رمادي، هي كلمات لم يكن Koalino متأكدًا من سماعها جيدًا. لتصحيح مقطع، اضغط ✎ تصحيح بجانبه، أو اضغط عليه مطولًا أو انقر بزر الفأرة الأيمن.';
+
+  @override
+  String get gotIt => 'فهمت';
 }

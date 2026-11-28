@@ -907,5 +907,10 @@
   "storage": "Archiviazione",
   "aiSection": "IA",
   "privacy": "Privacy",
-  "developer": "Sviluppatore"
+  "developer": "Sviluppatore",
+  "correct": "Correggi",
+  "tipUnsureWordsBefore": "Le parole come ",
+  "tipUnsureWordsExample": "questa",
+  "tipUnsureWordsAfter": ", in corsivo grigio, sono quelle che Koalino non è sicuro di aver sentito bene. Per correggere un passaggio premi ✎ Correggi accanto, oppure tienilo premuto o fai clic destro.",
+  "gotIt": "Ho capito"
 }

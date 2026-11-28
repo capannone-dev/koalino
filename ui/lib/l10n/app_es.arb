@@ -907,5 +907,10 @@
   "storage": "Almacenamiento",
   "aiSection": "IA",
   "privacy": "Privacidad",
-  "developer": "Desarrollador"
+  "developer": "Desarrollador",
+  "correct": "Corregir",
+  "tipUnsureWordsBefore": "Las palabras como ",
+  "tipUnsureWordsExample": "esta",
+  "tipUnsureWordsAfter": ", en cursiva gris, son las que Koalino no está seguro de haber oído bien. Para corregir un fragmento pulsa ✎ Corregir a su lado, o mantenlo pulsado o haz clic derecho.",
+  "gotIt": "Entendido"
 }

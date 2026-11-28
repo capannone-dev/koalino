@@ -3,7 +3,7 @@
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { MeetingTranscript } from "@/components/meeting-transcript";
+import { MeetingTranscript, TRANSCRIPT_TIP_KEY } from "@/components/meeting-transcript";
 import * as edits from "@/lib/edits-api";
 
 vi.mock("@/lib/edits-api", async () => ({
@@ -113,4 +113,25 @@ test("a cited moment (#at-<ms>) scrolls to the passage it falls in (#110)", () =
     Element.prototype.scrollIntoView = original;
     window.location.hash = "";
   }
+});
+
+test("a one-time tip explains grey italics and the pencil, until dismissed (#213)", async () => {
+  // This test environment has no storage of its own.
+  const stored = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => stored.get(key) ?? null,
+    setItem: (key: string, value: string) => void stored.set(key, value),
+    removeItem: (key: string) => void stored.delete(key)
+  });
+  const { unmount } = render(<MeetingTranscript meetingId="m-1" transcript={null} segments={[doubtful]} />);
+
+  expect(await screen.findByRole("complementary", { name: "Tip" })).toHaveTextContent(/wasn't sure it heard right/);
+  fireEvent.click(screen.getByRole("button", { name: "Got it" }));
+  expect(screen.queryByRole("complementary", { name: "Tip" })).not.toBeInTheDocument();
+  expect(window.localStorage.getItem(TRANSCRIPT_TIP_KEY)).toBe("seen");
+  unmount();
+
+  render(<MeetingTranscript meetingId="m-1" transcript={null} segments={[doubtful]} />);
+  expect(screen.queryByRole("complementary", { name: "Tip" })).not.toBeInTheDocument();
+  vi.unstubAllGlobals();
 });

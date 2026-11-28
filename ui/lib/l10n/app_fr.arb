@@ -907,5 +907,10 @@
   "storage": "Stockage",
   "aiSection": "IA",
   "privacy": "Confidentialité",
-  "developer": "Développeur"
+  "developer": "Développeur",
+  "correct": "Corriger",
+  "tipUnsureWordsBefore": "Les mots comme ",
+  "tipUnsureWordsExample": "celui-ci",
+  "tipUnsureWordsAfter": ", en italique gris, sont ceux que Koalino n'est pas sûr d'avoir bien entendus. Pour corriger un passage, appuyez sur ✎ Corriger à côté, ou faites un appui long ou un clic droit dessus.",
+  "gotIt": "Compris"
 }

@@ -3226,4 +3226,20 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get developer => '开发者';
+
+  @override
+  String get correct => '更正';
+
+  @override
+  String get tipUnsureWordsBefore => '像';
+
+  @override
+  String get tipUnsureWordsExample => '这样';
+
+  @override
+  String get tipUnsureWordsAfter =>
+      '以灰色斜体显示的词，是 Koalino 不确定是否听对的。要修改某段，点旁边的 ✎ 更正，或长按、右键点击它。';
+
+  @override
+  String get gotIt => '知道了';
 }

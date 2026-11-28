@@ -135,3 +135,6 @@ now opens the meetings.
 with arrow keys; hidden panels stay mounted, so an unsaved note survives a switch), and `MeetingAskAi`, the button
 that opens the chat about the meeting. The page puts the recording player after the tabs, so it stays docked under
 each of them.
+
+`meeting-transcript.tsx` also shows a one-time tip (#213) over the transcript: grey italic words are ones Koalino was
+unsure of, and the pencil beside a passage corrects it. Dismissal is remembered in this browser's `localStorage`.

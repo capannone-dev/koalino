@@ -591,5 +591,10 @@
   "privacy": "Privacy",
   "storage": "Archiviazione",
   "developer": "Sviluppatore",
-  "summaryOptions": "Opzioni dei riassunti"
+  "summaryOptions": "Opzioni dei riassunti",
+  "tipUnsureWordsBefore": "Le parole come ",
+  "tipUnsureWordsExample": "questa",
+  "tipUnsureWordsAfter": ", in corsivo grigio, sono quelle che Koalino non è sicuro di aver sentito bene. Per correggere un passaggio premi la matita accanto.",
+  "gotIt": "Ho capito",
+  "tip": "Suggerimento"
 }

@@ -3469,4 +3469,20 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get developer => 'Programador';
+
+  @override
+  String get correct => 'Corrigir';
+
+  @override
+  String get tipUnsureWordsBefore => 'Palavras como ';
+
+  @override
+  String get tipUnsureWordsExample => 'esta';
+
+  @override
+  String get tipUnsureWordsAfter =>
+      ', em itálico cinzento, são as que o Koalino não tem a certeza de ter ouvido bem. Para corrigir uma passagem, toque em ✎ Corrigir ao lado, ou mantenha-a premida ou clique com o botão direito.';
+
+  @override
+  String get gotIt => 'Entendi';
 }

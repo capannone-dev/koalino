@@ -618,5 +618,10 @@
   "privacy": "الخصوصية",
   "storage": "التخزين",
   "developer": "المطوّر",
-  "summaryOptions": "خيارات الملخص"
+  "summaryOptions": "خيارات الملخص",
+  "tipUnsureWordsBefore": "الكلمات مثل ",
+  "tipUnsureWordsExample": "هذه",
+  "tipUnsureWordsAfter": "، المكتوبة بخط مائل رمادي، هي كلمات لم يكن Koalino متأكدًا من سماعها جيدًا. لتصحيح مقطع، اضغط على القلم بجانبه.",
+  "gotIt": "فهمت",
+  "tip": "نصيحة"
 }

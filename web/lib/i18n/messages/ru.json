@@ -619,5 +619,10 @@
   "privacy": "Конфиденциальность",
   "storage": "Хранение",
   "developer": "Для разработчиков",
-  "summaryOptions": "Параметры сводок"
+  "summaryOptions": "Параметры сводок",
+  "tipUnsureWordsBefore": "Слова вроде ",
+  "tipUnsureWordsExample": "этого",
+  "tipUnsureWordsAfter": ", серым курсивом, Koalino мог расслышать неверно. Чтобы исправить фрагмент, нажмите на карандаш рядом с ним.",
+  "gotIt": "Понятно",
+  "tip": "Подсказка"
 }

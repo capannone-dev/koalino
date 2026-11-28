@@ -839,15 +839,10 @@ final class _MeetingContent extends StatelessWidget {
             ? null
             : const ScrollCacheExtent.pixels(double.maxFinite),
         children: <Widget>[
-          if (editController != null &&
-              meeting.segments.isNotEmpty) ...<Widget>[
-            Text(
-              l10n.longPressOrRightClickA,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 12),
-          ],
+          // Once, until dismissed: what grey italics mean, and how to correct (#213).
+          if (editController case final MeetingEditController edits
+              when meeting.segments.isNotEmpty)
+            TranscriptTip(store: edits.tipsStore),
           ..._transcriptChildren(theme),
         ],
       ),
@@ -1025,6 +1020,22 @@ final class _MeetingContent extends StatelessWidget {
                 iconSize: 18,
                 icon: const Icon(Icons.play_circle_outline),
                 onPressed: () => player.playFrom(segment.startTimeMs),
+              ),
+            // A visible way to correct, besides long-press and right-click (#213).
+            if (editController case final MeetingEditController edits)
+              Builder(
+                builder: (BuildContext context) => IconButton(
+                  key: ValueKey<String>('correct-${segment.startTimeMs}'),
+                  tooltip: l10n.correct,
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 18,
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => correctSegmentAfterAsking(context,
+                      controller: edits,
+                      meetings: controller,
+                      meetingId: meeting.summary.meetingId,
+                      segment: segment),
+                ),
               ),
             if (segment.overlappingSpeech)
               Tooltip(

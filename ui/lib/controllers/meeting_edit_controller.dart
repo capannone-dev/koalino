@@ -2,6 +2,7 @@
 // new meetings with no recording (#129), and corrections to single transcript segments, which
 // are shown in the open meeting at once instead of reloading it. The core does the work; this keeps the answers and words failures.
 
+import 'package:note_taker_ui/infrastructure/seen_tips_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
@@ -10,10 +11,15 @@ import 'package:note_taker_ui/infrastructure/meeting_edit_bridge.dart';
 /// Meeting notes and transcript corrections.
 final class MeetingEditController extends ChangeNotifier {
   /// Creates the controller. Side effects: None until a method is called.
-  MeetingEditController({MeetingEditBridge bridge = const MeetingEditBridge()})
+  MeetingEditController(
+      {MeetingEditBridge bridge = const MeetingEditBridge(),
+      this.tipsStore = const FileSeenTipsStore()})
       : _bridge = bridge;
 
   final MeetingEditBridge _bridge;
+
+  /// Remembers that the transcript tip about corrections was dismissed (#213).
+  final SeenTipsStore tipsStore;
 
   /// Notes per meeting as last read or saved; a missing key means not loaded yet, an empty
   /// string means no notes.

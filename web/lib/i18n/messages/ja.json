@@ -587,5 +587,10 @@
   "privacy": "プライバシー",
   "storage": "ストレージ",
   "developer": "開発者向け",
-  "summaryOptions": "要約のオプション"
+  "summaryOptions": "要約のオプション",
+  "tipUnsureWordsBefore": "「",
+  "tipUnsureWordsExample": "このような語",
+  "tipUnsureWordsAfter": "」のように灰色の斜体で表示されるのは、Koalino が正しく聞き取れたか自信のない語です。箇所を直すには横の鉛筆を押します。",
+  "gotIt": "了解",
+  "tip": "ヒント"
 }

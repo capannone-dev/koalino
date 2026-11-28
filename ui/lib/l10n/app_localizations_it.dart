@@ -3475,4 +3475,20 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get developer => 'Sviluppatore';
+
+  @override
+  String get correct => 'Correggi';
+
+  @override
+  String get tipUnsureWordsBefore => 'Le parole come ';
+
+  @override
+  String get tipUnsureWordsExample => 'questa';
+
+  @override
+  String get tipUnsureWordsAfter =>
+      ', in corsivo grigio, sono quelle che Koalino non è sicuro di aver sentito bene. Per correggere un passaggio premi ✎ Correggi accanto, oppure tienilo premuto o fai clic destro.';
+
+  @override
+  String get gotIt => 'Ho capito';
 }
