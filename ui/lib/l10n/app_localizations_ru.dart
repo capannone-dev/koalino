@@ -3401,4 +3401,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String yesterdayAt(String time) {
     return 'Вчера $time';
   }
+
+  @override
+  String get unnamedDevice => 'Устройство без имени';
 }

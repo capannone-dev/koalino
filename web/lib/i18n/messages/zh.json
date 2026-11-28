@@ -570,5 +570,6 @@
   "playFromAt": "从 {at} 播放",
   "positionInTheRecording": "录音中的位置",
   "recordingPlayer": "录音播放器",
-  "downloadTheRecording": "下载录音"
+  "downloadTheRecording": "下载录音",
+  "unnamedDevice": "未命名设备"
 }

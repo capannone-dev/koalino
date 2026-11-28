@@ -882,5 +882,6 @@
   "unableToSaveTheRecording": "تعذّر حفظ التسجيل",
   "@unableToSaveTheRecording": {},
   "todayAt": "اليوم {time}",
-  "yesterdayAt": "أمس {time}"
+  "yesterdayAt": "أمس {time}",
+  "unnamedDevice": "جهاز بلا اسم"
 }

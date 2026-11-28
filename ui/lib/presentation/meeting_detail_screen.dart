@@ -766,11 +766,6 @@ final class _MeetingContent extends StatelessWidget {
                 ],
               ),
             ),
-          SelectableText(
-            summary.meetingId,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
           const Divider(height: 32),
           if (editController
               case final MeetingEditController edits) ...<Widget>[

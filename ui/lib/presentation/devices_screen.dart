@@ -277,10 +277,11 @@ final class _DevicesList extends StatelessWidget {
         for (final String peerId in status.nearbyPeerIds)
           ListTile(
             leading: const Icon(Icons.wifi),
-            // A device tells its name only while it is discoverable (#121).
-            title:
-                Text(status.nearbyDeviceNames[peerId] ?? shortPeerId(peerId)),
-            subtitle: status.nearbyDeviceNames.containsKey(peerId)
+            // A device tells its name only while it is discoverable (#121). Without one it is
+            // an unnamed device, told apart by its short peer ID; a named one shows the ID only
+            // when another nearby device has the same name (#211).
+            title: Text(status.nearbyDeviceNames[peerId] ?? l10n.unnamedDevice),
+            subtitle: _needsPeerId(status.nearbyDeviceNames, peerId)
                 ? Text(shortPeerId(peerId))
                 : null,
             trailing: FilledButton.tonal(
@@ -570,3 +571,15 @@ String describeCapabilities(DeviceCapabilities capabilities) {
 /// language (#124). Side effects: None.
 String formatPairedDate(DateTime pairedAt) =>
     formatDatePattern(pairedAt.toLocal(), 'd MMM y');
+
+/// Whether a nearby device's short peer ID must show to tell it apart (#211).
+///
+/// Inputs: the names nearby devices told, by peer ID; the device's `peerId`.
+/// Outputs: true when the device has no name, or shares its name with another nearby device.
+/// Side effects: none.
+bool _needsPeerId(Map<String, String> names, String peerId) {
+  final String? name = names[peerId];
+  if (name == null) return true;
+  return names.entries.any((MapEntry<String, String> other) =>
+      other.key != peerId && other.value == name);
+}

@@ -574,5 +574,6 @@
   "playFromAt": "Riproduci da {at}",
   "positionInTheRecording": "Posizione nella registrazione",
   "recordingPlayer": "Lettore della registrazione",
-  "downloadTheRecording": "Scarica la registrazione"
+  "downloadTheRecording": "Scarica la registrazione",
+  "unnamedDevice": "Dispositivo senza nome"
 }

@@ -93,6 +93,7 @@ test("pairing a nearby device shows the code to compare", async () => {
   );
   render(<DevicesPanel initialStatus={runningStatus({ nearby_devices: [{ peer_id: nearbyPeerId }] })} />);
 
+  expect(screen.getByText("Unnamed device")).toBeInTheDocument();
   expect(screen.getByText("12D3Koo…abcdef")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Pair" }));
 
@@ -301,7 +302,7 @@ test("using an invite says what comes next, and a refusal says why", async () =>
   expect(p2pApi.joinInvite).toHaveBeenLastCalledWith("new invite");
 });
 
-test("a nearby device shows the name it told, with its peer ID below (#121)", () => {
+test("a nearby device shows the name it told; an unnamed one its peer ID (#121, #211)", () => {
   const quietPeerId = "12D3KooWQuietPeer0000000000000000000000000000fedcba";
   render(
     <DevicesPanel
@@ -310,7 +311,8 @@ test("a nearby device shows the name it told, with its peer ID below (#121)", ()
   );
 
   expect(screen.getByText("Kitchen tablet")).toBeInTheDocument();
-  expect(screen.getByText("12D3Koo…abcdef")).toBeInTheDocument();
+  expect(screen.queryByText("12D3Koo…abcdef")).not.toBeInTheDocument();
+  expect(screen.getByText("Unnamed device")).toBeInTheDocument();
   expect(screen.getByText("12D3Koo…fedcba")).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Pair" })).toHaveLength(2);
 });
@@ -341,4 +343,10 @@ test("a refused name says why and keeps the field (#121)", async () => {
 
   expect(await screen.findByText("Use 1 to 64 characters, without line breaks.")).toBeInTheDocument();
   expect(screen.getByRole("textbox", { name: "Device name" })).toBeInTheDocument();
+});
+
+test("a named nearby device shows its name without its internal ID (#211)", () => {
+  render(<DevicesPanel initialStatus={runningStatus({ nearby_devices: [{ peer_id: nearbyPeerId, device_name: "Kitchen tablet" }] })} />);
+  expect(screen.getByText("Kitchen tablet")).toBeInTheDocument();
+  expect(screen.queryByText("12D3Koo…abcdef")).not.toBeInTheDocument();
 });

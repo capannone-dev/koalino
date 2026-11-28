@@ -3426,4 +3426,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String yesterdayAt(String time) {
     return 'Gestern $time';
   }
+
+  @override
+  String get unnamedDevice => 'Unbenanntes Gerät';
 }

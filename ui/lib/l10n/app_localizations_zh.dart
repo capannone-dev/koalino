@@ -3149,4 +3149,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String yesterdayAt(String time) {
     return '昨天 $time';
   }
+
+  @override
+  String get unnamedDevice => '未命名设备';
 }

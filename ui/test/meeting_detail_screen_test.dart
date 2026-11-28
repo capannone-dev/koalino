@@ -70,7 +70,8 @@ void main() {
         findsOneWidget);
     expect(
         find.text('Transcription languages: Italian, English'), findsOneWidget);
-    expect(find.text('meeting-titled'), findsOneWidget);
+    expect(find.text('meeting-titled'), findsNothing,
+        reason: 'the internal meeting ID is not shown (#211)');
     expect(find.text('Alice · 0:00'), findsOneWidget);
     expect(find.text('Hello team.'), findsOneWidget);
     expect(find.text('Unattributed · 1:01'), findsOneWidget);

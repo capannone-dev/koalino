@@ -570,5 +570,6 @@
   "playFromAt": "{at} から再生",
   "positionInTheRecording": "録音内の位置",
   "recordingPlayer": "録音プレーヤー",
-  "downloadTheRecording": "録音をダウンロード"
+  "downloadTheRecording": "録音をダウンロード",
+  "unnamedDevice": "名前のないデバイス"
 }

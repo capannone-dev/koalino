@@ -5349,6 +5349,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Yesterday {time}'**
   String yesterdayAt(String time);
+
+  /// A nearby device that has not told its name yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Unnamed device'**
+  String get unnamedDevice;
 }
 
 class _AppLocalizationsDelegate

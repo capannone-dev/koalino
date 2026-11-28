@@ -882,5 +882,6 @@
   "unableToSaveTheRecording": "无法保存录音",
   "@unableToSaveTheRecording": {},
   "todayAt": "今天 {time}",
-  "yesterdayAt": "昨天 {time}"
+  "yesterdayAt": "昨天 {time}",
+  "unnamedDevice": "未命名设备"
 }

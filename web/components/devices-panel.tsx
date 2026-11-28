@@ -404,14 +404,14 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
         )}
         {status.nearby_devices.map((device) => (
           <div key={device.peer_id} className="card flex items-center justify-between gap-4">
-            {device.device_name ? (
-              <div>
-                <p className="font-semibold">{device.device_name}</p>
+            {/* Without a name, the short peer ID tells unnamed devices apart; a named device
+                shows it only when another nearby device has the same name (#211). */}
+            <div>
+              <p className="font-semibold">{device.device_name || t("unnamedDevice")}</p>
+              {!device.device_name || status.nearby_devices.some((other) => other.peer_id !== device.peer_id && other.device_name === device.device_name) ? (
                 <p className="font-mono text-sm text-muted">{shortPeerId(device.peer_id)}</p>
-              </div>
-            ) : (
-              <p className="font-mono">{shortPeerId(device.peer_id)}</p>
-            )}
+              ) : null}
+            </div>
             <button type="button" className={primaryButton} disabled={isBusy} onClick={() => void runStep(async () => (await startPairing(device.peer_id), null))}>{t("pair")}</button>
           </div>
         ))}

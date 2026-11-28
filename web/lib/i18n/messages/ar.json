@@ -601,5 +601,6 @@
   "playFromAt": "التشغيل من {at}",
   "positionInTheRecording": "الموضع في التسجيل",
   "recordingPlayer": "مشغّل التسجيل",
-  "downloadTheRecording": "تنزيل التسجيل"
+  "downloadTheRecording": "تنزيل التسجيل",
+  "unnamedDevice": "جهاز بلا اسم"
 }

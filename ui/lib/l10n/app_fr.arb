@@ -882,5 +882,6 @@
   "unableToSaveTheRecording": "Impossible d'enregistrer le fichier audio",
   "@unableToSaveTheRecording": {},
   "todayAt": "Aujourd'hui {time}",
-  "yesterdayAt": "Hier {time}"
+  "yesterdayAt": "Hier {time}",
+  "unnamedDevice": "Appareil sans nom"
 }

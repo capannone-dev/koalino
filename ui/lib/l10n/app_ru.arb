@@ -882,5 +882,6 @@
   "unableToSaveTheRecording": "Не удалось сохранить запись",
   "@unableToSaveTheRecording": {},
   "todayAt": "Сегодня {time}",
-  "yesterdayAt": "Вчера {time}"
+  "yesterdayAt": "Вчера {time}",
+  "unnamedDevice": "Устройство без имени"
 }

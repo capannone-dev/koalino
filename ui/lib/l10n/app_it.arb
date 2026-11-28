@@ -882,5 +882,6 @@
   "unableToSaveTheRecording": "Impossibile salvare la registrazione",
   "@unableToSaveTheRecording": {},
   "todayAt": "Oggi {time}",
-  "yesterdayAt": "Ieri {time}"
+  "yesterdayAt": "Ieri {time}",
+  "unnamedDevice": "Dispositivo senza nome"
 }

@@ -109,19 +109,19 @@ void main() {
   });
 
   testWidgets(
-      'a nearby device shows its name, or its peer ID until it tells one (#121)',
+      'a nearby device shows its name, or "Unnamed device" until it tells one (#121, #211)',
       (WidgetTester tester) async {
     final FakeP2pBridge bridge = FakeP2pBridge(status: busyStatus());
     await pumpDevices(tester, bridge);
     await tester.scrollUntilVisible(find.text('Kitchen tablet'), 200);
 
     expect(find.text('Kitchen tablet'), findsOneWidget);
-    expect(find.text(shortPeerId('12D3KooWNearbyDevice1234')), findsOneWidget,
-        reason:
-            'the peer ID stays as a subtitle, to tell same-named devices apart');
-    await tester.scrollUntilVisible(
-        find.text(shortPeerId('12D3KooWQuietDevice5678')), 200);
-    expect(find.text(shortPeerId('12D3KooWQuietDevice5678')), findsOneWidget);
+    expect(find.text(shortPeerId('12D3KooWNearbyDevice1234')), findsNothing,
+        reason: 'a named device needs no internal ID');
+    await tester.scrollUntilVisible(find.text('Unnamed device'), 200);
+    expect(find.text('Unnamed device'), findsOneWidget);
+    expect(find.text(shortPeerId('12D3KooWQuietDevice5678')), findsOneWidget,
+        reason: 'the ID tells unnamed devices apart');
 
     await tester.tap(find.text('Pair').first);
     await tester.pumpAndSettle();

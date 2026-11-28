@@ -2529,5 +2529,7 @@
   "todayAt": "Today {time}",
   "@todayAt": {"description": "A meeting's time when it happened today, e.g. 'Today 9:32 AM'.", "placeholders": {"time": {"type": "String"}}},
   "yesterdayAt": "Yesterday {time}",
-  "@yesterdayAt": {"description": "A meeting's time when it happened yesterday.", "placeholders": {"time": {"type": "String"}}}
+  "@yesterdayAt": {"description": "A meeting's time when it happened yesterday.", "placeholders": {"time": {"type": "String"}}},
+  "unnamedDevice": "Unnamed device",
+  "@unnamedDevice": {"description": "A nearby device that has not told its name yet."}
 }

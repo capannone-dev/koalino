@@ -3379,4 +3379,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String yesterdayAt(String time) {
     return 'Ayer $time';
   }
+
+  @override
+  String get unnamedDevice => 'Dispositivo sin nombre';
 }

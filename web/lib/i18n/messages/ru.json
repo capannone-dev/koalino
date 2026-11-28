@@ -602,5 +602,6 @@
   "playFromAt": "Воспроизвести с {at}",
   "positionInTheRecording": "Позиция в записи",
   "recordingPlayer": "Проигрыватель записи",
-  "downloadTheRecording": "Скачать запись"
+  "downloadTheRecording": "Скачать запись",
+  "unnamedDevice": "Устройство без имени"
 }

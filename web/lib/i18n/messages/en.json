@@ -574,5 +574,6 @@
   "playFromAt": "Play from {at}",
   "positionInTheRecording": "Position in the recording",
   "recordingPlayer": "Recording player",
-  "downloadTheRecording": "Download the recording"
+  "downloadTheRecording": "Download the recording",
+  "unnamedDevice": "Unnamed device"
 }

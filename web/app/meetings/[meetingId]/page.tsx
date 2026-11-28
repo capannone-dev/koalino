@@ -46,7 +46,6 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       </p>
       {languages === null ? null : <p className="text-muted">{languages}</p>}
       <MeetingRecordedOn meeting={meeting} />
-      <p>{t("meeting", { meetingId: meeting.meeting_id })}</p>
       <MeetingSummaryPanel
         meetingId={meeting.meeting_id}
         summary={summaryState.summary}

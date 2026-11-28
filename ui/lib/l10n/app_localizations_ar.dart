@@ -3398,4 +3398,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String yesterdayAt(String time) {
     return 'أمس $time';
   }
+
+  @override
+  String get unnamedDevice => 'جهاز بلا اسم';
 }

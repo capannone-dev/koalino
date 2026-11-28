@@ -882,5 +882,6 @@
   "unableToSaveTheRecording": "録音を保存できません",
   "@unableToSaveTheRecording": {},
   "todayAt": "今日 {time}",
-  "yesterdayAt": "昨日 {time}"
+  "yesterdayAt": "昨日 {time}",
+  "unnamedDevice": "名前のないデバイス"
 }

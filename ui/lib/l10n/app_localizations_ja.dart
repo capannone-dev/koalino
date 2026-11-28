@@ -3217,4 +3217,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String yesterdayAt(String time) {
     return '昨日 $time';
   }
+
+  @override
+  String get unnamedDevice => '名前のないデバイス';
 }

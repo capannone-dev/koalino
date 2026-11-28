@@ -3385,4 +3385,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String yesterdayAt(String time) {
     return 'Ontem $time';
   }
+
+  @override
+  String get unnamedDevice => 'Dispositivo sem nome';
 }
