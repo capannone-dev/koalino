@@ -564,5 +564,14 @@
     "other": "Dernière synchronisation il y a {count} heures"
   },
   "lastSyncedOn": "Dernière synchronisation : {date}",
-  "devicesOnlineCount": "{online} sur {total} en ligne"
+  "devicesOnlineCount": "{online} sur {total} en ligne",
+  "play": "Lire",
+  "pause": "Pause",
+  "skipBack10Seconds": "Reculer de 10 secondes",
+  "skipForward10Seconds": "Avancer de 10 secondes",
+  "playbackSpeed": "Vitesse de lecture",
+  "followTranscript": "Suivre dans la transcription",
+  "playFromAt": "Lire à partir de {at}",
+  "positionInTheRecording": "Position dans l'enregistrement",
+  "recordingPlayer": "Lecteur de l'enregistrement"
 }

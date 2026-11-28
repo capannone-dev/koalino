@@ -46,6 +46,8 @@ you connect yourself, which may charge you directly.)
 - Projects that gather meetings, notes, files and e-mails; search across everything.
 - Export to Markdown, PDF and JSON; an optional notes folder mirrors everything as plain files you
   can edit with any editor.
+- If you choose to keep a meeting's audio (encrypted, on that device only), play it back with the
+  transcript following along: start from any passage, move anywhere, and change the speed.
 
 **AI, only if you want it**
 - Meeting summaries and chat with your notes, with answers that link to the moment they cite,

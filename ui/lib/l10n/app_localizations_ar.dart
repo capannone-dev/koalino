@@ -3348,4 +3348,25 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get youCanRecordOnceItIsReady => 'يمكنك التسجيل فور جاهزيته.';
+
+  @override
+  String get skipBack10Seconds => 'رجوع 10 ثوانٍ';
+
+  @override
+  String get skipForward10Seconds => 'تقديم 10 ثوانٍ';
+
+  @override
+  String get playbackSpeed => 'سرعة التشغيل';
+
+  @override
+  String get followTranscript => 'المتابعة في النص المكتوب';
+
+  @override
+  String get playFromHere => 'التشغيل من هنا';
+
+  @override
+  String get openingTheRecording => 'جارٍ فتح التسجيل…';
+
+  @override
+  String get recordingPlayer => 'مشغّل التسجيل';
 }

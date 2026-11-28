@@ -3334,4 +3334,25 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get youCanRecordOnceItIsReady =>
       'Você poderá gravar assim que ele estiver pronto.';
+
+  @override
+  String get skipBack10Seconds => 'Voltar 10 segundos';
+
+  @override
+  String get skipForward10Seconds => 'Avançar 10 segundos';
+
+  @override
+  String get playbackSpeed => 'Velocidade de reprodução';
+
+  @override
+  String get followTranscript => 'Acompanhar na transcrição';
+
+  @override
+  String get playFromHere => 'Reproduzir a partir daqui';
+
+  @override
+  String get openingTheRecording => 'Abrindo a gravação…';
+
+  @override
+  String get recordingPlayer => 'Player da gravação';
 }

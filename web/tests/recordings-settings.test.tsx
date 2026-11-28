@@ -1,10 +1,9 @@
 // Verifies the web side of kept meeting recordings (#140): keeping is turned on only after the
-// privacy warning, wiping asks first, and a meeting shows a player only when a recording is kept.
+// privacy warning, and wiping asks first. The meeting page's player is in recording-player.test.tsx.
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { RecordingsSettings } from "@/components/recordings-settings";
-import { MeetingRecordingPlayer } from "@/components/meeting-recording-player";
 import * as api from "@/lib/recordings-api";
 
 vi.mock("@/lib/recordings-api", async () => ({
@@ -59,20 +58,4 @@ test("wiping asks first, then deletes them all", async () => {
   expect(await screen.findByText("2 recordings wiped.")).toBeInTheDocument();
   expect(screen.getByText("No recordings kept")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Wipe all recordings" })).toBeDisabled();
-});
-
-test("a meeting with a kept recording shows a player loading only when played", async () => {
-  vi.mocked(api.hasMeetingRecording).mockResolvedValue(true);
-  const { container } = render(<MeetingRecordingPlayer meetingId="m 1" />);
-  expect(await screen.findByRole("heading", { name: "Play recording" })).toBeInTheDocument();
-  const audio = container.querySelector("audio");
-  expect(audio?.getAttribute("preload")).toBe("none");
-  expect(audio?.getAttribute("src")).toMatch(/\/api\/meetings\/m%201\/recording$/);
-});
-
-test("a meeting without one shows nothing", async () => {
-  vi.mocked(api.hasMeetingRecording).mockResolvedValue(false);
-  const { container } = render(<MeetingRecordingPlayer meetingId="m-1" />);
-  await Promise.resolve();
-  expect(container.querySelector("audio")).toBeNull();
 });

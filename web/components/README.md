@@ -66,8 +66,11 @@ Nested projects (#142): `projects-index.tsx` indents subprojects under their par
 (Move to, never into itself or its subprojects); `meeting-project-picker.tsx` indents them too.
 `recordings-settings.tsx` (#140) turns Keep meeting recordings on after a privacy and space
 warning, shows how many are kept, and wipes them all after a confirmation.
-`meeting-recording-player.tsx` shows an `<audio>` player on a meeting's page when the daemon keeps
-its recording, loading it only when played.
+`meeting-recording-player.tsx` (#140, #197) is the bar that plays a meeting's kept recording,
+sticking to the bottom of the window while the transcript scrolls: play and pause, back and forward
+10 seconds, the position, the speed, and a button to follow the transcript again. It and
+`meeting-transcript.tsx` share the playback through `lib/recording-playback.tsx`; the transcript
+marks the passage being heard, keeps it in view, and plays any passage from its start.
 
 `log-settings.tsx` (Issue #46) renders the Settings page's level selector (a directive set
 elsewhere, such as `info,note_taker_core=debug`, shows as "Custom") and **Export logs**, which

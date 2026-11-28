@@ -3167,4 +3167,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get youCanRecordOnceItIsReady => '準備ができ次第、録音できるようになります。';
+
+  @override
+  String get skipBack10Seconds => '10秒戻る';
+
+  @override
+  String get skipForward10Seconds => '10秒進む';
+
+  @override
+  String get playbackSpeed => '再生速度';
+
+  @override
+  String get followTranscript => '文字起こしで追う';
+
+  @override
+  String get playFromHere => 'ここから再生';
+
+  @override
+  String get openingTheRecording => '録音を開いています…';
+
+  @override
+  String get recordingPlayer => '録音プレーヤー';
 }

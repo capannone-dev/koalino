@@ -3351,4 +3351,25 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get youCanRecordOnceItIsReady =>
       'Записывать можно будет, как только она будет готова.';
+
+  @override
+  String get skipBack10Seconds => 'Назад на 10 секунд';
+
+  @override
+  String get skipForward10Seconds => 'Вперёд на 10 секунд';
+
+  @override
+  String get playbackSpeed => 'Скорость воспроизведения';
+
+  @override
+  String get followTranscript => 'Следить по расшифровке';
+
+  @override
+  String get playFromHere => 'Воспроизвести отсюда';
+
+  @override
+  String get openingTheRecording => 'Открываем запись…';
+
+  @override
+  String get recordingPlayer => 'Проигрыватель записи';
 }

@@ -856,5 +856,19 @@
   "downloadTheBestModelByItselfHint": "Con wifi y si cabe, el modelo que Automático elige para este dispositivo se descarga al iniciar. Mientras tanto, las grabaciones usan el modelo actual.",
   "gettingAMoreAccurateModel": "Descargando un modelo más preciso ({name}) para este dispositivo: {percent}",
   "recordingsUseTheCurrentModelMeanwhile": "Las grabaciones siguen usando el modelo actual hasta que esté listo.",
-  "youCanRecordOnceItIsReady": "Podrás grabar en cuanto esté listo."
+  "youCanRecordOnceItIsReady": "Podrás grabar en cuanto esté listo.",
+  "skipBack10Seconds": "Retroceder 10 segundos",
+  "@skipBack10Seconds": {},
+  "skipForward10Seconds": "Avanzar 10 segundos",
+  "@skipForward10Seconds": {},
+  "playbackSpeed": "Velocidad de reproducción",
+  "@playbackSpeed": {},
+  "followTranscript": "Seguir en la transcripción",
+  "@followTranscript": {},
+  "playFromHere": "Reproducir desde aquí",
+  "@playFromHere": {},
+  "openingTheRecording": "Abriendo la grabación…",
+  "@openingTheRecording": {},
+  "recordingPlayer": "Reproductor de la grabación",
+  "@recordingPlayer": {}
 }

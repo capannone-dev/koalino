@@ -3099,4 +3099,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get youCanRecordOnceItIsReady => '准备好后即可录音。';
+
+  @override
+  String get skipBack10Seconds => '后退 10 秒';
+
+  @override
+  String get skipForward10Seconds => '前进 10 秒';
+
+  @override
+  String get playbackSpeed => '播放速度';
+
+  @override
+  String get followTranscript => '在文字记录中跟随';
+
+  @override
+  String get playFromHere => '从这里播放';
+
+  @override
+  String get openingTheRecording => '正在打开录音…';
+
+  @override
+  String get recordingPlayer => '录音播放器';
 }

@@ -560,5 +560,14 @@
     "other": "上次同步：{count} 小时前"
   },
   "lastSyncedOn": "上次同步：{date}",
-  "devicesOnlineCount": "{online}/{total} 台在线"
+  "devicesOnlineCount": "{online}/{total} 台在线",
+  "play": "播放",
+  "pause": "暂停",
+  "skipBack10Seconds": "后退 10 秒",
+  "skipForward10Seconds": "前进 10 秒",
+  "playbackSpeed": "播放速度",
+  "followTranscript": "在文字记录中跟随",
+  "playFromAt": "从 {at} 播放",
+  "positionInTheRecording": "录音中的位置",
+  "recordingPlayer": "录音播放器"
 }

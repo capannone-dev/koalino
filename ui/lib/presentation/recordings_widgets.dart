@@ -1,13 +1,12 @@
 // Kept meeting recordings in the app (#140): the Settings section (switch with its privacy and
-// space warning, what is kept, Wipe all recordings) and the meeting page's Play recording button.
+// space warning, what is kept, Wipe all recordings). The meeting page plays them with
+// `recording_player_bar.dart` (#197).
 //
 // The widgets stay dumb: every decision and file lives in the core, reached through
-// `RecordingsBridge`. Playback uses `audioplayers` on the one decrypted file the core prepares,
-// which is released when playback stops or the page closes.
+// `RecordingsBridge`.
 
 import 'dart:async';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
@@ -18,9 +17,6 @@ const Key keepRecordingsSwitchKey = ValueKey<String>('keep-recordings');
 
 /// Key of the Wipe all recordings button.
 const Key wipeRecordingsKey = ValueKey<String>('wipe-recordings');
-
-/// Key of the meeting page's Play recording button.
-const Key playRecordingKey = ValueKey<String>('play-recording');
 
 /// Words a size in bytes as MB with one decimal.
 String recordingsSize(int bytes) =>
@@ -170,106 +166,6 @@ final class _RecordingsSectionState extends State<RecordingsSection> {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// The meeting page's Play recording button, shown only when the meeting has a kept recording.
-final class PlayRecordingButton extends StatefulWidget {
-  /// Creates the button; `player` is replaced in tests.
-  ///
-  /// Side effects: Asks the core whether a recording is kept when shown.
-  const PlayRecordingButton(
-      {required this.bridge, required this.meetingId, this.player, super.key});
-
-  final RecordingsBridge bridge;
-  final String meetingId;
-  final AudioPlayer? player;
-
-  @override
-  State<PlayRecordingButton> createState() => _PlayRecordingButtonState();
-}
-
-final class _PlayRecordingButtonState extends State<PlayRecordingButton> {
-  bool _available = false;
-  bool _playing = false;
-  bool _preparing = false;
-  AudioPlayer? _player;
-  StreamSubscription<void>? _finished;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_check());
-  }
-
-  Future<void> _check() async {
-    try {
-      final bool available = await widget.bridge.has(widget.meetingId);
-      if (mounted) setState(() => _available = available);
-    } on LlmException {
-      // No core or no recording: the button stays hidden.
-    }
-  }
-
-  AudioPlayer _ensurePlayer() {
-    final AudioPlayer player = _player ??= widget.player ?? AudioPlayer();
-    _finished ??= player.onPlayerComplete.listen((_) => unawaited(_stop()));
-    return player;
-  }
-
-  Future<void> _play() async {
-    setState(() => _preparing = true);
-    try {
-      final PreparedRecording recording =
-          await widget.bridge.prepare(widget.meetingId);
-      if (!mounted) return;
-      await _ensurePlayer().play(DeviceFileSource(recording.path));
-      if (mounted) setState(() => _playing = true);
-    } on LlmException {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.recordingCouldNotBePlayed)));
-      }
-    } finally {
-      if (mounted) setState(() => _preparing = false);
-    }
-  }
-
-  Future<void> _stop() async {
-    await _player?.stop();
-    if (mounted) setState(() => _playing = false);
-    try {
-      await widget.bridge.release();
-    } on LlmException {
-      // The core deletes the file at the next playback or start anyway.
-    }
-  }
-
-  @override
-  void dispose() {
-    unawaited(_finished?.cancel());
-    if (_playing) {
-      unawaited(_player?.stop());
-      unawaited(widget.bridge.release().catchError((Object _) {}));
-    }
-    if (widget.player == null) unawaited(_player?.dispose());
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_available) return const SizedBox.shrink();
-    return IconButton(
-      key: playRecordingKey,
-      tooltip: _playing ? l10n.stopRecordingPlayback : l10n.playRecording,
-      icon: _preparing
-          ? const SizedBox.square(
-              dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-          : Icon(_playing
-              ? Icons.stop_circle_outlined
-              : Icons.play_circle_outline),
-      onPressed: _preparing ? null : (_playing ? _stop : _play),
     );
   }
 }

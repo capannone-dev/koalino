@@ -2499,5 +2499,19 @@
   "recordingsUseTheCurrentModelMeanwhile": "Recordings keep using the current model until it's ready.",
   "@recordingsUseTheCurrentModelMeanwhile": {},
   "youCanRecordOnceItIsReady": "You can record as soon as it's ready.",
-  "@youCanRecordOnceItIsReady": {}
+  "@youCanRecordOnceItIsReady": {},
+  "skipBack10Seconds": "Back 10 seconds",
+  "@skipBack10Seconds": {"description": "Kept-recording player on the meeting page (#197)."},
+  "skipForward10Seconds": "Forward 10 seconds",
+  "@skipForward10Seconds": {"description": "Kept-recording player on the meeting page (#197)."},
+  "playbackSpeed": "Playback speed",
+  "@playbackSpeed": {"description": "Kept-recording player on the meeting page (#197)."},
+  "followTranscript": "Follow along in the transcript",
+  "@followTranscript": {"description": "Kept-recording player on the meeting page (#197)."},
+  "playFromHere": "Play from here",
+  "@playFromHere": {"description": "Kept-recording player on the meeting page (#197)."},
+  "openingTheRecording": "Opening the recording…",
+  "@openingTheRecording": {"description": "Kept-recording player on the meeting page (#197)."},
+  "recordingPlayer": "Recording player",
+  "@recordingPlayer": {"description": "Kept-recording player on the meeting page (#197)."}
 }

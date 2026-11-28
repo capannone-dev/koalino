@@ -42,6 +42,11 @@ and the pure `projectTree` (each level by name, unknown parents at the top) and 
 `setKeepRecordings`, `wipeRecordings`, `hasMeetingRecording` and `meetingRecordingUrl` (the WAV
 an `<audio>` element plays), throwing `RecordingsError` with the daemon's `error_code`.
 
+`recording-playback.tsx` (#197) is `RecordingPlaybackProvider`, which owns one hidden `<audio>`
+element for a meeting's kept recording (loaded only when played) and shares its state and commands
+with the player bar and the transcript through `useRecordingPlayback`. The daemon serves the WAV in
+byte ranges, so the browser can move anywhere in it.
+
 `projects-api.ts` (Issue #85) is the projects client: `getProjects`, `getProject`, `createProject`,
 `renameProject`, `deleteProject`, `moveMeetingToProject`, `uploadProjectFile` (the raw file, its
 name in the query), `addProjectNote`, `deleteProjectResource`, `getProjectEmail`,

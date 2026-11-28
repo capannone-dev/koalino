@@ -174,6 +174,70 @@ async fn a_meeting_recording_plays_as_wav_and_a_missing_one_is_404() {
     assert_eq!(json(&body)["error_code"], "not_found");
 }
 
+/// Sends a GET with a `Range` header; returns the status, the headers and the body.
+async fn get_range(
+    router: axum::Router,
+    uri: &str,
+    range: &str,
+) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .header("range", range)
+                .body(Body::empty())
+                .unwrap_or_else(|error| panic!("{error}")),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("{error}"));
+    let status = response.status();
+    let headers = response.headers().clone();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_else(|error| panic!("{error}"));
+    (status, headers, bytes.to_vec())
+}
+
+/// Browsers move in a long recording by asking for the part they need (#197).
+#[tokio::test]
+async fn a_recording_is_served_in_parts_for_seeking() {
+    let scratch = Scratch::new();
+    let uri = "/api/meetings/m-1/recording";
+    let (_, _, whole) = send(scratch.router(), "GET", uri, None).await;
+    let total = whole.len();
+
+    let (status, headers, body) = get_range(scratch.router(), uri, "bytes=100-199").await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, whole[100..200]);
+    assert_eq!(
+        headers.get("content-range").and_then(|v| v.to_str().ok()),
+        Some(format!("bytes 100-199/{total}").as_str())
+    );
+    assert_eq!(
+        headers.get("accept-ranges").and_then(|v| v.to_str().ok()),
+        Some("bytes")
+    );
+
+    let (status, _, body) = get_range(scratch.router(), uri, "bytes=1000-").await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, whole[1000..]);
+
+    let (status, _, body) = get_range(scratch.router(), uri, "bytes=-44").await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, whole[total - 44..], "the last 44 bytes");
+
+    let (status, headers, _) = get_range(scratch.router(), uri, &format!("bytes={total}-")).await;
+    assert_eq!(status, StatusCode::RANGE_NOT_SATISFIABLE);
+    assert_eq!(
+        headers.get("content-range").and_then(|v| v.to_str().ok()),
+        Some(format!("bytes */{total}").as_str())
+    );
+
+    let (status, _, body) = get_range(scratch.router(), uri, "bytes=0-1,5-9").await;
+    assert_eq!(status, StatusCode::OK, "several ranges get the whole file");
+    assert_eq!(body.len(), total);
+}
+
 #[tokio::test]
 async fn wiping_deletes_every_recording() {
     let scratch = Scratch::new();

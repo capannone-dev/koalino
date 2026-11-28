@@ -1,6 +1,6 @@
 // Verifies kept meeting recordings in the app (#140): turning keeping on only after the privacy
-// warning, what is kept, wiping them all after confirming, and the meeting's Play recording
-// button, shown only when a recording is kept.
+// warning, what is kept, and wiping them all after confirming. The meeting page's player is in
+// `recording_player_test.dart`.
 
 import 'dart:convert';
 
@@ -112,32 +112,5 @@ void main() {
         tester.widget<ButtonStyleButton>(find.byKey(wipeRecordingsKey)).enabled,
         isFalse,
         reason: 'nothing left to wipe');
-  });
-
-  testWidgets('a meeting with a kept recording shows Play recording',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            appBar: AppBar(actions: <Widget>[
-      PlayRecordingButton(
-          bridge: RecordingsBridge(call: core.call), meetingId: 'm-1'),
-    ]))));
-    await tester.pumpAndSettle();
-    expect(find.byKey(playRecordingKey), findsOneWidget);
-    expect(core.requests.last,
-        <String, Object?>{'command': 'has', 'meeting_id': 'm-1'});
-  });
-
-  testWidgets('a meeting without one shows nothing',
-      (WidgetTester tester) async {
-    core.available = false;
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            appBar: AppBar(actions: <Widget>[
-      PlayRecordingButton(
-          bridge: RecordingsBridge(call: core.call), meetingId: 'm-1'),
-    ]))));
-    await tester.pumpAndSettle();
-    expect(find.byKey(playRecordingKey), findsNothing);
   });
 }

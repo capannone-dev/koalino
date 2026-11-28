@@ -856,5 +856,19 @@
   "downloadTheBestModelByItselfHint": "عند الاتصال بشبكة Wi-Fi وتوفر المساحة، يُنزَّل عند البدء النموذج الذي يختاره «تلقائي» لهذا الجهاز. وفي الأثناء تستخدم التسجيلات النموذج الحالي.",
   "gettingAMoreAccurateModel": "جارٍ تنزيل نموذج أدق ({name}) لهذا الجهاز: {percent}",
   "recordingsUseTheCurrentModelMeanwhile": "تواصل التسجيلات استخدام النموذج الحالي حتى يصبح جاهزًا.",
-  "youCanRecordOnceItIsReady": "يمكنك التسجيل فور جاهزيته."
+  "youCanRecordOnceItIsReady": "يمكنك التسجيل فور جاهزيته.",
+  "skipBack10Seconds": "رجوع 10 ثوانٍ",
+  "@skipBack10Seconds": {},
+  "skipForward10Seconds": "تقديم 10 ثوانٍ",
+  "@skipForward10Seconds": {},
+  "playbackSpeed": "سرعة التشغيل",
+  "@playbackSpeed": {},
+  "followTranscript": "المتابعة في النص المكتوب",
+  "@followTranscript": {},
+  "playFromHere": "التشغيل من هنا",
+  "@playFromHere": {},
+  "openingTheRecording": "جارٍ فتح التسجيل…",
+  "@openingTheRecording": {},
+  "recordingPlayer": "مشغّل التسجيل",
+  "@recordingPlayer": {}
 }

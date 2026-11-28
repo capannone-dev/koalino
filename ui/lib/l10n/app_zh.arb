@@ -856,5 +856,19 @@
   "downloadTheBestModelByItselfHint": "连接 Wi-Fi 且空间足够时，启动时会下载“自动”为此设备选择的模型。在此期间，录音使用当前模型。",
   "gettingAMoreAccurateModel": "正在为此设备获取更准确的模型（{name}）：{percent}",
   "recordingsUseTheCurrentModelMeanwhile": "在它准备好之前，录音继续使用当前模型。",
-  "youCanRecordOnceItIsReady": "准备好后即可录音。"
+  "youCanRecordOnceItIsReady": "准备好后即可录音。",
+  "skipBack10Seconds": "后退 10 秒",
+  "@skipBack10Seconds": {},
+  "skipForward10Seconds": "前进 10 秒",
+  "@skipForward10Seconds": {},
+  "playbackSpeed": "播放速度",
+  "@playbackSpeed": {},
+  "followTranscript": "在文字记录中跟随",
+  "@followTranscript": {},
+  "playFromHere": "从这里播放",
+  "@playFromHere": {},
+  "openingTheRecording": "正在打开录音…",
+  "@openingTheRecording": {},
+  "recordingPlayer": "录音播放器",
+  "@recordingPlayer": {}
 }

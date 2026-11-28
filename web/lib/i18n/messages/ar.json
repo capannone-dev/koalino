@@ -591,5 +591,14 @@
     "other": "آخر مزامنة قبل {count} ساعة"
   },
   "lastSyncedOn": "آخر مزامنة: {date}",
-  "devicesOnlineCount": "{online} من {total} متصل"
+  "devicesOnlineCount": "{online} من {total} متصل",
+  "play": "تشغيل",
+  "pause": "إيقاف مؤقت",
+  "skipBack10Seconds": "رجوع 10 ثوانٍ",
+  "skipForward10Seconds": "تقديم 10 ثوانٍ",
+  "playbackSpeed": "سرعة التشغيل",
+  "followTranscript": "المتابعة في النص المكتوب",
+  "playFromAt": "التشغيل من {at}",
+  "positionInTheRecording": "الموضع في التسجيل",
+  "recordingPlayer": "مشغّل التسجيل"
 }

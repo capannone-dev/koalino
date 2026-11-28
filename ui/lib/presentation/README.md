@@ -144,8 +144,13 @@ width, so the mouse wheel scrolls anywhere across the meeting page and the summa
 
 `recordings_widgets.dart` (#140) holds `RecordingsSection` (Settings: Keep meeting recordings,
 turned on only after a privacy and space warning, how many are kept, Wipe all recordings with a
-confirmation) and `PlayRecordingButton` (the meeting page's app bar, shown only when a recording is
-kept; it plays the one decrypted file the core prepares and releases it on stop).
+confirmation).
+
+`recording_player_bar.dart` (#197) is the meeting page's player for a kept recording, under the
+transcript on phones and in the desktop pane: the position slider (seeks when let go), back and
+forward 10 seconds, play and pause, the speed (0.75× to 2×), and a button to follow the transcript
+again after scrolling away. `meeting_detail_screen.dart` marks the passage being heard, keeps it in
+view while following, and gives each passage a Play from here button.
 
 `backup_section.dart` (#167) is Settings' Back up all data and Restore from backup (Android): the
 passphrase twice (at least 8 characters) for a backup, a warning before a restore, failures worded

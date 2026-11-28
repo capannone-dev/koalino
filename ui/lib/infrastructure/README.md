@@ -158,6 +158,10 @@ read back.
 `recordings_bridge.dart` (#140) calls `note_taker_recordings_command`: `status`, `setKeep`,
 `wipe`, `has`, `prepare` (the decrypted WAV's path and length) and `release`.
 
+`recording_playback.dart` (#197) is `RecordingPlayback`, the small interface the recording player
+plays through (open, resume, pause, seek, speed, position events), and `AudioPlayersPlayback`, its
+`audioplayers` implementation. Tests swap in a fake that plays nothing.
+
 `backup_bridge.dart` (#167) is `BackupBridge` and, on Android, `AndroidBackupBridge` over
 `note_taker/backup` (`BackupChannel.kt`): document pickers, `create` and `stage`, and `restart`.
 The database key never passes through Dart. `restore_on_start.dart` runs first in

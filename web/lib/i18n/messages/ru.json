@@ -592,5 +592,14 @@
     "other": "Синхронизировано {count} часа назад"
   },
   "lastSyncedOn": "Последняя синхронизация: {date}",
-  "devicesOnlineCount": "В сети: {online} из {total}"
+  "devicesOnlineCount": "В сети: {online} из {total}",
+  "play": "Воспроизвести",
+  "pause": "Пауза",
+  "skipBack10Seconds": "Назад на 10 секунд",
+  "skipForward10Seconds": "Вперёд на 10 секунд",
+  "playbackSpeed": "Скорость воспроизведения",
+  "followTranscript": "Следить по расшифровке",
+  "playFromAt": "Воспроизвести с {at}",
+  "positionInTheRecording": "Позиция в записи",
+  "recordingPlayer": "Проигрыватель записи"
 }

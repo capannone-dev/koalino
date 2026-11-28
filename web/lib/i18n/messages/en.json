@@ -564,5 +564,14 @@
     "other": "Last synced {count} hours ago"
   },
   "lastSyncedOn": "Last synced {date}",
-  "devicesOnlineCount": "{online} of {total} online"
+  "devicesOnlineCount": "{online} of {total} online",
+  "play": "Play",
+  "pause": "Pause",
+  "skipBack10Seconds": "Back 10 seconds",
+  "skipForward10Seconds": "Forward 10 seconds",
+  "playbackSpeed": "Playback speed",
+  "followTranscript": "Follow along in the transcript",
+  "playFromAt": "Play from {at}",
+  "positionInTheRecording": "Position in the recording",
+  "recordingPlayer": "Recording player"
 }

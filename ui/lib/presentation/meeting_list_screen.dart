@@ -352,7 +352,8 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                         child: MeetingDetailView(
                             controller: widget.controller,
                             editController: widget.editController,
-                            speakerRenamer: widget.speakerRenamer)),
+                            speakerRenamer: widget.speakerRenamer,
+                            recordingsBridge: widget.recordingsBridge)),
                   ],
                 )
               : meetingList,

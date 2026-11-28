@@ -5259,6 +5259,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You can record as soon as it\'s ready.'**
   String get youCanRecordOnceItIsReady;
+
+  /// Kept-recording player on the meeting page (#197).
+  ///
+  /// In en, this message translates to:
+  /// **'Back 10 seconds'**
+  String get skipBack10Seconds;
+
+  /// Kept-recording player on the meeting page (#197).
+  ///
+  /// In en, this message translates to:
+  /// **'Forward 10 seconds'**
+  String get skipForward10Seconds;
+
+  /// Kept-recording player on the meeting page (#197).
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed'**
+  String get playbackSpeed;
+
+  /// Kept-recording player on the meeting page (#197).
+  ///
+  /// In en, this message translates to:
+  /// **'Follow along in the transcript'**
+  String get followTranscript;
+
+  /// Kept-recording player on the meeting page (#197).
+  ///
+  /// In en, this message translates to:
+  /// **'Play from here'**
+  String get playFromHere;
+
+  /// Kept-recording player on the meeting page (#197).
+  ///
+  /// In en, this message translates to:
+  /// **'Opening the recording…'**
+  String get openingTheRecording;
+
+  /// Kept-recording player on the meeting page (#197).
+  ///
+  /// In en, this message translates to:
+  /// **'Recording player'**
+  String get recordingPlayer;
 }
 
 class _AppLocalizationsDelegate

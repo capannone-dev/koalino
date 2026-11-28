@@ -5,10 +5,11 @@ import 'dart:async';
 import 'dart:io';
 
 // ignore: deprecated_member_use
+import 'package:note_taker_ui/controllers/recording_player_controller.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
-import 'package:note_taker_ui/presentation/recordings_widgets.dart';
+import 'package:note_taker_ui/presentation/recording_player_bar.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/rendering.dart' show ScrollCacheExtent, ScrollDirection;
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/presentation/chat_screen.dart';
 import 'package:note_taker_ui/presentation/clear_file.dart';
@@ -94,7 +95,7 @@ final class MeetingDetailScreen extends StatefulWidget {
   /// Adds Chat about this meeting when given (#97).
   final ChatBridge? chatBridge;
 
-  /// Adds Play recording when given and the meeting has a kept recording (#140).
+  /// Adds the recording player when given and the meeting has a kept recording (#140, #197).
   final RecordingsBridge? recordingsBridge;
 
   /// Lets the owner rename speakers from the transcript when given (#186).
@@ -145,8 +146,6 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> actions = <Widget>[
-      if (widget.recordingsBridge case final RecordingsBridge recordings)
-        PlayRecordingButton(bridge: recordings, meetingId: widget.meetingId),
       if (widget.chatBridge case final ChatBridge bridge)
         IconButton(
           tooltip: l10n.chatAboutThisMeeting,
@@ -231,6 +230,7 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
           controller: widget.controller,
           editController: widget.editController,
           speakerRenamer: widget.speakerRenamer,
+          recordingsBridge: widget.recordingsBridge,
           focusStartMs: widget.focusStartMs),
     );
   }
@@ -426,6 +426,7 @@ final class MeetingDetailView extends StatelessWidget {
       {required this.controller,
       this.editController,
       this.speakerRenamer,
+      this.recordingsBridge,
       this.focusStartMs,
       super.key});
 
@@ -434,6 +435,10 @@ final class MeetingDetailView extends StatelessWidget {
 
   /// Lets the owner rename speakers from the transcript when given (#186).
   final SpeakerRenamer? speakerRenamer;
+
+  /// Adds the recording player under the transcript when given and the meeting keeps its
+  /// recording (#197).
+  final RecordingsBridge? recordingsBridge;
 
   /// Scrolls to and marks the transcript passage starting here (#100).
   final int? focusStartMs;
@@ -455,15 +460,109 @@ final class MeetingDetailView extends StatelessWidget {
           return Center(child: Text(errorMessage));
         }
         return switch (controller.selectedMeeting) {
-          final MeetingDetail meeting => _MeetingContent(
-              controller: controller,
-              meeting: meeting,
-              editController: editController,
-              speakerRenamer: speakerRenamer,
-              focusStartMs: focusStartMs),
+          final MeetingDetail meeting => switch (recordingsBridge) {
+              final RecordingsBridge bridge => _MeetingWithPlayer(
+                  // A new meeting gets a new player; the old one releases its file.
+                  key: ValueKey<String>(meeting.summary.meetingId),
+                  bridge: bridge,
+                  meeting: meeting,
+                  contentBuilder: (RecordingPlayerController? player) =>
+                      _MeetingContent(
+                          controller: controller,
+                          meeting: meeting,
+                          editController: editController,
+                          speakerRenamer: speakerRenamer,
+                          player: player,
+                          focusStartMs: focusStartMs),
+                ),
+              null => _MeetingContent(
+                  controller: controller,
+                  meeting: meeting,
+                  editController: editController,
+                  speakerRenamer: speakerRenamer,
+                  focusStartMs: focusStartMs),
+            },
           null => Center(child: Text(l10n.selectAMeetingToSeeIts)),
         };
       },
+    );
+  }
+}
+
+/// Owns a meeting's recording player (#197): the transcript above, the player bar below.
+///
+/// The transcript gets the player only once a recording is known to be kept, so a meeting without
+/// one looks as before. Side effects: Asks the core once whether a recording is kept; closing the
+/// page releases the decrypted file.
+final class _MeetingWithPlayer extends StatefulWidget {
+  const _MeetingWithPlayer({
+    required this.bridge,
+    required this.meeting,
+    required this.contentBuilder,
+    super.key,
+  });
+
+  final RecordingsBridge bridge;
+  final MeetingDetail meeting;
+  final Widget Function(RecordingPlayerController? player) contentBuilder;
+
+  @override
+  State<_MeetingWithPlayer> createState() => _MeetingWithPlayerState();
+}
+
+final class _MeetingWithPlayerState extends State<_MeetingWithPlayer> {
+  late final RecordingPlayerController _player = RecordingPlayerController(
+    bridge: widget.bridge,
+    meetingId: widget.meeting.summary.meetingId,
+  );
+  bool _available = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _setPassages();
+    _player.addListener(_onPlayerChanged);
+    unawaited(_player.check());
+  }
+
+  @override
+  void didUpdateWidget(_MeetingWithPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.meeting, widget.meeting)) {
+      _setPassages();
+    }
+  }
+
+  void _setPassages() => _player.passageStarts = <int>[
+        for (final MeetingTranscriptSegment segment in widget.meeting.segments)
+          segment.startTimeMs,
+      ];
+
+  /// Rebuilds the transcript only when the player appears, not at every position.
+  void _onPlayerChanged() {
+    if (_player.available != _available && mounted) {
+      setState(() => _available = _player.available);
+    }
+  }
+
+  @override
+  void dispose() {
+    _player.removeListener(_onPlayerChanged);
+    _player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(child: widget.contentBuilder(_available ? _player : null)),
+        RecordingPlayerBar(
+          player: _player,
+          fallbackDurationMs: widget.meeting.summary.durationMs,
+        ),
+      ],
     );
   }
 }
@@ -475,12 +574,17 @@ final class _MeetingContent extends StatelessWidget {
       required this.meeting,
       this.editController,
       this.speakerRenamer,
+      this.player,
       this.focusStartMs});
 
   final MeetingListController controller;
   final MeetingDetail meeting;
   final MeetingEditController? editController;
   final SpeakerRenamer? speakerRenamer;
+
+  /// The kept recording's player, when there is one: the passage being heard is marked and kept
+  /// in view, and each passage can be played from its start (#197).
+  final RecordingPlayerController? player;
   final int? focusStartMs;
 
   /// The start of the passage to scroll to: the one starting at `focusStartMs`, or the last one
@@ -505,12 +609,13 @@ final class _MeetingContent extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final MeetingSummary summary = meeting.summary;
     // The list fills the pane so the wheel scrolls anywhere across it (#142).
-    return ReadableWidth(
+    final Widget content = ReadableWidth(
       maxWidth: _maxReadableWidth,
       builder: (BuildContext context, EdgeInsets padding) => ListView(
         padding: padding,
-        // A passage to scroll to must be built, so build the whole transcript then.
-        scrollCacheExtent: focusStartMs == null
+        // A passage to scroll to must be built, so build the whole transcript then; the player
+        // can move to any passage.
+        scrollCacheExtent: focusStartMs == null && player == null
             ? null
             : const ScrollCacheExtent.pixels(double.maxFinite),
         children: <Widget>[
@@ -639,6 +744,21 @@ final class _MeetingContent extends StatelessWidget {
         ],
       ),
     );
+    final RecordingPlayerController? recordingPlayer = player;
+    if (recordingPlayer == null) {
+      return content;
+    }
+    // Scrolling by hand while it plays stops following; the player bar offers to follow again.
+    return NotificationListener<UserScrollNotification>(
+      onNotification: (UserScrollNotification notification) {
+        if (recordingPlayer.playing &&
+            notification.direction != ScrollDirection.idle) {
+          recordingPlayer.stopFollowing();
+        }
+        return false;
+      },
+      child: content,
+    );
   }
 
   /// Builds one block per segment and attachment in timeline order, or the flat transcript or
@@ -662,10 +782,10 @@ final class _MeetingContent extends StatelessWidget {
                     when segment.startTimeMs == focusedStart =>
                   _FocusedSegment(
                     key: focusedSegmentKey,
-                    child: _editable(theme, segment),
+                    child: _heard(segment, _editable(theme, segment)),
                   ),
                 SegmentEntry(:final MeetingTranscriptSegment segment) =>
-                  _editable(theme, segment),
+                  _heard(segment, _editable(theme, segment)),
                 AttachmentEntry(:final MeetingAttachment attachment) =>
                   MeetingAttachmentView(attachment: attachment, photos: photos),
               },
@@ -692,6 +812,14 @@ final class _MeetingContent extends StatelessWidget {
       ...entries,
     ];
   }
+
+  /// Marks `child` while the player is in its passage, when there is a player.
+  Widget _heard(MeetingTranscriptSegment segment, Widget child) =>
+      switch (player) {
+        final RecordingPlayerController player => _HeardPassage(
+            player: player, startMs: segment.startTimeMs, child: child),
+        null => child,
+      };
 
   /// Builds a segment, correctable when there is an edit controller.
   Widget _editable(ThemeData theme, MeetingTranscriptSegment segment) =>
@@ -728,6 +856,15 @@ final class _MeetingContent extends StatelessWidget {
                 '$speaker · ${formatMeetingDuration(segment.startTimeMs)}',
               ),
             ),
+            if (player case final RecordingPlayerController player)
+              IconButton(
+                key: ValueKey<String>('play-from-${segment.startTimeMs}'),
+                tooltip: l10n.playFromHere,
+                visualDensity: VisualDensity.compact,
+                iconSize: 18,
+                icon: const Icon(Icons.play_circle_outline),
+                onPressed: () => player.playFrom(segment.startTimeMs),
+              ),
             if (segment.overlappingSpeech)
               Tooltip(
                 message: l10n.peopleTalkedAtOnceHereWords,
@@ -804,6 +941,54 @@ final class _MeetingContent extends StatelessWidget {
     );
   }
 }
+
+/// Marks the passage being heard and, while following, keeps it in view (#197).
+///
+/// It listens only to which passage is current, so it rebuilds when the player enters or leaves
+/// this passage, not at every position update.
+final class _HeardPassage extends StatelessWidget {
+  const _HeardPassage(
+      {required this.player, required this.startMs, required this.child});
+
+  final RecordingPlayerController player;
+  final int startMs;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int?>(
+      valueListenable: player.currentPassageStart,
+      builder: (BuildContext context, int? current, Widget? child) {
+        final bool heard = current == startMs;
+        if (heard && player.follow && player.playing) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) {
+              Scrollable.ensureVisible(context,
+                  alignment: 0.3, duration: const Duration(milliseconds: 300));
+            }
+          });
+        }
+        final ColorScheme colors = Theme.of(context).colorScheme;
+        return AnimatedContainer(
+          key: heard ? heardPassageKey : null,
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: heard
+                ? colors.secondaryContainer.withValues(alpha: 0.6)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: child,
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+/// Key of the transcript passage being heard (#197), for tests.
+const Key heardPassageKey = ValueKey<String>('heard-passage');
 
 /// Key of the transcript passage a meeting page was opened at (#100), for tests.
 const Key focusedSegmentKey = ValueKey<String>('focused-segment');

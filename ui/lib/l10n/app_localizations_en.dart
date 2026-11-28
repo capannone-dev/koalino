@@ -3293,4 +3293,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get youCanRecordOnceItIsReady =>
       'You can record as soon as it\'s ready.';
+
+  @override
+  String get skipBack10Seconds => 'Back 10 seconds';
+
+  @override
+  String get skipForward10Seconds => 'Forward 10 seconds';
+
+  @override
+  String get playbackSpeed => 'Playback speed';
+
+  @override
+  String get followTranscript => 'Follow along in the transcript';
+
+  @override
+  String get playFromHere => 'Play from here';
+
+  @override
+  String get openingTheRecording => 'Opening the recording…';
+
+  @override
+  String get recordingPlayer => 'Recording player';
 }

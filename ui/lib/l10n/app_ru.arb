@@ -856,5 +856,19 @@
   "downloadTheBestModelByItselfHint": "По Wi-Fi и при наличии места модель, которую «Автоматически» выбирает для этого устройства, скачивается при запуске. Пока что записи используют текущую модель.",
   "gettingAMoreAccurateModel": "Загружается более точная модель ({name}) для этого устройства: {percent}",
   "recordingsUseTheCurrentModelMeanwhile": "Пока она не готова, записи используют текущую модель.",
-  "youCanRecordOnceItIsReady": "Записывать можно будет, как только она будет готова."
+  "youCanRecordOnceItIsReady": "Записывать можно будет, как только она будет готова.",
+  "skipBack10Seconds": "Назад на 10 секунд",
+  "@skipBack10Seconds": {},
+  "skipForward10Seconds": "Вперёд на 10 секунд",
+  "@skipForward10Seconds": {},
+  "playbackSpeed": "Скорость воспроизведения",
+  "@playbackSpeed": {},
+  "followTranscript": "Следить по расшифровке",
+  "@followTranscript": {},
+  "playFromHere": "Воспроизвести отсюда",
+  "@playFromHere": {},
+  "openingTheRecording": "Открываем запись…",
+  "@openingTheRecording": {},
+  "recordingPlayer": "Проигрыватель записи",
+  "@recordingPlayer": {}
 }

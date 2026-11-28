@@ -3,12 +3,15 @@
 // italics (#90, #91). Imported meetings without segments show their flat text. With a meeting ID,
 // each segment's text can be corrected in place (#96), keeping its speaker and timing; the
 // meeting is then no longer re-transcribed. A link to a moment (`#at-<ms>`, from a chat answer's
-// source, #110) scrolls to the passage that moment falls in.
+// source, #110) scrolls to the passage that moment falls in. With a kept recording (#197), each
+// passage plays from its start, and the passage being heard is marked and kept in view until the
+// owner scrolls by hand.
 
 "use client";
 
 import { useEffect, useId, useState } from "react";
 import type { TranscriptSegment } from "@/lib/api";
+import { passageStartAt, useRecordingPlayback } from "@/lib/recording-playback";
 import { editErrorMessage, editSegment } from "@/lib/edits-api";
 import { useT } from "@/lib/i18n/client";
 
@@ -79,6 +82,40 @@ export function MeetingTranscript({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const fieldPrefix = useId();
+  const playback = useRecordingPlayback();
+  const player = playback?.available ? playback : null;
+  const heardStart =
+    player && (player.playing || player.positionMs > 0)
+      ? passageStartAt(
+          current.map((segment) => segment.start_time_ms),
+          player.positionMs
+        )
+      : null;
+  const following = Boolean(player?.playing && player.follow);
+
+  // Keeps the passage being heard in view while following.
+  useEffect(() => {
+    if (!following || heardStart === null) return;
+    document.getElementById(`t-${heardStart}`)?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [following, heardStart]);
+
+  // Scrolling by hand while it plays stops following; the player offers to follow again.
+  const stopFollowing = player?.setFollow;
+  useEffect(() => {
+    if (!following || !stopFollowing) return;
+    const stop = () => stopFollowing(false);
+    const keys = (event: KeyboardEvent) => {
+      if (["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) stop();
+    };
+    window.addEventListener("wheel", stop, { passive: true });
+    window.addEventListener("touchmove", stop, { passive: true });
+    window.addEventListener("keydown", keys);
+    return () => {
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchmove", stop);
+      window.removeEventListener("keydown", keys);
+    };
+  }, [following, stopFollowing]);
 
   // Scrolls to the passage a cited moment falls in: the last one starting at or before it.
   useEffect(() => {
@@ -132,11 +169,29 @@ export function MeetingTranscript({
           const at = formatOffset(segment.start_time_ms);
           const fieldId = `${fieldPrefix}-${key}`;
           return (
-            <li key={key} id={`t-${segment.start_time_ms}`} className="scroll-mt-20">
-              <p className="text-sm font-medium text-accent-text">
+            <li
+              key={key}
+              id={`t-${segment.start_time_ms}`}
+              aria-current={heardStart === segment.start_time_ms ? "true" : undefined}
+              className={`scroll-mt-20 rounded-lg ${heardStart === segment.start_time_ms ? "bg-accent-soft px-2 py-1" : ""}`}
+            >
+              <p className="flex flex-wrap items-center gap-x-2 text-sm font-medium text-accent-text">
                 <span title={segment.uncertain_speaker ? t("theSpeakerIsAGuess") : undefined}>{`${speaker} · ${at}`}</span>
+                {player ? (
+                  <button
+                    type="button"
+                    className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-full hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
+                    aria-label={t("playFromAt", { at })}
+                    title={t("playFromAt", { at })}
+                    onClick={() => player.playFrom(segment.start_time_ms)}
+                  >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </button>
+                ) : null}
                 {segment.overlapping_speech ? (
-                  <span className="ml-2 text-xs text-warning" title={t("peopleTalkedAtOnceHere")}>{t("overlappingSpeech")}</span>
+                  <span className="text-xs text-warning" title={t("peopleTalkedAtOnceHere")}>{t("overlappingSpeech")}</span>
                 ) : null}
               </p>
               {editing?.key === key ? (

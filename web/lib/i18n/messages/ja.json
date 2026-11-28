@@ -560,5 +560,14 @@
     "other": "最終同期: {count} 時間前"
   },
   "lastSyncedOn": "最終同期: {date}",
-  "devicesOnlineCount": "{total} 台中 {online} 台がオンライン"
+  "devicesOnlineCount": "{total} 台中 {online} 台がオンライン",
+  "play": "再生",
+  "pause": "一時停止",
+  "skipBack10Seconds": "10秒戻る",
+  "skipForward10Seconds": "10秒進む",
+  "playbackSpeed": "再生速度",
+  "followTranscript": "文字起こしで追う",
+  "playFromAt": "{at} から再生",
+  "positionInTheRecording": "録音内の位置",
+  "recordingPlayer": "録音プレーヤー"
 }

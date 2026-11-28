@@ -1,7 +1,7 @@
 // Renders one meeting's renamable title, when it was created and the languages it was transcribed
 // in, the devices it was recorded on with a Split action (#88), its project (Issue #85), its AI
 // summary (#95), notes and editable transcript (#96), a chat about it (#97), its kept recording
-// (#140), and metadata-only
+// with a player the transcript follows (#140, #197), and metadata-only
 // attachment list from Axum.
 
 import { ChatPanel } from "@/components/chat-panel";
@@ -12,6 +12,7 @@ import { MeetingRecordingPlayer } from "@/components/meeting-recording-player";
 import { MeetingNotes } from "@/components/meeting-notes";
 import { MeetingSummaryPanel } from "@/components/meeting-summary-panel";
 import { MeetingTranscript } from "@/components/meeting-transcript";
+import { RecordingPlaybackProvider } from "@/lib/recording-playback";
 import { getMeeting, getMeetings } from "@/lib/api";
 import { describeTranscriptionLanguages, formatMeetingCreatedAt } from "@/lib/meeting-metadata";
 import { getMeetingNotes } from "@/lib/edits-api";
@@ -44,7 +45,6 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       </p>
       {languages === null ? null : <p className="text-muted">{languages}</p>}
       <MeetingRecordedOn meeting={meeting} />
-      <MeetingRecordingPlayer meetingId={meeting.meeting_id} />
       <p>{t("meeting", { meetingId: meeting.meeting_id })}</p>
       <MeetingSummaryPanel
         meetingId={meeting.meeting_id}
@@ -55,8 +55,12 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       />
       <MeetingNotes meetingId={meeting.meeting_id} notes={notes} />
       <ChatPanel topic={{ scope: "meeting", id: meeting.meeting_id }} heading={t("chatAboutThisMeeting")} />
-      <h2>{t("transcript")}</h2>
-      <MeetingTranscript meetingId={meeting.meeting_id} segments={meeting.segments} transcript={meeting.transcript} />
+      <RecordingPlaybackProvider meetingId={meeting.meeting_id}>
+        <h2>{t("transcript")}</h2>
+        <MeetingTranscript meetingId={meeting.meeting_id} segments={meeting.segments} transcript={meeting.transcript} />
+        {/* After the transcript, so it sticks to the bottom of the window while the transcript scrolls. */}
+        <MeetingRecordingPlayer />
+      </RecordingPlaybackProvider>
       <h2>{t("attachments")}</h2>
       <ul>
         {meeting.attachments.map((attachment) => (

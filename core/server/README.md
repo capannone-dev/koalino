@@ -96,7 +96,8 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
     settings file `503` `unavailable`. `retention_routes_tests.rs` covers each case.
 - Kept meeting recordings (`recordings_routes.rs`, #140): `GET`/`PUT /api/settings/recordings`
   (`{"keep","count","bytes"}`), `DELETE /api/recordings` (wipes all, `{"deleted","bytes"}`),
-  `GET /api/meetings/{id}/recording` (WAV built in memory; `404` `not_found`) and
+  `GET /api/meetings/{id}/recording` (WAV built in memory; one `Range: bytes=…` gets that part,
+  `206`, so a browser can seek, #197; `404` `not_found`) and
   `GET /api/meetings/{id}/recording/available` (`{"available"}`). `recordings_routes_tests.rs`
   covers them.
 - Keeping online-meeting participants' voices (`meeting_voices_routes.rs`, #103) lives in the same

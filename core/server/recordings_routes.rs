@@ -17,7 +17,7 @@ use axum::{
     Json, Router,
     body::Body,
     extract::{Path, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{delete, get},
 };
@@ -140,12 +140,98 @@ async fn available(
     Json(serde_json::json!({ "available": available })).into_response()
 }
 
+/// One byte range of a body, both ends included.
+#[derive(Debug, PartialEq, Eq)]
+enum ByteRange {
+    /// From `start` to `end`.
+    Part { start: usize, end: usize },
+    /// Starts past the end of the body.
+    Unsatisfiable,
+    /// No range, an unreadable one, or several: the whole body.
+    Whole,
+}
+
+/// Reads a `Range` header against a body of `length` bytes.
+///
+/// Inputs: The header's value, if any. Outputs: One range (`bytes=a-b`, `bytes=a-` or the suffix
+/// `bytes=-n`), `Unsatisfiable`, or `Whole`. Side effects: None.
+fn byte_range(header_value: Option<&str>, length: usize) -> ByteRange {
+    let Some(spec) = header_value.and_then(|value| value.trim().strip_prefix("bytes=")) else {
+        return ByteRange::Whole;
+    };
+    if spec.contains(',') || length == 0 {
+        return ByteRange::Whole;
+    }
+    let Some((first, last)) = spec.split_once('-') else {
+        return ByteRange::Whole;
+    };
+    let (first, last) = (first.trim(), last.trim());
+    let parse = |text: &str| text.parse::<usize>().ok();
+    let (start, end) = match (first.is_empty(), last.is_empty()) {
+        (true, false) => match parse(last) {
+            Some(0) | None => return ByteRange::Whole,
+            Some(suffix) => (length.saturating_sub(suffix), length - 1),
+        },
+        (false, true) => match parse(first) {
+            Some(start) => (start, length - 1),
+            None => return ByteRange::Whole,
+        },
+        (false, false) => match (parse(first), parse(last)) {
+            (Some(start), Some(end)) if start <= end => (start, end.min(length - 1)),
+            _ => return ByteRange::Whole,
+        },
+        (true, true) => return ByteRange::Whole,
+    };
+    if start >= length {
+        ByteRange::Unsatisfiable
+    } else {
+        ByteRange::Part { start, end }
+    }
+}
+
+/// Answers with the WAV, or the part `range` asks for.
+///
+/// Outputs: 200 with the whole file, 206 with a part, or 416 for a range past the end; each says
+/// ranges are accepted. Side effects: None.
+fn wav_response(wav: Vec<u8>, range: Option<&header::HeaderValue>) -> Response {
+    let length = wav.len();
+    let common = [
+        (header::CONTENT_TYPE, "audio/wav"),
+        (header::CACHE_CONTROL, "no-store"),
+        (header::ACCEPT_RANGES, "bytes"),
+    ];
+    match byte_range(range.and_then(|value| value.to_str().ok()), length) {
+        ByteRange::Whole => (common, Body::from(wav)).into_response(),
+        ByteRange::Part { start, end } => (
+            StatusCode::PARTIAL_CONTENT,
+            common,
+            [(
+                header::CONTENT_RANGE,
+                format!("bytes {start}-{end}/{length}"),
+            )],
+            Body::from(wav[start..=end].to_vec()),
+        )
+            .into_response(),
+        ByteRange::Unsatisfiable => (
+            StatusCode::RANGE_NOT_SATISFIABLE,
+            [
+                (header::ACCEPT_RANGES, "bytes".to_owned()),
+                (header::CONTENT_RANGE, format!("bytes */{length}")),
+            ],
+        )
+            .into_response(),
+    }
+}
+
 /// Plays a meeting's kept recording, or one folded into it (#88), as WAV.
 ///
+/// A request for one byte range (`Range: bytes=…`) gets that part (206), so a browser can move
+/// anywhere in a long recording (#197); several ranges get the whole file.
 /// Side effects: Decrypts and decodes the recording in memory on a blocking thread.
 async fn recording(
     State(state): State<ServerAppState>,
     Path(meeting_id): Path<String>,
+    headers: HeaderMap,
 ) -> Response {
     tracing::info!(
         endpoint = "/api/meetings/:meeting_id/recording",
@@ -167,14 +253,7 @@ async fn recording(
     })
     .await;
     match built {
-        Ok(Ok(wav)) => (
-            [
-                (header::CONTENT_TYPE, "audio/wav"),
-                (header::CACHE_CONTROL, "no-store"),
-            ],
-            Body::from(wav),
-        )
-            .into_response(),
+        Ok(Ok(wav)) => wav_response(wav, headers.get(header::RANGE)),
         Ok(Err(error)) => {
             let status = match error {
                 PlaybackError::NotFound => StatusCode::NOT_FOUND,

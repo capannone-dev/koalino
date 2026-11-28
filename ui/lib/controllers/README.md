@@ -77,6 +77,13 @@ transcribed; the core stores and applies it.
 
 `transcription_settings_controller.dart` holds the Transcription page: models and downloads (#67); the OpenAI choice is gone (#117).
 
+`recording_player_controller.dart` (#197) runs a meeting's kept-recording player: it asks the core
+whether a recording is kept, decrypts it only when first played, plays, pauses, seeks, skips and
+changes speed, and publishes the passage being heard (`currentPassageStart`), so the transcript
+rebuilds once per passage. The kept WAV is on the meeting's timeline, so a passage's start time is its
+place in the audio. Scrolling by hand stops following until the owner asks again or plays a passage;
+closing the page releases the decrypted file.
+
 `automatic_model_fetcher.dart` (#189) downloads Automatic's model by itself, so a fresh install
 reaches the best model for the device without opening Settings. `main.dart` runs `check()` once the
 core is open and whenever the app returns to the foreground; it starts the core's download only when
